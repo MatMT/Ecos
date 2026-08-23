@@ -62,57 +62,89 @@ Please follow these instructions sequentially to set up the project on your loca
 
 <details open>
   <summary><b>Step 1: Clone the Repository</b></summary>
-  <blockquote>
-    Download the project source code to your local machine and navigate into the root directory.
-  </blockquote>
-  <pre><code>git clone &lt;repository-url&gt;<br/>cd Ecos</code></pre>
+
+> Download the project source code to your local machine and navigate into the root directory.
+>
+> ```powershell
+> git clone <repository-url>
+> cd Ecos
+> ```
+
 </details>
 
 <details open>
   <summary><b>Step 2: Start the Database Infrastructure</b></summary>
-  <blockquote>
-    ECOS uses a local Supabase environment to run PostgreSQL. Start the Docker containers before running the application. <i>(Note: The first run may take a few minutes as Docker downloads the necessary images.)</i>
-  </blockquote>
-  <pre><code>cd infra/supabase<br/>docker compose up -d<br/>cd ../../</code></pre>
+
+> ECOS uses a local Supabase environment to run PostgreSQL. Start the Docker containers before running the application. _(Note: The first run may take a few minutes as Docker downloads the necessary images.)_
+>
+> ```powershell
+> cd infra/supabase
+> docker compose up -d
+> cd ../../
+> ```
+
 </details>
 
 <details open>
   <summary><b>Step 3: Install Dependencies</b></summary>
-  <blockquote>
-    Install all required Node.js packages across the monorepo using <code>pnpm</code>.
-  </blockquote>
-  <pre><code>pnpm install</code></pre>
+
+> Install all required Node.js packages across the monorepo using `pnpm`.
+>
+> ```powershell
+> pnpm install
+> ```
+
 </details>
 
 <details open>
   <summary><b>Step 4: Configure Environment Variables</b></summary>
-  <blockquote>
-    The server requires environment variables to connect to the database. We provide an example file containing the default local credentials.
-  </blockquote>
-  <pre><code>cd apps/server<br/>cp .env.example .env<br/>cd ../../</code></pre>
+
+> The server requires environment variables to connect to the database. We provide an example file containing the default local credentials.
+>
+> ```powershell
+> cd apps/server
+> cp .env.example .env
+> cd ../../
+> ```
+
 </details>
 
 <details open>
   <summary><b>Step 5: Run Database Migrations</b></summary>
-  <blockquote>
-    Apply the database schema structure to your running PostgreSQL database and generate the Prisma Client.
-  </blockquote>
-  <pre><code>cd apps/server<br/>pnpm exec prisma migrate dev<br/>cd ../../</code></pre>
+
+> Apply the database schema structure to your running PostgreSQL database and generate the Prisma Client.
+>
+> ```powershell
+> cd apps/server
+> pnpm exec prisma migrate dev
+> cd ../../
+> ```
+
 </details>
 
 <details open>
   <summary><b>Step 6: Start the Application</b></summary>
-  <blockquote>
-    There are two ways to run ECOS depending on your needs: Daily Development (Hot-Reloading) or Full Production Testing.
-  </blockquote>
-  
-  <h4>Scenario A: Local Development (Recommended)</h4>
-  <p>For daily coding, run the server natively so it instantly hot-reloads when you save a file. Make sure your database is running first (Step 2).</p>
-  <pre><code># Run from the root of the project<br/>pnpm run dev</code></pre>
 
-  <h4>Scenario B: Full Production Docker Build</h4>
-  <p>To test the compiled, containerized production version of the API alongside the database, use the root Docker Compose file.</p>
-  <pre><code># This will start BOTH Supabase and the compiled API in Docker<br/>docker compose up -d</code></pre>
+> There are two ways to run ECOS depending on your needs: Daily Development (Hot-Reloading) or Full Production Testing.
+>
+> **• Scenario A: Local Development (Recommended)**
+>
+> For daily coding, run the server natively so it instantly hot-reloads when you save a file. Make sure your database is running first (Step 2).
+>
+> ```powershell
+> # Run from the root of the project
+> pnpm run dev
+> ```
+>
+> **• Scenario B: Full Production Docker Build**
+>
+> To test the compiled, containerized production version of the API alongside the database, use the root Docker Compose file.
+>
+> ```powershell
+> # This will start BOTH Supabase and the compiled API in Docker
+> docker compose up -d
+> ```
+
 </details>
 
 <br />
@@ -125,26 +157,29 @@ ECOS provides two built-in visual interfaces to manage your local database durin
 
 <details>
   <summary><b>1. Supabase Studio (Full Database Admin)</b></summary>
-  <blockquote>
-    The official Supabase dashboard running locally. Perfect for managing database roles, raw SQL, and deep metrics.
-  </blockquote>
-  <ul>
-    <li><b>URL:</b> <a href="http://localhost:8000">http://localhost:8000</a></li>
-    <li><b>Username:</b> <code>supabase</code></li>
-    <li><b>Password:</b> <code>this_password_is_insecure_and_should_be_updated</code></li>
-  </ul>
+
+> The official Supabase dashboard running locally. Perfect for managing database roles, raw SQL, and deep metrics.
+
+- **URL:** [http://localhost:8000](http://localhost:8000)
+- **Username:** `supabase`
+- **Password:** `this_password_is_insecure_and_should_be_updated`
+
 </details>
 
 <details>
   <summary><b>2. Prisma Studio (Data & Schema Explorer)</b></summary>
-  <blockquote>
-    A lightweight, fast visual editor directly tied to your <code>schema.prisma</code> models. Perfect for quickly editing rows and exploring relations.
-  </blockquote>
-  <p>To start it, open a new terminal window and run:</p>
-  <pre><code>cd apps/server<br/>pnpm exec prisma studio</code></pre>
-  <ul>
-    <li><b>URL:</b> Automatically opens at <a href="http://localhost:5555">http://localhost:5555</a> (or check the terminal output for the dynamic port).</li>
-  </ul>
+
+> A lightweight, fast visual editor directly tied to your `schema.prisma` models. Perfect for quickly editing rows and exploring relations.
+>
+> To start it, open a new terminal window and run:
+>
+> ```powershell
+> cd apps/server
+> pnpm exec prisma studio
+> ```
+
+- **URL:** Automatically opens at [http://localhost:5555](http://localhost:5555) (or check the terminal output for the dynamic port).
+
 </details>
 
 <br />
