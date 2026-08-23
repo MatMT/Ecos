@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  student
+  doctor
+  administrator
+
+  @@map("enum_role")
+}
+
+enum EntryType {
+  personal_journal
+  ai_chat
+
+  @@map("enum_entry_type")
+}
+
+enum AppointmentStatus {
+  pending
+  confirmed
+  completed
+  cancelled
+
+  @@map("enum_appointment_status")
+}
+
+enum AlertType {
+  panic_button
+  biometric_anomaly
+  ai_risk
+
+  @@map("enum_alert_type")
+}
+
+enum EmotionalState {
+  calm
+  anxious
+  sad
+  euphoric
+  other
+
+  @@map("enum_emotional_state")
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Institution {
+  id        Int      @id @default(autoincrement())
+  name      String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("remote_institutions")
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  institutionId  Int?     @map("institution_id")
+  fullName       String?  @map("full_name") @db.VarChar(255)
+  email          String?  @db.VarChar(255)
+  passwordHash   String?  @map("password_hash") @db.VarChar(255)
+  role           Role?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  institution    Institution? @relation(fields: [institutionId], references: [id])
+  studentProfile StudentProfile?
+  assignedStudents StudentProfile[] @relation("AssignedDoctor")
+  doctorAppointments Appointment[] @relation("DoctorAppointments")
+  doctorClinicalNotes ClinicalNote[] @relation("DoctorClinicalNotes")
+
+  @@map("remote_users")
+}
+
+model StudentProfile {
+  id                Int      @id @default(autoincrement())
+  userId            Int      @unique @map("user_id")
+  studentCode       String?  @map("student_code") @db.VarChar(255)
+  primaryDiagnosis  String?  @map("primary_diagnosis") @db.VarChar(255)
+  assignedDoctorId  Int?     @map("assigned_doctor_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user              User     @relation(fields: [userId], references: [id])
+  assignedDoctor    User?    @relation("AssignedDoctor", fields: [assignedDoctorId], references: [id])
+  bandDevices       BandDevice[]
+  alerts            Alert[]
+  emotionalJournals EmotionalJournal[]
+  appointments      Appointment[]
+  clinicalNotes     ClinicalNote[]
+
+  @@map("remote_student_profiles")
+}
+
+model BandDevice {
+  id            Int       @id @default(autoincrement())
+  studentId     Int?      @map("student_id")
+  deviceCode    String?   @map("device_code") @db.VarChar(255)
+  bindingStatus Boolean?  @map("binding_status")
+  lastSync      DateTime? @map("last_sync")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  student          StudentProfile? @relation(fields: [studentId], references: [id])
+  biometricRecords BiometricRecord[]
+
+  @@map("remote_band_devices")
+}
+
+model BiometricRecord {
+  id                     Int       @id @default(autoincrement())
+  deviceId               Int?      @map("device_id")
+  avgHeartRate           Int?      @map("avg_heart_rate")
+  stressLevel            Float?    @map("stress_level")
+  sleepQualityHours      Float?    @map("sleep_quality_hours")
+  bloodOxygen            Int?      @map("blood_oxygen")
+  systolicBloodPressure  Int?      @map("systolic_blood_pressure")
+  diastolicBloodPressure Int?      @map("diastolic_blood_pressure")
+  bodyTemperature        Float?    @map("body_temperature")
+  timestamp              DateTime?
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  device            BandDevice?       @relation(fields: [deviceId], references: [id])
+  alerts            Alert[]
+  emotionalJournals EmotionalJournal[]
+
+  @@map("remote_biometric_records")
+}
+
+model Alert {
+  id                Int       @id @default(autoincrement())
+  studentId         Int?      @map("student_id")
+  biometricRecordId Int?      @map("biometric_record_id")
+  alertType         AlertType? @map("alert_type")
+  description       String?   @db.VarChar(255)
+  resolved          Boolean   @default(false)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  student          StudentProfile?  @relation(fields: [studentId], references: [id])
+  biometricRecord  BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
+
+  @@map("remote_alerts")
+}
+
+model EmotionalJournal {
+  id                Int        @id @default(autoincrement())
+  studentId         Int?       @map("student_id")
+  biometricRecordId Int?       @map("biometric_record_id")
+  entryType         EntryType? @map("entry_type")
+  userContent       String?    @map("user_content") @db.Text
+  aiResponse        String?    @map("ai_response") @db.Text
+  detectedAlertLevel String?   @map("detected_alert_level") @db.VarChar(255)
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  student          StudentProfile?  @relation(fields: [studentId], references: [id])
+  biometricRecord  BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
+
+  @@map("remote_emotional_journal")
+}
+
+model Appointment {
+  id              Int                @id @default(autoincrement())
+  studentId       Int?               @map("student_id")
+  doctorId        Int?               @map("doctor_id")
+  sessionTitle    String?            @map("session_title") @db.VarChar(255)
+  sessionType     String?            @map("session_type") @db.VarChar(255)
+  appointmentDate DateTime?          @map("appointment_date")
+  status          AppointmentStatus?
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  student      StudentProfile? @relation(fields: [studentId], references: [id])
+  doctor       User?           @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  clinicalNote ClinicalNote?
+
+  @@map("remote_appointments")
+}
+
+model ClinicalNote {
+  id                    Int             @id @default(autoincrement())
+  appointmentId         Int             @unique @map("appointment_id")
+  doctorId              Int?            @map("doctor_id")
+  studentId             Int?            @map("student_id")
+  sessionDiagnosis      String?         @map("session_diagnosis") @db.VarChar(255)
+  observedEmotionalState EmotionalState? @map("observed_emotional_state")
+  observations          String?         @db.Text
+  aiAssistantAnalysis   String?         @map("ai_assistant_analysis") @db.Text
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
+
+  appointment  Appointment     @relation(fields: [appointmentId], references: [id])
+  doctor       User?           @relation("DoctorClinicalNotes", fields: [doctorId], references: [id])
+  student      StudentProfile? @relation(fields: [studentId], references: [id])
+
+  @@map("remote_clinical_notes")
+}
