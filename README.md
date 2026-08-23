@@ -103,6 +103,38 @@ Please follow these instructions sequentially to set up the project on your loca
 
 <br />
 
+<br />
+
+## 🗄️ Database Management
+
+ECOS provides two built-in visual interfaces to manage your local database during development:
+
+<details>
+  <summary><b>1. Supabase Studio (Full Database Admin)</b></summary>
+  <blockquote>
+    The official Supabase dashboard running locally. Perfect for managing database roles, raw SQL, and deep metrics.
+  </blockquote>
+  <ul>
+    <li><b>URL:</b> <a href="http://localhost:8000">http://localhost:8000</a></li>
+    <li><b>Username:</b> <code>supabase</code></li>
+    <li><b>Password:</b> <code>this_password_is_insecure_and_should_be_updated</code></li>
+  </ul>
+</details>
+
+<details>
+  <summary><b>2. Prisma Studio (Data & Schema Explorer)</b></summary>
+  <blockquote>
+    A lightweight, fast visual editor directly tied to your <code>schema.prisma</code> models. Perfect for quickly editing rows and exploring relations.
+  </blockquote>
+  <p>To start it, open a new terminal window and run:</p>
+  <pre><code>cd apps/server<br/>pnpm exec prisma studio</code></pre>
+  <ul>
+    <li><b>URL:</b> Automatically opens at <a href="http://localhost:5555">http://localhost:5555</a> (or check the terminal output for the dynamic port).</li>
+  </ul>
+</details>
+
+<br />
+
 <div align="center">
   <h3>🎉 You are all set!</h3>
   <p>Once the server is running successfully, you can explore the available API endpoints using our interactive Scalar documentation at:</p>
