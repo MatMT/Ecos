@@ -7,7 +7,7 @@
 
 ## 📖 About the Project
 
-ECOS is currently focused on providing a highly reliable backend infrastructure. The project is structured as a **monorepo** to allow for seamless future expansion (such as adding web or mobile frontends). 
+ECOS is currently focused on providing a highly reliable backend infrastructure. The project is structured as a **monorepo** to allow for seamless future expansion (such as adding web or mobile frontends).
 
 <h3>⚙️ Tech Stack</h3>
 <ul>
@@ -46,6 +46,13 @@ Before you begin the installation, please ensure you have the following software
     </td>
   </tr>
 </table>
+
+<br />
+
+## ⚠️ Development Guidelines & Warnings
+
+> [!WARNING]
+> **Be careful when modifying existing files!** This project follows a strict architecture (enforced by the rules in `AGENTS.md`). Before modifying any existing module, service, or configuration, ensure that your changes do not break downstream logic, types, or Docker builds. Always strive for non-invasive modifications.
 
 <br />
 
@@ -96,9 +103,16 @@ Please follow these instructions sequentially to set up the project on your loca
 <details open>
   <summary><b>Step 6: Start the Application</b></summary>
   <blockquote>
-    Boot up the backend server using Turborepo from the root of the project.
+    There are two ways to run ECOS depending on your needs: Daily Development (Hot-Reloading) or Full Production Testing.
   </blockquote>
-  <pre><code>pnpm run dev</code></pre>
+  
+  <h4>Scenario A: Local Development (Recommended)</h4>
+  <p>For daily coding, run the server natively so it instantly hot-reloads when you save a file. Make sure your database is running first (Step 2).</p>
+  <pre><code># Run from the root of the project<br/>pnpm run dev</code></pre>
+
+  <h4>Scenario B: Full Production Docker Build</h4>
+  <p>To test the compiled, containerized production version of the API alongside the database, use the root Docker Compose file.</p>
+  <pre><code># This will start BOTH Supabase and the compiled API in Docker<br/>docker compose up -d</code></pre>
 </details>
 
 <br />

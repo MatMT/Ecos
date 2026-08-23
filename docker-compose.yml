@@ -1,0 +1,22 @@
+name: ecos
+
+include:
+  - infra/supabase/docker-compose.yml
+
+services:
+  server:
+    container_name: ecos-server
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    ports:
+      - "6622:6622"
+    env_file:
+      - apps/server/.env
+    environment:
+      # Connect via the internal Docker network to the Supabase Postgres container
+      # instead of using localhost/host.docker.internal
+      - DATABASE_URL=postgresql://postgres:your-super-secret-and-long-postgres-password@supabase-db:5432/postgres
+    depends_on:
+      db:
+        condition: service_healthy
