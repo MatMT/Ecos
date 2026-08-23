@@ -1,0 +1,73 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependencies
+node_modules
+node_modules/
+**/node_modules
+**/node_modules/
+.pnpm-store/
+
+# IDEs and Editor dirs
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Build outputs
+dist/
+build/
+.turbo/
+apps/*/dist/
+apps/*/build/
+
+# Turborepo Cache
+.turbo/
+
+# NestJS
+.nest/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Supabase Docker (Ignore local DB volumes but keep config)
+infra/supabase/volumes/db/data/
+infra/supabase/volumes/storage/
+infra/supabase/volumes/api/
+infra/supabase/volumes/pooler/
+
+# Prisma
+*.db
+*.db-journal
