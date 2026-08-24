@@ -65,8 +65,7 @@ apps/*/build/
 # Supabase Docker (Ignore local DB volumes but keep config)
 infra/supabase/volumes/db/data/
 infra/supabase/volumes/storage/
-infra/supabase/volumes/api/
-infra/supabase/volumes/pooler/
+infra/supabase/volumes/logs/
 
 # Prisma
 *.db
