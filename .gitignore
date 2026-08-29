@@ -70,3 +70,7 @@ infra/supabase/volumes/logs/
 # Prisma
 *.db
 *.db-journal
+
+# Edge AI Training Data (Ignore large CSV/JSON sets)
+edge-ai/resultados/
+edge-ai/results/
