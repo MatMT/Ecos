@@ -4,7 +4,6 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Ecos Therapist',
-    'Monitorea y analiza datos biomédicos de pacientes para terapeutas con métricas, alertas e insights clínicos.',
   description: 'Monitorea y analiza datos biomédicos de pacientes para terapeutas con métricas, alertas e insights clínicos.',
   robots: {
     index: false,
