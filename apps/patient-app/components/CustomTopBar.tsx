@@ -1,5 +1,6 @@
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BellIcon from '@/assets/bell.svg';
 
 export default function CustomTopBar() {
   return (
@@ -17,7 +18,7 @@ export default function CustomTopBar() {
         </View>
         
         <TouchableOpacity>
-            <Image source={require('../assets/bell-icon.png')}/>
+            <BellIcon/>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -36,7 +37,7 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12, // Espacio entre imagen y texto
+    gap: 14, // Espacio entre imagen y texto
   },
   avatar: {
     width: 45,
@@ -44,7 +45,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
   },
   greeting: {
-    fontSize: 14,
+    fontSize: 22,
     color: '#666',
   },
   brandName: {

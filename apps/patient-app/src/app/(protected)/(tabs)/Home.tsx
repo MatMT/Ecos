@@ -56,7 +56,7 @@ const [fecha] = useState(new Date());
               <Text style={styles.metricValue}>99 <Text style={styles.metricUnit}>bpm</Text></Text>
               <Text style={styles.metricLabel}>Ritmo Cardíaco</Text>
             </View>
-            <View style={styles.metricCard}>
+            <View style={[styles.metricCard, styles.borderLeftNormal]}>
               <Text style={styles.statusNormal}>Normal</Text>
               <Text style={styles.metricValue}>95 <Text style={styles.metricUnit}>%</Text></Text>
               <Text style={styles.metricLabel}>Oxígeno</Text>
@@ -117,12 +117,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#0F172A',
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 18,
     color: '#64748B',
     marginTop: 4,
   },
@@ -138,13 +138,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   aiTag: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 'bold',
     color: '#047857',
     marginBottom: 10,
   },
   aiText: {
-    fontSize: 16,
+    fontSize: 19,
     color: '#1E293B',
     lineHeight: 22,
     marginBottom: 15,
@@ -178,9 +178,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     elevation: 2,
   },
+  borderLeftNormal: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#059669'
+  },
   borderLeftElevated: {
     borderLeftWidth: 4,
-    borderLeftColor: '#EF4444',
+    borderLeftColor: '#efb644',
   },
   borderLeftHigh: {
     borderLeftWidth: 4,
@@ -188,20 +192,20 @@ const styles = StyleSheet.create({
   },
   statusElevated: {
     alignSelf: 'flex-end',
-    color: '#EF4444',
-    fontSize: 11,
+    color: '#efb644',
+    fontSize: 14,
     fontWeight: 'bold',
   },
   statusNormal: {
     alignSelf: 'flex-end',
     color: '#059669',
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   statusHigh: {
     alignSelf: 'flex-end',
     color: '#DC2626',
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   metricValue: {
