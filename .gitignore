@@ -75,4 +75,3 @@ infra/supabase/volumes/logs/
 .next/
 out/
 build/
-apps/therapist-web/package-lock.json
