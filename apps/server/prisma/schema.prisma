@@ -10,7 +10,7 @@ datasource db {
 
 enum Role {
   student
-  doctor
+  psychologist
   administrator
 
   @@map("enum_role")
