@@ -74,4 +74,3 @@ infra/supabase/volumes/logs/
 # Next.js
 .next/
 out/
-build/
