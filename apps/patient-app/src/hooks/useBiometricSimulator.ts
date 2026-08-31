@@ -24,18 +24,37 @@ export interface BiometricData {
   steps: number;
 }
 
-export function useBiometricSimulator(intervalMs: number = 1000): BiometricData | null {
+export interface BiometricSimulationResult {
+  currentData: BiometricData | null;
+  // A flattened array of 30 normalized values (10 readings x 3 features) ready for ExecuTorch
+  modelInput: number[] | null;
+}
+
+export function useBiometricSimulator(intervalMs: number = 1000): BiometricSimulationResult {
   const [currentData, setCurrentData] = useState<BiometricData | null>(null);
+  const [history, setHistory] = useState<BiometricData[]>([]);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => {
       if (index < DUMMY_DATA.length) {
-        setCurrentData({
+        const newData = {
           bpm: DUMMY_DATA[index].bpm,
           stress: DUMMY_DATA[index].stress,
           steps: DUMMY_DATA[index].steps,
+        };
+        
+        setCurrentData(newData);
+        
+        // Maintain a rolling window of the last 10 readings
+        setHistory((prev) => {
+          const updated = [...prev, newData];
+          if (updated.length > 10) {
+            updated.shift();
+          }
+          return updated;
         });
+
         setIndex((prev) => (prev + 1) % DUMMY_DATA.length);
       }
     }, intervalMs);
@@ -43,5 +62,15 @@ export function useBiometricSimulator(intervalMs: number = 1000): BiometricData 
     return () => clearInterval(timer);
   }, [index, intervalMs]);
 
-  return currentData;
+  // Compute normalized model input when we have exactly 10 readings
+  let modelInput: number[] | null = null;
+  if (history.length === 10) {
+    modelInput = history.flatMap(reading => [
+      Math.min(reading.bpm / 220.0, 1.0),
+      Math.min(reading.stress / 100.0, 1.0),
+      Math.min(reading.steps / 200.0, 1.0),
+    ]);
+  }
+
+  return { currentData, modelInput };
 }
