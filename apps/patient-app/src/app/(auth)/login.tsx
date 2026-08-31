@@ -1,15 +1,20 @@
-import {View, Text, TextInput, StyleSheet, Image, Touchable, TouchableOpacity} from 'react-native';
+import {View, Text, TextInput, StyleSheet, Image, TouchableOpacity} from 'react-native';
 import React from 'react';
+import { router } from 'expo-router';
 
 function Login () {
+    const handleLogin = () => {
+        router.replace('/(protected)/(tabs)/Home');
+    };
+
     return (
         <View style={style.container}>
             <Image source={require("@/assets/logo_nexo_ecos.png")} style={style.image}></Image>
             <View style={style.card}>
                 <TextInput style={style.UserInput} placeholder='Ingrese su usuario'></TextInput>
                 <TextInput style={style.UserPass} placeholder='Ingreses su contraseña'></TextInput>
-                <TouchableOpacity style={style.buttom}>
-                    <Text style= {{color: '#ffff', textAlign: 'center', fontWeight: 'bold'}}>INICIAR SESION</Text>
+                <TouchableOpacity style={style.buttom} onPress={handleLogin}>
+                    <Text style= {{color: '#ffff', textAlign: 'center', fontWeight: 'bold'}}>INICIAR SESIÓN</Text>
                 </TouchableOpacity>
             </View>
         </View>
