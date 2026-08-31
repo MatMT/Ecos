@@ -7,13 +7,12 @@ module.exports = (() => {
 
   config.transformer = {
     ...transformer,
-    // Quita el "/expo" de la siguiente línea
     babelTransformerPath: require.resolve("react-native-svg-transformer")
   };
-  
+
   config.resolver = {
     ...resolver,
-    assetExts: resolver.assetExts.filter((ext) => ext !== "svg"),
+    assetExts: [...resolver.assetExts.filter((ext) => ext !== "svg"), "pte"],
     sourceExts: [...resolver.sourceExts, "svg"]
   };
 

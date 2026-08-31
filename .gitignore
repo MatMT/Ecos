@@ -75,3 +75,6 @@ infra/supabase/volumes/logs/
 .next/
 out/
 build/
+
+# Edge AI Training Data (Ignore large CSV/JSON sets)
+apps/edge-ai/results/
