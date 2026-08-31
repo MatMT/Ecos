@@ -141,7 +141,7 @@ if __name__ == "__main__":
     
     train_model(model, data)
     
-    # 3. Calibración del Umbral (Risk Score Calibration)
+    # 3. Umbral Calibration (Risk Score Calibration)
     model.eval()
     with torch.no_grad():
         reconstructed = model(data)
