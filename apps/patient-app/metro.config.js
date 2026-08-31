@@ -1,9 +1,20 @@
-const { getDefaultConfig } = require('expo/metro-config');
+const { getDefaultConfig } = require("expo/metro-config");
 
-/** @type {import('expo/metro-config').MetroConfig} */
-const config = getDefaultConfig(__dirname);
+module.exports = (() => {
+  const config = getDefaultConfig(__dirname);
 
-// Add the .pte extension so Metro bundles the local AI model
-config.resolver.assetExts.push('pte');
+  const { transformer, resolver } = config;
 
-module.exports = config;
+  config.transformer = {
+    ...transformer,
+    babelTransformerPath: require.resolve("react-native-svg-transformer")
+  };
+
+  config.resolver = {
+    ...resolver,
+    assetExts: [...resolver.assetExts.filter((ext) => ext !== "svg"), "pte"],
+    sourceExts: [...resolver.sourceExts, "svg"]
+  };
+
+  return config;
+})();
