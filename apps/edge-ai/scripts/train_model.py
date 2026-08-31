@@ -8,16 +8,16 @@ from executorch.exir import to_edge
 class AnomalyDetector(nn.Module):
     def __init__(self):
         super(AnomalyDetector, self).__init__()
-        # Input: 3 features (BPM, Stress, Steps)
+        # Input: 30 features (10 timesteps x 3 features)
         self.encoder = nn.Sequential(
-            nn.Linear(3, 8),
+            nn.Linear(30, 16),
             nn.ReLU(),
-            nn.Linear(8, 4)
+            nn.Linear(16, 8)
         )
         self.decoder = nn.Sequential(
-            nn.Linear(4, 8),
+            nn.Linear(8, 16),
             nn.ReLU(),
-            nn.Linear(8, 3)
+            nn.Linear(16, 30)
         )
 
     def forward(self, x):
@@ -71,7 +71,25 @@ def parse_xiaomi_csv(csv_path):
         dtype=torch.float32
     )
     
-    return tensor_data
+    # 1. Normalization
+    tensor_data[:, 0] = tensor_data[:, 0] / 220.0 # Max theoretical BPM
+    tensor_data[:, 1] = tensor_data[:, 1] / 100.0 # Max stress score
+    tensor_data[:, 2] = tensor_data[:, 2] / 200.0 # Max steps per interval
+    tensor_data = torch.clamp(tensor_data, 0.0, 1.0)
+    
+    # 2. Time Windows (Context of 10 readings)
+    window_size = 10
+    if len(tensor_data) < window_size:
+        raise ValueError(f"Not enough data to create a window of size {window_size}")
+        
+    # unfold creates sliding windows: shape (num_windows, 3 features, 10 timesteps)
+    windows = tensor_data.unfold(0, window_size, 1) 
+    
+    # We want each window flattened as [t0_bpm, t0_stress, t0_steps, t1_bpm, ...]
+    # So we transpose to (num_windows, 10 timesteps, 3 features) and then flatten to (num_windows, 30)
+    windows = windows.transpose(1, 2).contiguous().view(-1, window_size * 3)
+    
+    return windows
 
 def train_model(model, data, epochs=100):
     print("Starting training...")
@@ -94,8 +112,8 @@ def export_executorch(model, output_path):
     print("Exporting model to ExecuTorch (.pte)...")
     model.eval()
     
-    # Example input now has 3 dimensions (BPM, Stress, Steps)
-    example_input = (torch.tensor([[75.0, 30.0, 15.0]], dtype=torch.float32),)
+    # Example input now has 30 dimensions (10 timesteps * 3 features)
+    example_input = (torch.zeros(1, 30, dtype=torch.float32),)
     
     try:
         from torch.export import export
@@ -122,4 +140,25 @@ if __name__ == "__main__":
     data = parse_xiaomi_csv(csv_file)
     
     train_model(model, data)
+    
+    # 3. Calibración del Umbral (Risk Score Calibration)
+    model.eval()
+    with torch.no_grad():
+        reconstructed = model(data)
+        # MSE per sample window
+        mse_per_sample = torch.mean((reconstructed - data) ** 2, dim=1)
+        
+        p95 = torch.quantile(mse_per_sample, 0.95)
+        p99 = torch.quantile(mse_per_sample, 0.99)
+        max_err = torch.max(mse_per_sample)
+        
+        print("\n--- Risk Score Calibration ---")
+        print(f"95th Percentile MSE (Risk Score): {p95.item():.6f}")
+        print(f"99th Percentile MSE (Risk Score): {p99.item():.6f}")
+        print(f"Max MSE (Risk Score): {max_err.item():.6f}")
+        
+        suggested_threshold = (p95.item() + p99.item()) / 2
+        print(f"Suggested Threshold: {suggested_threshold:.6f}")
+        print("------------------------------\n")
+        
     export_executorch(model, "../../apps/patient-app/assets/model.pte")
