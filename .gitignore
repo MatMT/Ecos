@@ -77,5 +77,4 @@ out/
 build/
 
 # Edge AI Training Data (Ignore large CSV/JSON sets)
-edge-ai/resultados/
-edge-ai/results/
+apps/edge-ai/results/
