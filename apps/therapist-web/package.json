@@ -1,0 +1,29 @@
+{
+  "name": "therapist-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.34.3",
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0 --port 9443",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0 --port 9443",
+    "format": "oxfmt"
+  },
+  "dependencies": {
+    "lucide-react": "^1.25.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^3.10.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "oxfmt": "^0.2.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

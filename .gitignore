@@ -70,3 +70,11 @@ infra/supabase/volumes/logs/
 # Prisma
 *.db
 *.db-journal
+
+# Next.js
+.next/
+out/
+build/
+
+# Results
+apps/edge-ai/results
