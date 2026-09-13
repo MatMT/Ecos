@@ -250,38 +250,70 @@ other call, in any service, should call `withRls(fn)` with no override and let A
 2. `GRANT SELECT/INSERT/UPDATE/DELETE ... TO authenticated` (+ `GRANT USAGE ON SEQUENCE ...` for any
    serial PK) **before** writing policies. Policies only restrict rows on an operation the role is
    already allowed to attempt — no grant means the operation fails regardless of any policy, and
-   this is the single easiest thing to forget.
+   this is the single easiest thing to forget. (Also hit in this session: adding RLS to a table that
+   previously had a bare `GRANT SELECT` and no RLS at all — `remote_band_devices` — silently meant
+   *every* authenticated user could read *every* device row until RLS was actually enabled. A grant
+   with no RLS on the table is not a safe intermediate state; don't leave one lying around.)
 3. **Never let a policy directly query another RLS-protected table that might query back into this
    one** — that's an infinite-recursion trap Postgres will happily let you create (hit and fixed
    live in this session: `remote_student_profiles`'s policy queried `remote_users`, whose own policy
    queried `remote_student_profiles`). Route any cross-table lookup through a `SECURITY DEFINER
    STABLE` SQL function instead (`current_user_role()`, `current_user_institution_id()`,
-   `institution_id_for_user()`, `can_access_student_profile()` in the migration) — created by a
-   migration (runs as `postgres`), so it executes with the superuser's RLS-bypass, breaking the
-   cycle at the source. Always add `set search_path = ''` and fully-qualify names in these
-   functions (hardening against search_path hijacking).
+   `institution_id_for_user()`, `can_access_student_profile()`, `can_access_clinical_data()` — all in
+   `app_private`, see point 6) — created by a migration (runs as `postgres`), so it executes with
+   the superuser's RLS-bypass, breaking the cycle at the source. Always add `set search_path = ''`
+   and fully-qualify names in these functions (hardening against search_path hijacking).
 4. **RLS is row-level only.** If any column on the row must be off-limits to a non-privileged
    caller who otherwise passes the row-level check (e.g. a user updating their own row shouldn't be
    able to change their own `role`), RLS cannot express that — add a `BEFORE UPDATE` trigger that
    rejects the change (see `protect_privileged_columns`).
 5. Update `PrismaExceptionFilter` if the new trigger's raised message needs specific HTTP-status
    handling beyond the generic 403 the `P0001` case already gives you.
+6. **Wrap every `auth.uid()`/`auth.role()`/helper-function call in a policy as `(SELECT ...)`**
+   (`id = (SELECT auth.uid())`, not `id = auth.uid()`) — otherwise Postgres re-evaluates it per row
+   scanned instead of once per statement. Flagged by Supabase's own advisor at scale; do it from the
+   start rather than retrofitting every policy later.
+7. **Internal `SECURITY DEFINER` helper functions must live outside every PostgREST-exposed
+   schema** (`PGRST_DB_SCHEMAS` in `infra/supabase/.env`, currently `public,graphql_public`) — put
+   them in `app_private`, not `public`. Two separate things make a function in `public` reachable by
+   `anon`/`authenticated` directly over `POST /rest/v1/rpc/<fn>`, and both must be closed: the
+   implicit `PUBLIC` execute grant Postgres adds on every new function, *and* self-hosted Supabase's
+   own `ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role`
+   — revoking only `FROM PUBLIC` still leaves `anon` able to call it directly (confirmed with
+   `has_function_privilege('anon', ...)` in this session). Moving the function out of `public`
+   entirely sidesteps the whole question: `ALTER FUNCTION ... SET SCHEMA app_private` preserves the
+   function's OID, so any existing policy or trigger referencing it keeps working with zero edits —
+   verified live in this session (moved all 6 helpers, re-ran the full RLS scoping test, nothing
+   broke). `authenticated` still needs `GRANT USAGE ON SCHEMA app_private` plus its existing
+   `GRANT EXECUTE` on the function — schema-level grants are independent of PostgREST's exposure
+   list, so this only removes the *direct-RPC* reachability, not the app's own ability to use it.
+8. Don't forget the DB-side FK-index audit while you're adding a table with foreign keys — Postgres
+   never creates one automatically. Add `@@index([...])` in `schema.prisma` for every FK column that
+   doesn't already have a `@unique` (which creates one for free).
 
 **Known follow-up, not yet solved**: automated device ingestion (a band device pushing biometric
 readings with no logged-in clinician present) has no `auth.uid()` to check against — that path
 needs its own decision (likely a `service_role`-authenticated ingestion endpoint), not the
 `authenticated`-role policy used for interactive access.
 
-**Extending RLS to the remaining tables** (`remote_alerts`, `remote_appointments`,
-`remote_clinical_notes`, `remote_band_devices`, `remote_emotional_journal`,
-`remote_institutions`) — same checklist every time:
+**Current coverage**: all nine domain tables now have RLS enabled and forced —
+`remote_users`/`remote_student_profiles`/`remote_biometric_records` (migration
+`20260913120500_rls_policies`), plus `remote_institutions`/`remote_band_devices`/`remote_alerts`/
+`remote_appointments`/`remote_clinical_notes`/`remote_emotional_journal` (migration
+`20260913150500_rls_hardening_and_remaining_tables`). `public._prisma_migrations` is RLS-enabled
+with zero policies/grants (fully inaccessible via the API; `prisma migrate` is unaffected since it
+runs as `postgres`). Helper functions live in `app_private` (migration
+`20260913151000_move_rls_helpers_to_private_schema`). If you add a **tenth** domain table, the
+checklist is still:
 - [ ] `ENABLE`/`FORCE ROW LEVEL SECURITY`
-- [ ] `GRANT`s for `authenticated` (table + any sequence)
-- [ ] select/insert/update/delete policies, reusing `current_user_role()`/
-      `current_user_institution_id()`/`can_access_student_profile()` — add a new `SECURITY DEFINER`
-      helper only for a genuinely new cross-table lookup, and check it can't recurse
+- [ ] `GRANT`s for `authenticated` (table + any sequence) — **before** the policy, not after
+- [ ] select/insert/update/delete policies, reusing the `app_private` helpers where possible — add a
+      new `SECURITY DEFINER` helper (in `app_private`, revoked from `PUBLIC` and `anon`, granted to
+      `authenticated`) only for a genuinely new cross-table lookup, and check it can't recurse
+- [ ] Every `auth.*()`/helper call wrapped in `(SELECT ...)`
 - [ ] A trigger if any column needs to be off-limits beyond what row-level access already implies
 - [ ] A test proving both the allowed and the denied case (see §9)
+- [ ] `@@index` on every new FK column without a `@unique`
 
 ## 13. Definition of done for a new endpoint
 
