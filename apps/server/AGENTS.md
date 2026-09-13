@@ -219,6 +219,16 @@ has no administrator to provision the first one through the API — `prisma/seed
 exactly one, connecting directly as `postgres` + calling the GoTrue Admin API itself. Re-run it (or
 adapt it) whenever a fresh environment needs its first admin.
 
+For local testing, `prisma/seed-demo.ts` (`pnpm run seed:demo`) populates a full fake ecosystem —
+2 institutions, admins/psychologists/students, band devices, biometric records, alerts,
+appointments, clinical notes, journal entries — under a reserved `@seed.ecos.local` email domain
+and `[SEED]`-prefixed institution names. It's idempotent by construction: every run deletes
+anything matching those markers first (in FK-safe child→parent order, since
+`remote_student_profiles.user_id` is `ON DELETE RESTRICT`) and recreates the dataset fresh, so it's
+safe to re-run after `prisma migrate reset` or on a brand-new machine. It refuses to run unless
+`DATABASE_URL` looks local. All seed users share the password `Seed1234!` (printed at the end of the
+run along with example logins) — this is test data only, never point it at anything real.
+
 **How RLS is bridged through Prisma.** Prisma has no built-in RLS support, and — this was tried and
 verified not to work — a transparent `$extends({ query: { $allOperations } })` client extension
 **cannot** redirect the wrapped query into a separately-opened `$transaction`; the `query(args)`
