@@ -10,6 +10,7 @@ import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../decorators/current-user.decorator';
+import { extractBearerToken } from '../context/extract-bearer-token';
 
 interface GoTrueJwtPayload {
   sub: string;
@@ -34,7 +35,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<Request>();
-    const token = this.extractToken(request);
+    const token = extractBearerToken(request);
 
     if (!token) {
       throw new UnauthorizedException('Se requiere un token de autenticación.');
@@ -72,10 +73,5 @@ export class JwtAuthGuard implements CanActivate {
     };
 
     return true;
-  }
-
-  private extractToken(request: Request): string | undefined {
-    const [type, token] = request.headers.authorization?.split(' ') ?? [];
-    return type === 'Bearer' ? token : undefined;
   }
 }

@@ -50,6 +50,61 @@ export class AuthService {
   }
 
   /**
+   * Revokes the caller's own session(s) — acts as the caller (their own access token),
+   * never the anon/service_role key. `scope=global` revokes every refresh token for this
+   * user (all devices/sessions), not just the current one.
+   */
+  async logout(accessToken: string): Promise<void> {
+    await this.request<void>(
+      'POST',
+      '/logout?scope=global',
+      undefined,
+      UnauthorizedException,
+      'No fue posible cerrar la sesión.',
+      { bearerToken: accessToken },
+    );
+  }
+
+  /**
+   * Starts GoTrue's password-recovery email flow. Always resolves the same way whether
+   * or not the email exists (GoTrue's own anti-enumeration behavior) — don't use this to
+   * infer whether an account exists. `redirectTo` should be a URL/deep link the *client
+   * app* owns and can handle; GoTrue redirects the user's browser there (with
+   * access_token/refresh_token in the URL fragment) after they click the emailed link —
+   * that whole exchange happens directly between the user's browser and GoTrue, never
+   * through this server.
+   */
+  async forgotPassword(email: string, redirectTo?: string): Promise<void> {
+    const query = redirectTo
+      ? `?redirect_to=${encodeURIComponent(redirectTo)}`
+      : '';
+    await this.request<void>(
+      'POST',
+      `/recover${query}`,
+      { email },
+      BadRequestException,
+      'No fue posible iniciar el proceso de recuperación de contraseña.',
+    );
+  }
+
+  /**
+   * Self-service password change — acts as the caller. Works equally for "I know my
+   * current password and want to change it" (normal Bearer token) and "I clicked the
+   * recovery email link and landed with a fresh session" (that session's token passes
+   * through JwtAuthGuard exactly like any other valid GoTrue JWT).
+   */
+  async updatePassword(accessToken: string, password: string): Promise<void> {
+    await this.request<void>(
+      'PUT',
+      '/user',
+      { password },
+      BadRequestException,
+      'No fue posible actualizar la contraseña.',
+      { bearerToken: accessToken },
+    );
+  }
+
+  /**
    * Server-only: provisions a GoTrue user directly (pre-confirmed, no email flow), using
    * the service_role key. Never expose this key or this call path to clients.
    */
@@ -82,10 +137,10 @@ export class AuthService {
   private async request<T>(
     method: 'POST' | 'PUT',
     path: string,
-    body: Record<string, unknown>,
+    body: Record<string, unknown> | undefined,
     errorType: new (message: string) => Error,
     fallbackMessage: string,
-    options?: { admin?: boolean },
+    options?: { admin?: boolean; bearerToken?: string },
   ): Promise<T> {
     const authUrl = this.configService.get<string>('supabase.authUrl');
     const anonKey = this.configService.get<string>('supabase.anonKey');
@@ -93,7 +148,8 @@ export class AuthService {
       'supabase.serviceRoleKey',
     );
 
-    const authorization = options?.admin ? serviceRoleKey : anonKey;
+    const authorization =
+      options?.bearerToken ?? (options?.admin ? serviceRoleKey : anonKey);
 
     let response: Response;
     try {
@@ -104,7 +160,7 @@ export class AuthService {
           apikey: anonKey!,
           Authorization: `Bearer ${authorization}`,
         },
-        body: JSON.stringify(body),
+        body: body ? JSON.stringify(body) : undefined,
       });
     } catch {
       throw new InternalServerErrorException(
@@ -121,6 +177,10 @@ export class AuthService {
       throw new errorType(
         detail ? `${fallbackMessage} (${detail})` : fallbackMessage,
       );
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
     }
 
     return response.json() as Promise<T>;
