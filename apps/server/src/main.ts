@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import { AppModule } from './app.module';
@@ -7,6 +8,7 @@ import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -22,6 +24,7 @@ async function bootstrap() {
     .setTitle('ECOS API')
     .setDescription('REST API for the ECOS health monitoring platform')
     .setVersion('0.1.0')
+    .addBearerAuth()
     .build();
 
   const documentFactory = () => SwaggerModule.createDocument(app, config);
@@ -33,7 +36,7 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const port = configService.get<number>('port') ?? 3000;
   await app.listen(port);
   console.log(`Server is running on port ${port}`);
 }
