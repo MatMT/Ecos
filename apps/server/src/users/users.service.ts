@@ -1,20 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
 
+const MAX_PAGE_SIZE = 100;
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto) {
-    // hash the passwd
     const passwordHash = await bcrypt.hash(createUserDto.password, 10);
     return this.prisma.user.create({
       data: {
-        institutionId:  null,
+        institutionId: null,
         fullName: createUserDto.full_name,
         email: createUserDto.email,
         passwordHash,
@@ -22,56 +23,66 @@ export class UsersService {
       },
       omit: {
         passwordHash: true,
-      }
+      },
     });
   }
 
-  async findAll() {
+  async findAll(skip = 0, take = 20) {
     return this.prisma.user.findMany({
-        omit: {
-             passwordHash: true,
-        }
+      skip,
+      take: Math.min(take, MAX_PAGE_SIZE),
+      omit: {
+        passwordHash: true,
+      },
     });
   }
 
   async findOne(id: number) {
-    return this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: {
         id,
       },
-       omit: {
-             passwordHash: true,
-        },
+      omit: {
+        passwordHash: true,
+      },
     });
+
+    if (!user) {
+      throw new NotFoundException('No se ha encontrado el usuario solicitado.');
+    }
+
+    return user;
   }
 
   async update(id: number, updateUserDto: UpdateUserDto) {
-  const data: Prisma.UserUpdateInput = {
-    fullName: updateUserDto.full_name,
-    email: updateUserDto.email,
-    role: updateUserDto.role,
-    
-  };
+    const data: Prisma.UserUpdateInput = {
+      fullName: updateUserDto.full_name,
+      email: updateUserDto.email,
+      role: updateUserDto.role,
+    };
 
-  if (updateUserDto.password) {
-    data.passwordHash = await bcrypt.hash(updateUserDto.password, 10);
+    if (updateUserDto.password) {
+      data.passwordHash = await bcrypt.hash(updateUserDto.password, 10);
+    }
+
+    return this.prisma.user.update({
+      where: {
+        id,
+      },
+      data,
+      omit: {
+        passwordHash: true,
+      },
+    });
   }
-
-  return this.prisma.user.update({
-    where: {
-      id,
-    },
-    data,
-    omit: {
-      passwordHash: true,
-    },
-  });
-}
 
   async remove(id: number) {
     return this.prisma.user.delete({
       where: {
         id,
+      },
+      omit: {
+        passwordHash: true,
       },
     });
   }
