@@ -125,19 +125,35 @@ security is enforced in two independent layers, and both matter:
 
 - **App layer**: `JwtAuthGuard` is registered globally (`APP_GUARD`) — every route requires a valid
   Supabase Auth (GoTrue) JWT unless explicitly marked `@Public()` (see `common/decorators/
-  public.decorator.ts`; currently only the health check and `/auth/login`/`/auth/refresh`). Add
-  `@UseGuards(RolesGuard)` + `@Roles(Role.xxx)` on any handler that should be restricted beyond
-  "any authenticated user" — see `UsersController.create`/`remove` for the pattern.
+  public.decorator.ts`; currently the health check, `/auth/login`, `/auth/refresh`, and
+  `/auth/forgot-password`). Add `@UseGuards(RolesGuard)` + `@Roles(Role.xxx)` on any handler that
+  should be restricted beyond "any authenticated user" — see `UsersController.create`/`remove` for
+  the pattern.
 - **DB layer**: Row Level Security (see §12) independently enforces the same access rules at the
   Postgres level. Never treat the app-layer guard as sufficient on its own for a new sensitive
   table — add both.
 - Never hardcode tunable security parameters (bcrypt salt rounds, token TTLs) — read them from
   `ConfigService`. (There is no bcrypt in this app anymore — GoTrue owns password storage entirely;
   don't reintroduce local password hashing.)
-- Add `helmet()` and an explicit CORS allowlist in `main.ts` before this API is exposed beyond
-  localhost. Not done yet — still a gap.
-- Add rate limiting (`@nestjs/throttler`) on write endpoints and anything auth-related. Not done
-  yet — still a gap.
+- CORS is configured in `main.ts` (`app.enableCors`) with an explicit allowlist from
+  `configuration.ts`'s `corsAllowedOrigins` (env `CORS_ALLOWED_ORIGINS`, comma-separated; defaults to
+  `therapist-web`/`admin-web`'s dev ports). Add a new browser app's origin there — never widen this
+  to a wildcard, since credentials/tokens are involved.
+- Full session lifecycle now exists: `POST /auth/logout` (revokes all of the caller's refresh
+  tokens via GoTrue, `scope=global`), `POST /auth/forgot-password` (public, starts GoTrue's
+  recovery-email flow), `POST /auth/update-password` (protected — acts as the caller via their own
+  bearer token, extracted with `@AccessToken()`; this single endpoint serves both "change my known
+  password" and "I followed the recovery email link", since both arrive as a normal valid GoTrue
+  JWT). Local mail delivery: `infra/supabase/docker-compose.yml` runs a `mail` service
+  (`container_name: supabase-mail`, Mailpit) so recovery/confirmation emails are actually
+  deliverable and viewable at `http://localhost:8025` — start it with
+  `docker compose up -d mail` from `infra/supabase/` if it isn't already running. GoTrue's mailer
+  refuses to send SMTP AUTH over Mailpit's unencrypted listener, so `SMTP_USER`/`SMTP_PASS` are
+  intentionally blank in `infra/supabase/.env` (skips AUTH entirely — Mailpit needs no credentials
+  anyway). This is dev-only: a real deployment needs real `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS` and a
+  provider that supports authenticated/TLS SMTP.
+- Add rate limiting (`@nestjs/throttler`) on write endpoints and anything auth-related — especially
+  `/auth/login` and `/auth/forgot-password` now that they exist. Not done yet — still a gap.
 - Never log `passwordHash` (doesn't exist anymore) or raw health-record content. Redact sensitive
   fields in any logging interceptor.
 - `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS entirely and must never reach a client. It is used in
