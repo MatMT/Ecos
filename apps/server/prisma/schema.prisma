@@ -81,6 +81,7 @@ model User {
   doctorAppointments Appointment[] @relation("DoctorAppointments")
   doctorClinicalNotes ClinicalNote[] @relation("DoctorClinicalNotes")
 
+  @@index([institutionId])
   @@map("remote_users")
 }
 
@@ -101,6 +102,7 @@ model StudentProfile {
   appointments      Appointment[]
   clinicalNotes     ClinicalNote[]
 
+  @@index([assignedDoctorId])
   @@map("remote_student_profiles")
 }
 
@@ -116,6 +118,7 @@ model BandDevice {
   student          StudentProfile? @relation(fields: [studentId], references: [id])
   biometricRecords BiometricRecord[]
 
+  @@index([studentId])
   @@map("remote_band_devices")
 }
 
@@ -137,6 +140,7 @@ model BiometricRecord {
   alerts            Alert[]
   emotionalJournals EmotionalJournal[]
 
+  @@index([deviceId])
   @@map("remote_biometric_records")
 }
 
@@ -153,6 +157,8 @@ model Alert {
   student          StudentProfile?  @relation(fields: [studentId], references: [id])
   biometricRecord  BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
 
+  @@index([studentId])
+  @@index([biometricRecordId])
   @@map("remote_alerts")
 }
 
@@ -170,6 +176,8 @@ model EmotionalJournal {
   student          StudentProfile?  @relation(fields: [studentId], references: [id])
   biometricRecord  BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
 
+  @@index([studentId])
+  @@index([biometricRecordId])
   @@map("remote_emotional_journal")
 }
 
@@ -188,6 +196,8 @@ model Appointment {
   doctor       User?           @relation("DoctorAppointments", fields: [doctorId], references: [id])
   clinicalNote ClinicalNote?
 
+  @@index([studentId])
+  @@index([doctorId])
   @@map("remote_appointments")
 }
 
@@ -207,5 +217,7 @@ model ClinicalNote {
   doctor       User?           @relation("DoctorClinicalNotes", fields: [doctorId], references: [id])
   student      StudentProfile? @relation(fields: [studentId], references: [id])
 
+  @@index([doctorId])
+  @@index([studentId])
   @@map("remote_clinical_notes")
 }
