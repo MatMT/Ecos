@@ -8,6 +8,15 @@ import {
 import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 
+interface DriverAdapterErrorMeta {
+  driverAdapterError?: {
+    cause?: {
+      code?: string;
+      message?: string;
+    };
+  };
+}
+
 @Catch(Prisma.PrismaClientKnownRequestError)
 export class PrismaExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(PrismaExceptionFilter.name);
@@ -21,7 +30,13 @@ export class PrismaExceptionFilter implements ExceptionFilter {
     let message =
       'Ha ocurrido un error en el procesamiento de la solicitud. Por favor, intente nuevamente.';
 
-    switch (exception.code) {
+    // Raw Postgres errors (driver-adapter passthrough — trigger RAISE EXCEPTION, RLS
+    // denials, etc.) surface as Prisma's generic P2039 with the real code/message nested
+    // in meta.driverAdapterError.cause, not as one of Prisma's own known codes.
+    const driverCause = (exception.meta as DriverAdapterErrorMeta | undefined)
+      ?.driverAdapterError?.cause;
+
+    switch (driverCause?.code ?? exception.code) {
       case 'P2025':
         status = HttpStatus.NOT_FOUND;
         message = 'No se ha encontrado el recurso solicitado.';
@@ -34,6 +49,13 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         status = HttpStatus.BAD_REQUEST;
         message =
           'La operación viola una restricción de integridad referencial.';
+        break;
+      case 'P0001':
+        // A trigger (e.g. protect_privileged_columns) explicitly rejected the operation —
+        // this is an authorization refusal, not a server bug. The message is one we raise
+        // ourselves in application-owned triggers, so it's safe to surface as-is.
+        status = HttpStatus.FORBIDDEN;
+        message = driverCause?.message ?? message;
         break;
     }
 
