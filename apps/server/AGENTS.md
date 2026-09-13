@@ -31,7 +31,8 @@ src/
 │   └── validation.ts      # Joi/Zod schema, validated at boot
 ├── prisma/
 │   ├── prisma.module.ts   # @Global, exports PrismaService
-│   └── prisma.service.ts
+│   └── prisma.service.ts  # connects as `authenticator`; owns withRls() — see §12
+├── auth/                  # GoTrue-backed login/refresh/admin-provisioning (see §12)
 └── <feature>/              # one folder per domain feature (users, appointments, ...)
     ├── dto/
     │   ├── create-<feature>.dto.ts
@@ -101,11 +102,16 @@ Rules:
 - Throw Nest's built-in `HttpException` subclasses (`NotFoundException`, `ConflictException`,
   `BadRequestException`, ...) from services for expected failure cases. Do not let a `null` from
   `findUnique` flow back to the controller as an HTTP 200 with an empty body — check for it and
-  throw `NotFoundException`.
-- Add a global exception filter (`common/filters/prisma-exception.filter.ts`) that catches
-  `Prisma.PrismaClientKnownRequestError` and maps known codes to HTTP errors (`P2025` → 404,
-  `P2002` → 409, etc.), so a missing row on `update`/`delete` doesn't surface as an unhandled 500
-  with a raw Prisma stack trace.
+  throw `NotFoundException`. (Note: with RLS in place, a `null` also correctly means "exists but you
+  can't see it" — a 404 either way is the right thing to leak, not a bug.)
+- `common/filters/prisma-exception.filter.ts` (global, wired in `main.ts`) catches
+  `Prisma.PrismaClientKnownRequestError` and maps known codes to HTTP errors: `P2025` → 404,
+  `P2002` → 409, `P2003` → 400. It also unwraps the `@prisma/adapter-pg` driver-adapter error shape
+  (`exception.meta.driverAdapterError.cause.code`) to recognize raw Postgres errors that Prisma
+  itself only reports as a generic `P2039` — in particular `P0001` (a `RAISE EXCEPTION` from an
+  application trigger, e.g. `protect_privileged_columns`) → 403, since that's an authorization
+  refusal, not a server bug. Extend this switch, don't bypass it, when a new trigger/constraint
+  needs its own HTTP mapping.
 - Keep one consistent JSON error envelope across the whole API (`statusCode`, `message`, `path`,
   `timestamp`).
 - Per root AGENTS.md: the `message` shown to API consumers must be formal, impersonal Spanish.
@@ -114,42 +120,59 @@ Rules:
 
 ## 6. Security
 
-This server holds health data (biometrics, clinical notes, emotional journals, panic alerts) — treat
-security as a first-class requirement, not a later pass:
+This server holds health data (biometrics, clinical notes, emotional journals, panic alerts) —
+security is enforced in two independent layers, and both matter:
 
-- Every route beyond the public health check must sit behind an auth guard once authentication
-  exists. The `Role` enum (`student`, `psychologist`, `administrator`) already models the access
-  tiers the schema needs — a `RolesGuard` + `@Roles()` decorator should enforce them before any
-  clinical or biometric endpoint ships.
+- **App layer**: `JwtAuthGuard` is registered globally (`APP_GUARD`) — every route requires a valid
+  Supabase Auth (GoTrue) JWT unless explicitly marked `@Public()` (see `common/decorators/
+  public.decorator.ts`; currently only the health check and `/auth/login`/`/auth/refresh`). Add
+  `@UseGuards(RolesGuard)` + `@Roles(Role.xxx)` on any handler that should be restricted beyond
+  "any authenticated user" — see `UsersController.create`/`remove` for the pattern.
+- **DB layer**: Row Level Security (see §12) independently enforces the same access rules at the
+  Postgres level. Never treat the app-layer guard as sufficient on its own for a new sensitive
+  table — add both.
 - Never hardcode tunable security parameters (bcrypt salt rounds, token TTLs) — read them from
-  `ConfigService`.
+  `ConfigService`. (There is no bcrypt in this app anymore — GoTrue owns password storage entirely;
+  don't reintroduce local password hashing.)
 - Add `helmet()` and an explicit CORS allowlist in `main.ts` before this API is exposed beyond
-  localhost.
-- Add rate limiting (`@nestjs/throttler`) on write endpoints and anything auth-related.
-- Never log `passwordHash` or raw health-record content. Redact sensitive fields in any logging
-  interceptor.
+  localhost. Not done yet — still a gap.
+- Add rate limiting (`@nestjs/throttler`) on write endpoints and anything auth-related. Not done
+  yet — still a gap.
+- Never log `passwordHash` (doesn't exist anymore) or raw health-record content. Redact sensitive
+  fields in any logging interceptor.
+- `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS entirely and must never reach a client. It is used in
+  exactly one place (`AuthService.adminCreateUser`/`adminUpdatePassword`) — do not thread it into
+  any other code path without a specific reason.
 
 ## 7. Config
 
-- Validate environment variables at boot (Joi or Zod schema passed to `ConfigModule.forRoot({
-  validate })`) so a missing/malformed `DATABASE_URL` fails fast on startup, not on the first
-  request.
-- Access config through `ConfigService` (or a typed config factory), not `process.env` scattered
-  across files. `main.ts` (`process.env.PORT`) and `prisma.service.ts`
-  (`process.env.DATABASE_URL`) currently read `process.env` directly — route both through
-  `ConfigService` once the validated config module is in place.
+- `src/config/configuration.ts` + `src/config/validation.ts`, wired into `ConfigModule.forRoot({
+  load: [configuration], validate })` in `app.module.ts`. `validate` fails fast at boot if any
+  required env var is missing (see the list there) rather than failing on the first request that
+  happens to touch it.
+- Access config through `ConfigService` — `main.ts` and `PrismaService` both do this already. Don't
+  reintroduce direct `process.env.X` reads in application code; add the var to `configuration.ts`
+  instead (a one-off script like `prisma/seed.ts`, which runs outside Nest's DI, is the one
+  legitimate exception).
 
 ## 8. Prisma & database
 
 - All Prisma access stays inside services (already respected) — never inject `PrismaService` into a
   controller.
+- **Every query against an RLS-protected table MUST go through `this.prisma.withRls(tx => ...)`**,
+  never `this.prisma.user.findMany()` directly. See §12 — a bare call runs as the `authenticator`
+  role with no privileges switched in and will simply fail (not silently bypass RLS).
 - Schema changes always go through `prisma migrate` — never hand-edit the database or generated
-  client.
+  client. RLS policies/functions/triggers are the one exception: they're plain SQL inside a
+  migration file (`prisma migrate dev --create-only` then hand-write the SQL, since they aren't
+  representable in `schema.prisma`) — see §12.
 - Add `@@index` on foreign-key columns that are queried or joined on often (`studentId`, `doctorId`,
   `deviceId`, `biometricRecordId`, etc.) — Postgres does not auto-index FK columns, and this schema
   has several one-to-many relations that will be queried by parent id.
 - Wrap multi-step writes that must succeed or fail together (e.g. creating an `Appointment` and its
-  `ClinicalNote`) in `prisma.$transaction(...)`.
+  `ClinicalNote`) in `prisma.$transaction(...)` — note `withRls` already gives you an open
+  transaction (the `tx` parameter); do multi-step writes inside one `withRls` call, don't nest
+  another `$transaction` inside it.
 - Avoid N+1 queries — use `include`/`select` to fetch related data in one round trip instead of
   looping and querying per record.
 - Any list endpoint (`findAll`) must paginate (`skip`/`take` with a sane default and an enforced
@@ -177,7 +200,90 @@ security as a first-class requirement, not a later pass:
   (`users.controller.ts`, `users.service.ts`) currently have formatting inconsistent with those
   rules and should be cleaned up next time they're touched.
 
-## 11. Definition of done for a new endpoint
+## 12. Row Level Security (RLS) & Supabase Auth
+
+Compliance requires DB-level enforcement, not just app-level guards — a superuser connection
+bypasses RLS unconditionally, so this only works because the app connects as a **non-superuser**
+role. This section is the load-bearing one; read it before touching auth, `PrismaService`, or any
+new RLS-protected table.
+
+**Identity & auth.** Users authenticate via self-hosted **Supabase Auth (GoTrue)**, not a local
+password table — `remote_users.id` is a foreign key into `auth.users(id)` (`ON DELETE CASCADE`),
+and there is no `passwordHash` column anymore. `AuthService` proxies GoTrue's password grant
+(`/auth/login`, `/auth/refresh`) and provisions accounts via GoTrue's **Admin API**
+(`adminCreateUser`/`adminUpdatePassword`, using the server-only `SUPABASE_SERVICE_ROLE_KEY`) —
+registration is admin-provisioned, not public self-signup. `JwtAuthGuard` verifies the GoTrue-issued
+JWT locally (`SUPABASE_JWT_SECRET`, HS256) and resolves the caller's ECOS profile
+(`role`/`institutionId`) via one explicitly-scoped self-lookup (see below). A brand new environment
+has no administrator to provision the first one through the API — `prisma/seed.ts` bootstraps
+exactly one, connecting directly as `postgres` + calling the GoTrue Admin API itself. Re-run it (or
+adapt it) whenever a fresh environment needs its first admin.
+
+**How RLS is bridged through Prisma.** Prisma has no built-in RLS support, and — this was tried and
+verified not to work — a transparent `$extends({ query: { $allOperations } })` client extension
+**cannot** redirect the wrapped query into a separately-opened `$transaction`; the `query(args)`
+callback Prisma hands you always executes against the original client. The only verifiably-correct
+approach is `PrismaService.withRls(fn)` (`src/prisma/prisma.service.ts`): it opens a real interactive
+transaction (`$transaction(async (tx) => ...)`, which *does* guarantee same-connection execution for
+everything called via `tx`), and inside that one connection runs, in order:
+1. `SELECT set_config('request.jwt.claims', '<json sub/role>', true)` — the same session variable
+   PostgREST sets per-request, so `auth.uid()`/`auth.role()` work exactly as in any Supabase doc.
+2. `SET LOCAL ROLE <anon|authenticated|service_role>` — the actual privilege switch. `authenticator`
+   (what `APP_DATABASE_URL` connects as) is `NOBYPASSRLS`/`NOINHERIT` and has no table grants of its
+   own; it can only *become* one of `anon`/`authenticated`/`service_role` via `SET ROLE`, mirroring
+   what PostgREST does per-request. This is why a bare `this.prisma.user.findMany()` fails outright
+   instead of silently working unscoped — there is no privilege to fall back to.
+
+The identity for step 1/2 comes from `AsyncLocalStorage` (`common/context/rls-context.ts`),
+populated by the global `RlsContextInterceptor` from `request.user` — which `JwtAuthGuard` sets.
+**Ordering matters and is easy to get wrong**: Nest runs Guards *before* Interceptors, so at the
+point `JwtAuthGuard` runs, the ALS context doesn't exist yet. That's why `JwtAuthGuard`'s own
+self-lookup calls `withRls(fn, { userId, role: 'authenticated' })` with an **explicit override**
+instead of relying on ALS — it's the one call site that has to bootstrap its own identity. Every
+other call, in any service, should call `withRls(fn)` with no override and let ALS supply it.
+
+**Writing new policies — the pattern from `remote_users`/`remote_student_profiles`/
+`remote_biometric_records`** (migration `20260913120500_rls_policies`):
+1. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY; ... FORCE ROW LEVEL SECURITY;` — `FORCE` matters even
+   though the app doesn't connect as the table owner; add it anyway, it's what makes intent explicit
+   and protects against a future owner-switch.
+2. `GRANT SELECT/INSERT/UPDATE/DELETE ... TO authenticated` (+ `GRANT USAGE ON SEQUENCE ...` for any
+   serial PK) **before** writing policies. Policies only restrict rows on an operation the role is
+   already allowed to attempt — no grant means the operation fails regardless of any policy, and
+   this is the single easiest thing to forget.
+3. **Never let a policy directly query another RLS-protected table that might query back into this
+   one** — that's an infinite-recursion trap Postgres will happily let you create (hit and fixed
+   live in this session: `remote_student_profiles`'s policy queried `remote_users`, whose own policy
+   queried `remote_student_profiles`). Route any cross-table lookup through a `SECURITY DEFINER
+   STABLE` SQL function instead (`current_user_role()`, `current_user_institution_id()`,
+   `institution_id_for_user()`, `can_access_student_profile()` in the migration) — created by a
+   migration (runs as `postgres`), so it executes with the superuser's RLS-bypass, breaking the
+   cycle at the source. Always add `set search_path = ''` and fully-qualify names in these
+   functions (hardening against search_path hijacking).
+4. **RLS is row-level only.** If any column on the row must be off-limits to a non-privileged
+   caller who otherwise passes the row-level check (e.g. a user updating their own row shouldn't be
+   able to change their own `role`), RLS cannot express that — add a `BEFORE UPDATE` trigger that
+   rejects the change (see `protect_privileged_columns`).
+5. Update `PrismaExceptionFilter` if the new trigger's raised message needs specific HTTP-status
+   handling beyond the generic 403 the `P0001` case already gives you.
+
+**Known follow-up, not yet solved**: automated device ingestion (a band device pushing biometric
+readings with no logged-in clinician present) has no `auth.uid()` to check against — that path
+needs its own decision (likely a `service_role`-authenticated ingestion endpoint), not the
+`authenticated`-role policy used for interactive access.
+
+**Extending RLS to the remaining tables** (`remote_alerts`, `remote_appointments`,
+`remote_clinical_notes`, `remote_band_devices`, `remote_emotional_journal`,
+`remote_institutions`) — same checklist every time:
+- [ ] `ENABLE`/`FORCE ROW LEVEL SECURITY`
+- [ ] `GRANT`s for `authenticated` (table + any sequence)
+- [ ] select/insert/update/delete policies, reusing `current_user_role()`/
+      `current_user_institution_id()`/`can_access_student_profile()` — add a new `SECURITY DEFINER`
+      helper only for a genuinely new cross-table lookup, and check it can't recurse
+- [ ] A trigger if any column needs to be off-limits beyond what row-level access already implies
+- [ ] A test proving both the allowed and the denied case (see §9)
+
+## 13. Definition of done for a new endpoint
 
 - [ ] DTOs validated with `class-validator` and documented with `@ApiProperty`
 - [ ] Controller documented with `@ApiTags`/`@ApiOperation`/`@ApiResponse`
@@ -185,5 +291,7 @@ security as a first-class requirement, not a later pass:
 - [ ] Not-found / conflict cases throw the correct `HttpException`
 - [ ] No raw Prisma entity leaks sensitive fields in the response
 - [ ] Auth/role guard applied if the resource isn't public
+- [ ] If the table holds sensitive data: RLS enabled + policies written (§12), not just an app guard
+- [ ] All Prisma calls in the service go through `this.prisma.withRls(...)`, not a bare call
 - [ ] Unit test(s) for the service, covering the failure path
 - [ ] `pnpm lint` and `pnpm format` clean
