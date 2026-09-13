@@ -31,8 +31,8 @@ src/
 │   └── validation.ts      # Joi/Zod schema, validated at boot
 ├── prisma/
 │   ├── prisma.module.ts   # @Global, exports PrismaService
-│   └── prisma.service.ts  # connects as `authenticator`; owns withRls() — see §12
-├── auth/                  # GoTrue-backed login/refresh/admin-provisioning (see §12)
+│   └── prisma.service.ts  # connects as `authenticator`; owns withRls() — see "RLS & Supabase Auth"
+├── auth/                  # GoTrue-backed login/refresh/admin-provisioning (see "RLS & Supabase Auth")
 └── <feature>/              # one folder per domain feature (users, appointments, ...)
     ├── dto/
     │   ├── create-<feature>.dto.ts
@@ -129,9 +129,9 @@ security is enforced in two independent layers, and both matter:
   `/auth/forgot-password`). Add `@UseGuards(RolesGuard)` + `@Roles(Role.xxx)` on any handler that
   should be restricted beyond "any authenticated user" — see `UsersController.create`/`remove` for
   the pattern.
-- **DB layer**: Row Level Security (see §12) independently enforces the same access rules at the
-  Postgres level. Never treat the app-layer guard as sufficient on its own for a new sensitive
-  table — add both.
+- **DB layer**: Row Level Security (see "Row Level Security (RLS) & Supabase Auth" below)
+  independently enforces the same access rules at the Postgres level. Never treat the app-layer
+  guard as sufficient on its own for a new sensitive table — add both.
 - Never hardcode tunable security parameters (bcrypt salt rounds, token TTLs) — read them from
   `ConfigService`. (There is no bcrypt in this app anymore — GoTrue owns password storage entirely;
   don't reintroduce local password hashing.)
@@ -176,12 +176,13 @@ security is enforced in two independent layers, and both matter:
 - All Prisma access stays inside services (already respected) — never inject `PrismaService` into a
   controller.
 - **Every query against an RLS-protected table MUST go through `this.prisma.withRls(tx => ...)`**,
-  never `this.prisma.user.findMany()` directly. See §12 — a bare call runs as the `authenticator`
-  role with no privileges switched in and will simply fail (not silently bypass RLS).
+  never `this.prisma.user.findMany()` directly. See "Row Level Security (RLS) & Supabase Auth"
+  below — a bare call runs as the `authenticator` role with no privileges switched in and will
+  simply fail (not silently bypass RLS).
 - Schema changes always go through `prisma migrate` — never hand-edit the database or generated
   client. RLS policies/functions/triggers are the one exception: they're plain SQL inside a
   migration file (`prisma migrate dev --create-only` then hand-write the SQL, since they aren't
-  representable in `schema.prisma`) — see §12.
+  representable in `schema.prisma`) — see "Row Level Security (RLS) & Supabase Auth" below.
 - Add `@@index` on foreign-key columns that are queried or joined on often (`studentId`, `doctorId`,
   `deviceId`, `biometricRecordId`, etc.) — Postgres does not auto-index FK columns, and this schema
   has several one-to-many relations that will be queried by parent id.
@@ -216,7 +217,7 @@ security is enforced in two independent layers, and both matter:
   (`users.controller.ts`, `users.service.ts`) currently have formatting inconsistent with those
   rules and should be cleaned up next time they're touched.
 
-## 12. Row Level Security (RLS) & Supabase Auth
+## 11. Row Level Security (RLS) & Supabase Auth
 
 Compliance requires DB-level enforcement, not just app-level guards — a superuser connection
 bypasses RLS unconditionally, so this only works because the app connects as a **non-superuser**
@@ -338,10 +339,10 @@ checklist is still:
       `authenticated`) only for a genuinely new cross-table lookup, and check it can't recurse
 - [ ] Every `auth.*()`/helper call wrapped in `(SELECT ...)`
 - [ ] A trigger if any column needs to be off-limits beyond what row-level access already implies
-- [ ] A test proving both the allowed and the denied case (see §9)
+- [ ] A test proving both the allowed and the denied case (see "Testing" above)
 - [ ] `@@index` on every new FK column without a `@unique`
 
-## 13. Definition of done for a new endpoint
+## 12. Definition of done for a new endpoint
 
 - [ ] DTOs validated with `class-validator` and documented with `@ApiProperty`
 - [ ] Controller documented with `@ApiTags`/`@ApiOperation`/`@ApiResponse`
@@ -349,7 +350,8 @@ checklist is still:
 - [ ] Not-found / conflict cases throw the correct `HttpException`
 - [ ] No raw Prisma entity leaks sensitive fields in the response
 - [ ] Auth/role guard applied if the resource isn't public
-- [ ] If the table holds sensitive data: RLS enabled + policies written (§12), not just an app guard
+- [ ] If the table holds sensitive data: RLS enabled + policies written (see "Row Level Security
+      (RLS) & Supabase Auth" above), not just an app guard
 - [ ] All Prisma calls in the service go through `this.prisma.withRls(...)`, not a bare call
 - [ ] Unit test(s) for the service, covering the failure path
 - [ ] `pnpm lint` and `pnpm format` clean
