@@ -116,9 +116,15 @@ Please follow these instructions sequentially to set up the project on your loca
 >
 > ```powershell
 > cd apps/server
-> pnpm exec prisma migrate dev
+> pnpm exec prisma migrate deploy
 > cd ../../
 > ```
+>
+> Use `migrate deploy`, not `migrate dev` — `dev` diffs against a throwaway shadow database that
+> never has Supabase Auth's `auth` schema, so it always fails on the migration that adds the
+> `remote_users` → `auth.users` foreign key. `deploy` applies existing migrations directly with no
+> shadow database involved, and is what you want any time you're just bringing a clone up to date
+> rather than authoring a new migration.
 
 </details>
 
