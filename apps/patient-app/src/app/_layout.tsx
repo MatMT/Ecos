@@ -1,12 +1,15 @@
-import { Stack } from "expo-router";
-import { HeaderShownContext } from "expo-router/build/react-navigation";
+import { Stack } from 'expo-router';
+
+import { AuthProvider } from '@/hooks/use-auth';
 
 export default function RootLayout() {
   return (
-    <Stack>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="(protected)/(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-    </Stack>
+    <AuthProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(protected)" />
+      </Stack>
+    </AuthProvider>
   );
 }

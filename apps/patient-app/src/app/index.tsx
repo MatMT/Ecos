@@ -1,43 +1,43 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withTiming, 
-  Easing
-} from 'react-native-reanimated';
+import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
+import { Colors } from '@/constants/theme';
+import { useAuth } from '@/hooks/use-auth';
+
+const MIN_SPLASH_DURATION_MS = 1200;
 
 export default function SplashScreen() {
+  const { isAuthenticated, isLoading } = useAuth();
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.9);
 
   useEffect(() => {
-    // Start animation
     opacity.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.ease) });
     scale.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.ease) });
-
-    // Navigate to login after animation + short delay
-    const timer = setTimeout(() => {
-      // Use replace to prevent going back to the splash screen
-      router.replace('/login');
-    }, 2500);
-
-    return () => clearTimeout(timer);
   }, [opacity, scale]);
 
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: opacity.value,
-      transform: [{ scale: scale.value }],
-    };
-  });
+  useEffect(() => {
+    if (isLoading) return;
+
+    const timer = setTimeout(() => {
+      router.replace(isAuthenticated ? '/(protected)/(tabs)/home' : '/login');
+    }, MIN_SPLASH_DURATION_MS);
+
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, isLoading]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
     <View style={styles.container}>
-      <Animated.Image 
-        source={require('@/assets/logo_nexo_ecos.png')} 
-        style={[styles.logo, animatedStyle]} 
+      <Animated.Image
+        source={require('@/assets/logo_nexo_ecos.png')}
+        style={[styles.logo, animatedStyle]}
         resizeMode="contain"
       />
       <Animated.View style={[styles.loaderContainer, animatedStyle]}>
@@ -50,7 +50,7 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#47ACA0',
+    backgroundColor: Colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
   },

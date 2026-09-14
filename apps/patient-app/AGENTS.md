@@ -10,49 +10,45 @@ end-user text, DRY, no dead code, etc. all still apply here.
 Expo HAS CHANGED. Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before
 writing any code — do not rely on memorized APIs from older Expo/React Native versions.
 
-## 1. Current state (read before touching navigation or screens)
+## 1. Known gaps — not yet solved
 
-This codebase is mid-migration from the `create-expo-app` starter template to the real product and
-currently mixes both. Concretely, as of this writing:
+- **No automated tests exist** (see section 7) — this is the main outstanding gap from the last
+  structural pass.
+- `expo-secure-store` has no web implementation (it's an empty stub on `web` — there's no OS
+  keychain in a browser). `src/services/api/secure-session-storage.ts` falls back to
+  `localStorage` on `Platform.OS === 'web'` only; native (Expo Go / a real build) always uses
+  SecureStore. This is the same known XSS trade-off `docs/AUTH_INTEGRATION.md` calls out for
+  browser apps — acceptable for now since web is a secondary preview target for this app, not
+  where it primarily ships, but don't treat it as solved.
+- `Home` (`src/app/(protected)/(tabs)/home.tsx`)'s oxygen and temperature metrics are still
+  hardcoded (`95%`, `37.2°C`) — there is no sensor/data source for them yet, unlike heart rate and
+  stress which are wired to `useBiometricMonitor`. Marked with a `TODO` in place; wire them up
+  the same way once a real data source exists, don't silently make them look live before that.
+- The "Iniciar Respiración" button and the panic button on `Home` are inert UI (no screen/flow
+  wired up yet).
+- `stats.tsx` and `chat.tsx` are intentionally minimal placeholders (`ScreenPlaceholder`) — no
+  design or backend contract exists yet for either. Build them out against a real API contract
+  when one exists; don't invent one client-side.
 
-- `src/app/(protected)/(tabs)/Stats.tsx`, `Chat.tsx`, and `Profile.tsx` are **empty files** wired
-  into the tab navigator — opening those tabs renders nothing / breaks. Any work touching navigation
-  must not ship a route with no default export.
-- The whole starter-template layer is dead code, never imported by a real screen: `app-tabs.tsx` /
-  `app-tabs.web.tsx`, `ThemedText` / `ThemedView` / `use-theme` / `use-color-scheme` /
-  `constants/theme.ts` (`Colors`/`Fonts`/`Spacing`), `HintRow`, `Collapsible`, `ExternalLink`,
-  `WebBadge`, `AnimatedIcon` / `AnimatedSplashOverlay`, and their backing assets (`expo-logo.png`,
-  `react-logo*.png`, `expo-badge*.png`, `logo-glow.png`, `tabIcons/*`). Every real screen instead
-  hand-rolls its own `StyleSheet.create` with hardcoded hex colors. Do not add new UI on top of the
-  unused theme system without first reading section 5 — either the theme system becomes the one
-  real design system, or it gets deleted; it must not keep existing unreferenced.
-- `useBiometricSimulator` and `ExecuTorchService`/`aiEngine` implement a real (simulated) data +
-  inference pipeline but are not consumed by any screen — `Home.tsx`'s "AI status" card and metric
-  values are 100% hardcoded JSX, not sourced from either. Treat this as an integration gap, not a
-  reason to write a second, competing data path.
-- `login.tsx` performs no authentication — `handleLogin` unconditionally calls
-  `router.replace('/(protected)/(tabs)/Home')`, the inputs are uncontrolled, and nothing in
-  `(auth)` or `(protected)` gates access by session state. Any auth-adjacent work must follow section
-  3 and [`docs/AUTH_INTEGRATION.md`](../../docs/AUTH_INTEGRATION.md) — this is not implemented yet,
-  it is not a reference for "how it already works" here.
-
-Do not treat any of the above as intentional prior art to copy from. When a task touches one of these
-areas, fix it in place per the rules below rather than extending the inconsistency.
+Do not treat any of the above as something to silently build around — if a task touches one of
+these areas, close the gap for real rather than adding another layer on top of the placeholder.
 
 ## 2. Project structure
 
-Target layout — `src/` is the only source root; nothing app-specific lives outside it:
+`src/` is the only source root — nothing app-specific lives outside it (a past inconsistency had a
+component living at the repo-level `components/`, forcing a `../../../../` relative import instead
+of the `@/` alias; don't reintroduce that).
 
 ```text
 src/
 ├── app/                      # expo-router file-based routes ONLY — no business logic here
-│   ├── _layout.tsx
-│   ├── index.tsx             # splash / session bootstrap redirect
+│   ├── _layout.tsx           # wraps everything in AuthProvider
+│   ├── index.tsx             # splash screen; redirects based on session state
 │   ├── (auth)/
-│   │   ├── _layout.tsx       # redirects away if already authenticated
+│   │   ├── _layout.tsx       # redirects to (protected) if already authenticated
 │   │   └── login.tsx
 │   └── (protected)/
-│       ├── _layout.tsx       # redirects to (auth) if NOT authenticated — the actual route guard
+│       ├── _layout.tsx       # redirects to /login if NOT authenticated — the actual route guard
 │       └── (tabs)/
 │           ├── _layout.tsx
 │           ├── home.tsx
@@ -60,58 +56,45 @@ src/
 │           ├── chat.tsx
 │           └── profile.tsx
 ├── components/                # shared, reusable, presentation-only components
-│   └── ui/                    # generic primitives (Button, Card, Badge, TextField, MetricCard...)
-├── features/                   # OR co-locate per screen — pick one, see below
-│   └── <feature>/
-│       ├── components/         # feature-specific presentational components
-│       ├── hooks/               # feature-specific hooks (data + local state)
-│       └── <feature>.types.ts
-├── hooks/                      # cross-cutting hooks (useAuth, useSession, useColorScheme...)
-├── services/                   # API clients / device / AI integrations, no React imports
-│   ├── api/                    # HTTP client(s) talking to `apps/server`
-│   └── ai/
-├── constants/
-└── store/ or context/          # session/auth state, shared app state
+│   └── ui/                    # generic primitives (Button, TextField, MetricCard, ScreenPlaceholder...)
+├── config/                    # env.ts — read config from here, never inline `process.env` at call sites
+├── constants/                  # theme.ts — Colors/Spacing/Radius design tokens (see section 5)
+├── hooks/                      # cross-cutting hooks (useAuth, useBiometricMonitor, ...)
+├── services/
+│   ├── api/                    # auth-client.ts and any future HTTP client for `apps/server`
+│   └── ai/                     # on-device inference (ExecuTorch)
 ```
 
 Rules:
 
-- **`components/` and all app source live under `src/`.** `apps/patient-app/components/
-  CustomTopBar.tsx` currently sits outside `src/`, forcing `Home.tsx` to import it via a fragile
-  `../../../../components/CustomTopBar` relative path instead of the `@/` alias (which only maps to
-  `src/*`). Move any component living outside `src/` into `src/components/` and import it via `@/
-  components/...`.
 - Never leave an unreferenced file in `src/` "for later" — either wire it up in the same change or
-  delete it. `git log`/version control is the place for code you're not currently using, not the
-  working tree.
-- Pick **one** pattern for feature code and apply it consistently: either co-locate a screen's
-  hooks/components next to it under `src/features/<feature>/`, or keep a flat `src/components` +
-  `src/hooks` split. Do not grow a third pattern once one is chosen.
+  delete it. Version control is the place for code you're not currently using, not the working
+  tree. (The app previously carried a full unused starter-template layer — theming components,
+  animated splash, an alternate tab bar — that nothing imported; it was removed. Don't rebuild that
+  situation by scaffolding a component/hook before it has a caller.)
+- Feature-specific hooks/components can be co-located under a `src/features/<feature>/` folder once
+  a feature grows past a couple of files. Until then, the flat `src/components` + `src/hooks` split
+  above is the convention — don't introduce a third pattern.
 
 ## 3. Navigation (Expo Router)
 
 - Every route file registered in a `Tabs`/`Stack` navigator **must** have a working default export
-  before it is wired in. Do not add a `Tabs.Screen`/`Stack.Screen` entry for a screen that isn't
-  built yet — an empty placeholder screen still needs at least a minimal implemented component.
-- **Auth gating belongs in layout files, not in individual screens.** `(auth)/_layout.tsx` and
-  `(protected)/_layout.tsx` must exist and implement Expo Router's protected-routes pattern
-  (`<Stack.Protected guard={...}>` or an equivalent redirect based on session state read from
-  `useAuth`/`useSession`) — see [`docs/AUTH_INTEGRATION.md`](../../docs/AUTH_INTEGRATION.md) for the
-  session/token contract. A screen component must never be the thing deciding "am I allowed to be
-  here" via an ad hoc `router.replace` in an event handler.
-- `app/index.tsx` (the splash/bootstrap screen) must check for an existing valid session before
-  deciding whether to redirect to `/login` or straight into `(protected)`. Unconditionally routing to
-  `/login` defeats persisted sessions.
-- Route file names are lowercase kebab-case, consistent with every other file in `src/`
-  (`home.tsx`, `stats.tsx`, `chat.tsx`, `profile.tsx`, `_layout.tsx`) — not `PascalCase` (`Home.tsx`,
-  `Stats.tsx`). Expo Router matches on file name, so renaming is a mechanical, low-risk cleanup; do
-  it in its own change, not mixed into a feature change.
-- Tab icon render props (`tabBarIcon: ({ focused, size }) => ...`) must destructure the same
-  arguments identically across tabs; when the design calls for an active/inactive icon state, use
-  `focused` the same way in every `Tabs.Screen`, not in only one.
-- Only one tab-bar implementation may exist. Delete `app-tabs.tsx`/`app-tabs.web.tsx` once confirmed
-  unused, or adopt one of them as *the* tab bar and delete the inline version currently in
-  `(tabs)/_layout.tsx` — never keep both.
+  before it is wired in — never register a placeholder route with no export.
+- **Auth gating lives in layout files, not in individual screens.** `(auth)/_layout.tsx` and
+  `(protected)/_layout.tsx` each read `useAuth()` and render a `<Redirect>` when the session state
+  doesn't match where the user is trying to go (see `src/hooks/use-auth.tsx`). A screen component
+  must never decide "am I allowed to be here" itself via an ad hoc `router.replace` in an event
+  handler — `login.tsx`, for example, only calls `login()` and lets `(auth)/_layout.tsx`'s guard
+  redirect once `isAuthenticated` flips true.
+- `app/index.tsx` (the splash screen) waits for `useAuth()`'s `isLoading` to resolve, then routes to
+  `(protected)/(tabs)/home` or `/login` depending on `isAuthenticated` — never route unconditionally
+  to `/login` and skip checking for a persisted session.
+- Route file names are lowercase kebab-case, consistent with every other file in `src/` (`home.tsx`,
+  `stats.tsx`, `chat.tsx`, `profile.tsx`, `_layout.tsx`) — not `PascalCase`.
+- Only one tab-bar implementation may exist (currently the `Tabs`/`Tabs.Screen` setup in
+  `(tabs)/_layout.tsx`). Don't add a second, parallel tab-bar component.
+- If a design introduces a focused/unfocused icon state, apply it identically across every
+  `Tabs.Screen`'s `tabBarIcon`, not just one.
 
 ## 4. Screens vs. business logic (Separation of Concerns)
 
@@ -121,73 +104,59 @@ Per root AGENTS.md: never mix business logic with presentation. Concretely for t
   wire up event handlers that call functions from a hook/service. It must not itself: define
   data-fetching logic, own non-trivial derived-value computations, or reach into a service/AI module
   directly.
-- Extract any computed/derived value out of a screen into a hook, even a small one. Don't define a
-  helper function (e.g. a date formatter) *inside* a screen component's body — it gets recreated
-  every render and invites exactly the kind of confusion seen in the current `Home.tsx` (`GetDate()`
-  nested inside `Home`, its own `useState`, PascalCase-named like a component but invoked as a plain
-  function). Prefer `useTodayLabel()` (a hook) or a pure utility function in `src/utils` if it truly
-  needs no React state.
-- Simulated/real sensor or inference data (`useBiometricSimulator`, `ExecuTorchService`) must be
-  consumed through a hook the screen calls (`useBiometricSimulator()`), never re-implemented or
-  hardcoded inline in the screen that's supposed to display it. If a screen currently shows
-  hardcoded placeholder values, either wire it to the real hook/service or explicitly mark it with a
-  `// TODO(<ticket/reason>)`-style comment — never leave static production-looking numbers that imply
-  a live data path exists when it doesn't.
-- Form screens (`login.tsx` and any future form) must use controlled inputs (`useState` +
-  `onChangeText`/`value`, or a form library already in the dependency tree) and delegate the actual
-  submit action to a hook/service (`useAuth().login(...)`), not perform navigation directly from a
-  raw `onPress` with no validation or error handling.
-- API/network calls to `apps/server` live in `src/services/api`, never inline in a component or hook
-  body beyond calling that service's exported function.
+- Extract any computed/derived value out of a screen into a hook, even a small one, rather than
+  defining a helper function inside a screen component's body (it gets recreated every render) —
+  see `useTodayLabel()` for the pattern.
+- Sensor/inference data must be consumed through a hook the screen calls
+  (`useBiometricMonitor()`, which wraps `useBiometricSimulator` + `ExecuTorchService`'s `aiEngine`)
+  — never re-implemented or hardcoded inline in the screen that displays it. If a value truly has no
+  backing data source yet, mark it with a `// TODO(...)` comment explaining what's missing (see
+  section 1) — never let it silently look like it comes from a live path.
+- Form screens (`login.tsx` and any future form) use controlled inputs (`useState` +
+  `onChangeText`/`value`) and delegate the actual submit action to a hook (`useAuth().login(...)`),
+  never perform navigation directly from a raw `onPress` with no validation or error handling.
+- API/network calls to `apps/server` live in `src/services/api` (see `auth-client.ts`, which
+  implements the shared `apiFetch`/refresh pattern from
+  [`docs/AUTH_INTEGRATION.md`](../../docs/AUTH_INTEGRATION.md)) — never inline a `fetch()` call in a
+  component or hook body.
 
 ## 5. Components & visual reuse
 
-- **One design system.** Either build on the existing `ThemedText`/`ThemedView`/`constants/theme.ts`
-  layer (extending `Colors`/`Spacing` with the real brand palette — the app's actual teal `#47ACA0`
-  currently only exists hardcoded inline in `index.tsx`/`login.tsx`, not in `constants/theme.ts`) or
-  replace it with a different one — but do not keep shipping new screens with raw, per-screen
-  `StyleSheet.create` and hand-picked hex values while an unused theme system sits next to them.
-- Extract a component once the same visual shape repeats with only data/color changes. The four
-  metric cards in `Home.tsx` (`Ritmo Cardíaco`, `Oxígeno`, `Temperatura`, `Nivel de Estrés`) and their
-  three status-color variants (`Elevado`/`Normal`/`Alto`) are exactly this case — one
-  `MetricCard({ label, value, unit, status })` component parameterized by status color, not four
-  copy-pasted `View`/`Text` blocks plus three copy-pasted style pairs.
-- Form fields that share the same look (`login.tsx`'s two `TextInput`s) belong in one
-  reusable `TextField`/`AuthInput`, not two near-identical `StyleSheet` blocks under inconsistent
-  names (`UserInput` vs `UserPass` — pick one casing convention, and name by what the field is, not
-  by a mix of both).
-- No placeholder/mock user data hardcoded into a shared component (`CustomTopBar` currently hardcodes
-  `"Hola, Laura"` and a random public avatar URL). Source it from the session/profile hook once one
-  exists; until then, accept it as props so the component itself stays reusable and testable.
+- **One design system**: `src/constants/theme.ts` exports `Colors`, `Spacing`, and `Radius` — the
+  single source of truth for the app's actual brand palette (`Colors.brand`, status colors, etc.).
+  Screens reference these tokens in their `StyleSheet.create`, never fresh hardcoded hex values.
+  (An earlier, unrelated light/dark theming layer inherited from the Expo starter template was
+  removed — it modeled a generic light/dark toggle this app's actual design doesn't use, and nothing
+  referenced it. Don't reintroduce a second, competing design system; extend `theme.ts` instead.)
+- Reusable primitives live in `src/components/ui`: `Button`, `TextField`, `MetricCard`,
+  `ScreenPlaceholder`. Extract a new one here as soon as the same visual shape repeats with only
+  data/color changes (`MetricCard` exists because `Home`'s four metric cards were four near-identical
+  copy-pasted blocks) — don't let a third copy of a shape appear inline in a screen.
+- No placeholder/mock user data hardcoded into a shared component. `CustomTopBar` takes `name` as a
+  prop (sourced from the session in `Home`) instead of hardcoding a name — keep that pattern for any
+  component that used to assume a single fake user.
 - Every asset under `assets/` must be referenced by at least one non-dead file. Delete an asset in
-  the same change that removes its last usage — `assets/icon-navbar/*.png` (chart/house/message/
-  user-icon) are currently unreferenced duplicates of the `.svg` icons actually used by the tab bar.
-- Run a spell/naming pass on any file you touch: identifiers like `buttom` (→ `button`), invalid
-  shorthand colors (`#ffff` is not a valid hex color — use `#fff`/`#ffffff`), and stray unused
-  imports (e.g. an unused `Image`/`View` import, or a typo'd `import Ract from "react"`) must not
-  survive review.
+  the same change that removes its last usage.
 
 ## 6. TypeScript & tooling
 
-- `declarations.d.ts` must type-check cleanly — module specifiers are string literals
-  (`import React from "react"`, not `import React from React`), and an imported type must be
-  referenced under the exact name it was imported as (`SVGProps`, not `SvgProps`, or vice versa,
-  consistently).
-- Every app in this monorepo except `patient-app` ships its own `eslint.config.mjs`. Add one here
-  (based on `eslint-config-expo`, already a devDependency) so `pnpm lint`/`expo lint` actually runs
-  against a real config instead of failing or falling back silently.
-- `README.md` is still the unmodified `create-expo-app` starter template (references an
-  `app-example` directory and generic Expo boilerplate that don't reflect this project). Replace it
-  with real project docs (how to run against the local `server`/Supabase stack, env vars, how auth
-  works) as part of any PR that touches setup/config — same expectation as `apps/server/README.md`.
+- `declarations.d.ts` must type-check cleanly — module specifiers are string literals, and an
+  imported type must be referenced under the exact name it was imported as. It also declares
+  `NodeJS.ProcessEnv.EXPO_PUBLIC_API_URL` — extend this block, don't add untyped `process.env`
+  reads, whenever a new `EXPO_PUBLIC_*` var is introduced.
+- `eslint.config.mjs` (flat config, based on `eslint-config-expo/flat`) is the lint config — run
+  `pnpm lint` (`expo lint`) before committing.
+- `README.md` documents how to actually run this app against the local `server`/Supabase stack —
+  keep it current when setup steps change, the same expectation as every other app's README in this
+  monorepo.
 
 ## 7. Testing
 
-There is currently no test setup in this app (no Jest config, no test files). At minimum, once a
-hook or service carries real logic (`useBiometricSimulator`, `ExecuTorchService`, a future
-`useAuth`), it should get a unit test using Expo's Jest preset (`jest-expo`) — don't let business
-logic accumulate in `src/hooks`/`src/services` with zero coverage while the project is still small
-enough to establish the habit early.
+There is currently no test setup in this app (no Jest config, no test files) — this is the main
+open gap (see section 1). At minimum, once a hook or service accumulates more logic
+(`useBiometricMonitor`, `auth-client.ts`, `use-auth.tsx`), it should get a unit test using Expo's
+Jest preset (`jest-expo`). Don't let business logic grow further in `src/hooks`/`src/services` with
+zero coverage.
 
 ## 8. Definition of done for a new screen/feature
 
@@ -197,10 +166,11 @@ enough to establish the habit early.
       calls go through `src/services`
 - [ ] Any repeated visual block (3+ near-identical JSX blocks) extracted into a component under
       `src/components`
-- [ ] Uses the project's one design system (theme tokens), not hardcoded hex values
+- [ ] Uses the project's one design system (`src/constants/theme.ts` tokens), not hardcoded hex
+      values
 - [ ] No unused imports, no dead files left behind, no placeholder data left hardcoded without a
-      tracked follow-up
+      tracked follow-up (`// TODO(...)`, and listed in section 1 if it's a standing gap)
 - [ ] End-user text is formal, impersonal Spanish per root AGENTS.md; identifiers stay in English
 - [ ] If it touches auth/session, follows [`docs/AUTH_INTEGRATION.md`](../../docs/AUTH_INTEGRATION.md)
-      and stores tokens via `expo-secure-store`, not `AsyncStorage`
+      and stores tokens via `secure-session-storage.ts` (SecureStore on native), not `AsyncStorage`
 - [ ] `pnpm lint` clean
