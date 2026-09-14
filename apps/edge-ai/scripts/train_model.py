@@ -131,7 +131,7 @@ def export_executorch(model, output_path):
         print(f"Export error: {e}")
 
 if __name__ == "__main__":
-    os.makedirs("../../apps/patient-app/assets", exist_ok=True)
+    os.makedirs("../../apps/mobile/assets", exist_ok=True)
     
     model = AnomalyDetector()
     
@@ -161,4 +161,4 @@ if __name__ == "__main__":
         print(f"Suggested Threshold: {suggested_threshold:.6f}")
         print("------------------------------\n")
         
-    export_executorch(model, "../../apps/patient-app/assets/model.pte")
+    export_executorch(model, "../../apps/mobile/assets/model.pte")

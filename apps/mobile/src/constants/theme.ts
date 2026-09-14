@@ -1,5 +1,5 @@
 /**
- * Design tokens for patient-app. This is the single source of truth for colors and spacing —
+ * Design tokens for mobile. This is the single source of truth for colors and spacing —
  * screens must reference these instead of hardcoding hex values in their own StyleSheet.
  */
 

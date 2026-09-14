@@ -1,6 +1,6 @@
 # ECOS Auth Integration Guide
 
-Audience: any app in this monorepo that needs to log a user in — `patient-app`,
+Audience: any app in this monorepo that needs to log a user in — `mobile`,
 `therapist-web`, `admin-web` — and any dev or agent implementing that. This is the
 contract client apps code against. Server-side implementation details live in
 [`apps/server/AGENTS.md`](../apps/server/AGENTS.md), in the "Security" and "Row Level
@@ -82,7 +82,7 @@ server, so it needs explaining:
 
 1. Your app calls `POST /auth/forgot-password` with `{ email, redirectTo }`, where
    `redirectTo` is a URL **your app owns** — a real page for `therapist-web`/`admin-web`,
-   a registered deep link (e.g. `ecosapp://reset-password`) for `patient-app`.
+   a registered deep link (e.g. `ecosapp://reset-password`) for `mobile`.
 2. GoTrue emails the user a link. The user clicks it. That request goes to GoTrue
    directly (through the gateway), **not through the Nest server** — GoTrue verifies it
    and 303-redirects the browser to your `redirectTo`, appending
@@ -103,7 +103,7 @@ small module like this per app, swapping only the storage functions:
 
 ```ts
 // authClient.ts — adapt getToken/setTokens/clearTokens to your platform's storage.
-// patient-app (Expo):     expo-secure-store (SecureStore.getItemAsync/setItemAsync)
+// mobile (Expo):     expo-secure-store (SecureStore.getItemAsync/setItemAsync)
 // therapist-web/admin-web: an httpOnly-cookie-backed store if you have one, otherwise
 //                          sessionStorage as the pragmatic default — flag this as a
 //                          known XSS trade-off if you go that route, not a solved one.

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "patient-app",
-    "slug": "patient-app",
+    "name": "mobile",
+    "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "patient-app",
+    "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -18,7 +18,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.patientapp"
+      "package": "com.anonymous.mobile"
     },
     "web": {
       "output": "static",

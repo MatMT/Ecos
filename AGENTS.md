@@ -38,7 +38,7 @@ If a user prompt requests a solution that violates any of these rules (e.g., ask
 
 ## 6. Client Auth Integration
 
-- Any work touching login, sessions, or tokens in `patient-app`, `therapist-web`, or
+- Any work touching login, sessions, or tokens in `mobile`, `therapist-web`, or
   `admin-web` MUST follow [`docs/AUTH_INTEGRATION.md`](docs/AUTH_INTEGRATION.md) — it is
   the authoritative contract for how a client talks to the `server` app's auth endpoints
   (token lifecycle, refresh rotation, error shapes, the forgot-password redirect flow).

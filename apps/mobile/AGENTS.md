@@ -1,6 +1,6 @@
-# patient-app — Expo / React Native Guidelines
+# mobile — Expo / React Native Guidelines
 
-This file defines how the `patient-app` app (Expo Router + React Native + TypeScript, tested via
+This file defines how the `mobile` app (Expo Router + React Native + TypeScript, tested via
 Expo Go) must be structured and written. It extends, and does not replace, the root
 [AGENTS.md](../../AGENTS.md) directives — English identifiers, strict typing, no `any`, Spanish
 end-user text, DRY, no dead code, etc. all still apply here.

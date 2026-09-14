@@ -1,4 +1,4 @@
-# patient-app
+# mobile
 
 The ECOS mobile app for patients (students), built with Expo Router + React Native + TypeScript.
 Developed and tested against Expo Go.
@@ -16,11 +16,11 @@ See [AGENTS.md](./AGENTS.md) for the project's structure, navigation, and coding
 ## Running the app
 
 ```bash
-pnpm --filter patient-app start
+pnpm --filter mobile start
 ```
 
 This opens the Expo dev tools; scan the QR code with Expo Go, or press `a`/`i` for an emulator/
-simulator, or `w` for the web target (`pnpm --filter patient-app web`).
+simulator, or `w` for the web target (`pnpm --filter mobile web`).
 
 ## Configuration
 
