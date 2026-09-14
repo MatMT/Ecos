@@ -1,56 +1,58 @@
-# Welcome to your Expo app 👋
+# patient-app
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The ECOS mobile app for patients (students), built with Expo Router + React Native + TypeScript.
+Developed and tested against Expo Go.
 
-## Get started
+See [AGENTS.md](./AGENTS.md) for the project's structure, navigation, and coding conventions.
 
-1. Install dependencies
+## Prerequisites
 
-   ```bash
-   npm install
-   ```
+- Node.js and `pnpm` (this app is part of the `Ecos` pnpm workspace — run `pnpm install` at the
+  repo root first)
+- The `server` app running locally (default `http://localhost:6622`) — see
+  [`apps/server/README.md`](../server/README.md)
+- Expo Go installed on a physical device, or an Android/iOS simulator
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Running the app
 
 ```bash
-npm run reset-project
+pnpm --filter patient-app start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+This opens the Expo dev tools; scan the QR code with Expo Go, or press `a`/`i` for an emulator/
+simulator, or `w` for the web target (`pnpm --filter patient-app web`).
 
-### Other setup steps
+## Configuration
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+The app talks to the `server` API — never hardcode its origin. Copy `.env.example` to `.env` and
+set `EXPO_PUBLIC_API_URL` there (the `EXPO_PUBLIC_` prefix is required for Expo to expose it to
+client code):
+
+```bash
+cp .env.example .env
+```
+
+Without a `.env`, the app falls back to `http://localhost:6622`, which only works for the web
+target or a simulator running on this same machine.
+
+> [!IMPORTANT]
+> **Testing on Expo Go on a physical device?** `localhost` there resolves to the *phone*, not your
+> computer — you MUST set `EXPO_PUBLIC_API_URL` to your machine's **LAN IP** instead (find it with
+> `ipconfig` on Windows / `ifconfig` or `ipconfig getifaddr en0` on macOS), and make sure the phone
+> is on the same Wi-Fi network as the machine running `server`. This IP can and will change
+> — different Wi-Fi network, a new DHCP lease after a reboot, switching machines — and each time it
+> does, login will fail with `"No fue posible conectar con el servidor"` until `.env` is updated to
+> match. This is a per-machine value: `.env` is gitignored on purpose, don't try to "fix this
+> permanently" by committing a real IP into `.env.example` or the code.
+
+## Auth
+
+Login, session, and token handling follow
+[`docs/AUTH_INTEGRATION.md`](../../docs/AUTH_INTEGRATION.md) — the contract shared with
+`therapist-web`/`admin-web` for talking to the server's `/auth/*` endpoints. Tokens are persisted
+with `expo-secure-store`, never `AsyncStorage`.
 
 ## Learn more
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- [Expo documentation](https://docs.expo.dev/)
+- [Expo Router documentation](https://docs.expo.dev/router/introduction)
