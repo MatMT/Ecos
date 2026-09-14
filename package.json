@@ -5,13 +5,12 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:mobile": "concurrently -n server,mobile -c blue,magenta \"pnpm --filter server dev\" \"pnpm --filter mobile dev\"",
     "lint": "turbo run lint",
     "test": "turbo run test"
   },
   "devDependencies": {
+    "concurrently": "^10.0.5",
     "turbo": "^2"
-  },
-  "dependencies": {
-    "pnpm": "^11.24.0"
   }
 }

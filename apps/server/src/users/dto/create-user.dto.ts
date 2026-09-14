@@ -1,7 +1,6 @@
 import {
   IsEmail,
   IsEnum,
-  IsInt,
   IsNotEmpty,
   IsString,
   MinLength,
@@ -9,9 +8,6 @@ import {
 import { Role } from '@prisma/client';
 
 export class CreateUserDto {
-  // @IsInt()
-  // institution_id?: number | null;
-
   @IsString()
   @IsNotEmpty()
   full_name!: string;

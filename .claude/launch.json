@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "patient-app-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "patient-app", "exec", "expo", "start", "--web", "--port", "8081"],
+      "port": 8081
+    }
+  ]
+}

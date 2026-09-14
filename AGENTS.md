@@ -36,21 +36,29 @@ Before generating any response, executing a command, or modifying the codebase, 
 
 If a user prompt requests a solution that violates any of these rules (e.g., asking to put a heavy database query inside a React component, or naming variables in Spanish), you must politely push back, explain the architectural violation, and provide the correct implementation following these guidelines.
 
-## 6. Prisma ORM Guidelines
+## 6. Client Auth Integration
+
+- Any work touching login, sessions, or tokens in `mobile`, `therapist-web`, or
+  `admin-web` MUST follow [`docs/AUTH_INTEGRATION.md`](docs/AUTH_INTEGRATION.md) — it is
+  the authoritative contract for how a client talks to the `server` app's auth endpoints
+  (token lifecycle, refresh rotation, error shapes, the forgot-password redirect flow).
+  Do not reverse-engineer this from `apps/server` source or invent a different flow.
+
+## 7. Prisma ORM Guidelines
 
 - **Schema as Single Source of Truth:** `schema.prisma` is the absolute source of truth for the database structure. Any changes to the database MUST be done through Prisma schema and migrations.
 - **Strict Typing with Prisma:** Leverage Prisma's generated types (e.g., `User`, `Prisma.UserCreateInput`). Do not manually redefine types that Prisma already generates.
 - **Service Layer Abstraction:** Do not inject `PrismaService` directly into controllers. All database interactions must reside within the Service layer to respect the Separation of Concerns.
 - **English Naming in Schema:** Table names (models) and columns (fields) in `schema.prisma` must be strictly in English, following `snake_case` for database mappings (`@map("my_table")`) and `camelCase` for Prisma client fields.
 
-## 7. AI Agent Communication & Workflow
+## 8. AI Agent Communication & Workflow
 
 - **Tone and Language:** Always use simple, clear, and understandable English when communicating with the user.
 - **No Personalization:** Maintain a strictly professional tone. Do not use emojis, conversational filler, or personalization.
 - **Conciseness:** Avoid redundancies. Provide direct, clear, and focused responses.
 - **Explicit Approval Required:** Never execute commands, modify files, or run actions without explicit prior approval from the user. Always wait for a clear confirmation before proceeding with implementation plans or structural changes.
 
-## 8. Ecosystem & Resource Utilization
+## 9. Ecosystem & Resource Utilization
 
 - **Contextual Awareness:** You must always take into consideration the "skills" (libraries, frameworks, custom hooks, helper functions, and database ORMs) already present in the project environment.
 - **Maximize Efficiency:** Use the existing project stack as your primary toolkit. Before implementing a custom solution from scratch, actively seek out and utilize these established resources to deliver better, faster, and more standardized work. Do not add new external dependencies unless strictly necessary and explicitly justified.

@@ -64,11 +64,13 @@ model Institution {
 }
 
 model User {
-  id             Int      @id @default(autoincrement())
+  /// Matches auth.users.id (Supabase Auth / GoTrue) — see the FK added by the
+  /// uuid_auth_migration; not modeled as a Prisma relation because auth.users
+  /// lives outside this schema's ownership.
+  id             String   @id @db.Uuid
   institutionId  Int?     @map("institution_id")
   fullName       String?  @map("full_name") @db.VarChar(255)
   email          String?  @db.VarChar(255)
-  passwordHash   String?  @map("password_hash") @db.VarChar(255)
   role           Role?
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -79,15 +81,16 @@ model User {
   doctorAppointments Appointment[] @relation("DoctorAppointments")
   doctorClinicalNotes ClinicalNote[] @relation("DoctorClinicalNotes")
 
+  @@index([institutionId])
   @@map("remote_users")
 }
 
 model StudentProfile {
   id                Int      @id @default(autoincrement())
-  userId            Int      @unique @map("user_id")
+  userId            String   @unique @map("user_id") @db.Uuid
   studentCode       String?  @map("student_code") @db.VarChar(255)
   primaryDiagnosis  String?  @map("primary_diagnosis") @db.VarChar(255)
-  assignedDoctorId  Int?     @map("assigned_doctor_id")
+  assignedDoctorId  String?  @map("assigned_doctor_id") @db.Uuid
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -99,6 +102,7 @@ model StudentProfile {
   appointments      Appointment[]
   clinicalNotes     ClinicalNote[]
 
+  @@index([assignedDoctorId])
   @@map("remote_student_profiles")
 }
 
@@ -114,6 +118,7 @@ model BandDevice {
   student          StudentProfile? @relation(fields: [studentId], references: [id])
   biometricRecords BiometricRecord[]
 
+  @@index([studentId])
   @@map("remote_band_devices")
 }
 
@@ -135,6 +140,7 @@ model BiometricRecord {
   alerts            Alert[]
   emotionalJournals EmotionalJournal[]
 
+  @@index([deviceId])
   @@map("remote_biometric_records")
 }
 
@@ -151,6 +157,8 @@ model Alert {
   student          StudentProfile?  @relation(fields: [studentId], references: [id])
   biometricRecord  BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
 
+  @@index([studentId])
+  @@index([biometricRecordId])
   @@map("remote_alerts")
 }
 
@@ -168,13 +176,15 @@ model EmotionalJournal {
   student          StudentProfile?  @relation(fields: [studentId], references: [id])
   biometricRecord  BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
 
+  @@index([studentId])
+  @@index([biometricRecordId])
   @@map("remote_emotional_journal")
 }
 
 model Appointment {
   id              Int                @id @default(autoincrement())
   studentId       Int?               @map("student_id")
-  doctorId        Int?               @map("doctor_id")
+  doctorId        String?            @map("doctor_id") @db.Uuid
   sessionTitle    String?            @map("session_title") @db.VarChar(255)
   sessionType     String?            @map("session_type") @db.VarChar(255)
   appointmentDate DateTime?          @map("appointment_date")
@@ -186,13 +196,15 @@ model Appointment {
   doctor       User?           @relation("DoctorAppointments", fields: [doctorId], references: [id])
   clinicalNote ClinicalNote?
 
+  @@index([studentId])
+  @@index([doctorId])
   @@map("remote_appointments")
 }
 
 model ClinicalNote {
   id                    Int             @id @default(autoincrement())
   appointmentId         Int             @unique @map("appointment_id")
-  doctorId              Int?            @map("doctor_id")
+  doctorId              String?         @map("doctor_id") @db.Uuid
   studentId             Int?            @map("student_id")
   sessionDiagnosis      String?         @map("session_diagnosis") @db.VarChar(255)
   observedEmotionalState EmotionalState? @map("observed_emotional_state")
@@ -205,5 +217,7 @@ model ClinicalNote {
   doctor       User?           @relation("DoctorClinicalNotes", fields: [doctorId], references: [id])
   student      StudentProfile? @relation(fields: [studentId], references: [id])
 
+  @@index([doctorId])
+  @@index([studentId])
   @@map("remote_clinical_notes")
 }

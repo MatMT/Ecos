@@ -245,6 +245,25 @@ services:
       # GOTRUE_HOOK_SEND_EMAIL_URI: "http://host.docker.internal:54321/functions/v1/email_sender"
       # GOTRUE_HOOK_SEND_EMAIL_SECRETS: "v1,dummy_webhook_secret_string"
 
+  # LOCAL CUSTOMIZATION (not part of upstream Supabase self-hosting) — a dev-only SMTP
+  # catcher so GoTrue's password-recovery/signup-confirmation emails are actually
+  # deliverable and viewable locally, instead of failing with "Error sending recovery
+  # email" against the placeholder SMTP_HOST=supabase-mail in .env. Web UI at
+  # http://localhost:8025 (override with MAILPIT_UI_PORT). Never use this for anything
+  # but local development — it accepts any SMTP credentials and does not actually send
+  # real email anywhere.
+  mail:
+    container_name: supabase-mail
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      MP_SMTP_BIND_ADDR: 0.0.0.0:${SMTP_PORT}
+      MP_UI_BIND_ADDR: 0.0.0.0:8025
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+
   rest:
     container_name: supabase-rest
     image: postgrest/postgrest:v14.12
