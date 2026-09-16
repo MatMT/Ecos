@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.anonymous.mobile"
+      "bundleIdentifier": "com.mateoelias.ecos",
+      "infoPlist": {
+        "NSBluetoothPeripheralUsageDescription": "Se requiere acceso a Bluetooth para comunicarse con el dispositivo de estimulación."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -49,6 +52,15 @@
             "central"
           ],
           "bluetoothAlwaysPermission": "Se requiere acceso a Bluetooth para comunicarse con el dispositivo de estimulación."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0",
+            "enableSceneSupport": true
+          }
         }
       ]
     ],
