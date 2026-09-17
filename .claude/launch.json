@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "patient-app", "exec", "expo", "start", "--web", "--port", "8081"],
       "port": 8081
+    },
+    {
+      "name": "server",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "server", "dev"],
+      "port": 6622
     }
   ]
 }
