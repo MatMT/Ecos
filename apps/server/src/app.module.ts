@@ -14,6 +14,9 @@ import { TherapistAssignmentsModule } from './therapist-assignments/therapist-as
 import { StudentsModule } from './students/students.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { AuditModule } from './audit/audit.module';
+import { ClinicalRecordsModule } from './clinical-records/clinical-records.module';
+import { ClinicalNotesModule } from './clinical-notes/clinical-notes.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RlsContextInterceptor } from './common/interceptors/rls-context.interceptor';
 
@@ -35,6 +38,9 @@ import { RlsContextInterceptor } from './common/interceptors/rls-context.interce
     StudentsModule,
     SchedulesModule,
     AppointmentsModule,
+    AuditModule,
+    ClinicalRecordsModule,
+    ClinicalNotesModule,
   ],
   controllers: [AppController],
   providers: [
