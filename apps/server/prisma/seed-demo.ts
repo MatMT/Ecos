@@ -38,7 +38,12 @@ const INSTITUTIONS = [
 const PSYCHOLOGISTS_PER_INSTITUTION = 2;
 const STUDENTS_PER_INSTITUTION = 3;
 
-const DIAGNOSES = ['Ansiedad generalizada', 'Estrés académico', 'Ninguno reportado'];
+const DIAGNOSES = [
+  'Ansiedad generalizada',
+  'Estrés académico',
+  'Ninguno reportado',
+];
+const SPECIALTIES = ['Terapia cognitivo-conductual', 'Terapia familiar'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function daysAgo(n: number): Date {
@@ -70,20 +75,23 @@ async function goTrueAdmin<T>(
   });
 
   if (!response.ok) {
-    throw new Error(`GoTrue ${method} ${path} failed: ${response.status} ${await response.text()}`);
+    throw new Error(
+      `GoTrue ${method} ${path} failed: ${response.status} ${await response.text()}`,
+    );
   }
 
-  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+  return response.status === 204
+    ? (undefined as T)
+    : ((await response.json()) as T);
 }
 
 async function listAllGoTrueUsers(): Promise<{ id: string; email?: string }[]> {
   const all: { id: string; email?: string }[] = [];
   let page = 1;
   for (;;) {
-    const result = await goTrueAdmin<{ users: { id: string; email?: string }[] }>(
-      'GET',
-      `/admin/users?page=${page}&per_page=200`,
-    );
+    const result = await goTrueAdmin<{
+      users: { id: string; email?: string }[];
+    }>('GET', `/admin/users?page=${page}&per_page=200`);
     if (!result.users.length) break;
     all.push(...result.users);
     page += 1;
@@ -129,22 +137,50 @@ async function cleanup(prisma: PrismaClient) {
     });
     const deviceIds = devices.map((d) => d.id);
 
-    // Child -> parent, respecting ON DELETE RESTRICT on studentProfile.userId.
-    await prisma.clinicalNote.deleteMany({ where: { studentId: { in: profileIds } } });
-    await prisma.appointment.deleteMany({ where: { studentId: { in: profileIds } } });
+    // Child -> parent, respecting ON DELETE RESTRICT on studentProfile.userId /
+    // therapistAssignment.studentId|therapistId / psychologistProfile.userId.
+    await prisma.clinicalNote.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await prisma.appointment.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
     await prisma.alert.deleteMany({ where: { studentId: { in: profileIds } } });
-    await prisma.emotionalJournal.deleteMany({ where: { studentId: { in: profileIds } } });
-    await prisma.biometricRecord.deleteMany({ where: { deviceId: { in: deviceIds } } });
-    await prisma.bandDevice.deleteMany({ where: { studentId: { in: profileIds } } });
-    await prisma.studentProfile.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.emotionalJournal.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await prisma.biometricRecord.deleteMany({
+      where: { deviceId: { in: deviceIds } },
+    });
+    await prisma.bandDevice.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await prisma.therapistAssignment.deleteMany({
+      where: {
+        OR: [
+          { studentId: { in: profileIds } },
+          { therapistId: { in: userIds } },
+        ],
+      },
+    });
+    await prisma.psychologistProfile.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+    await prisma.studentProfile.deleteMany({
+      where: { userId: { in: userIds } },
+    });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
-    await prisma.institution.deleteMany({ where: { id: { in: institutionIds } } });
+    await prisma.institution.deleteMany({
+      where: { id: { in: institutionIds } },
+    });
   }
 
   // Also sweep GoTrue directly for any seed-domain user an earlier partial/failed run
   // might have left behind (their public.remote_users row may already be gone above).
   const goTrueUsers = await listAllGoTrueUsers();
-  const orphaned = goTrueUsers.filter((u) => u.email?.endsWith(`@${SEED_EMAIL_DOMAIN}`));
+  const orphaned = goTrueUsers.filter((u) =>
+    u.email?.endsWith(`@${SEED_EMAIL_DOMAIN}`),
+  );
   for (const user of orphaned) {
     await goTrueAdmin('DELETE', `/admin/users/${user.id}`);
   }
@@ -160,7 +196,9 @@ async function createEcosUser(
   institutionId: number,
 ) {
   const id = await createGoTrueUser(email);
-  return prisma.user.create({ data: { id, email, fullName, role, institutionId } });
+  return prisma.user.create({
+    data: { id, email, fullName, role, institutionId },
+  });
 }
 
 async function seedInstitution(
@@ -168,7 +206,9 @@ async function seedInstitution(
   institutionKey: string,
   institutionName: string,
 ) {
-  const institution = await prisma.institution.create({ data: { name: institutionName } });
+  const institution = await prisma.institution.create({
+    data: { name: institutionName },
+  });
 
   await createEcosUser(
     prisma,
@@ -180,15 +220,22 @@ async function seedInstitution(
 
   const psychologists = [];
   for (let i = 1; i <= PSYCHOLOGISTS_PER_INSTITUTION; i++) {
-    psychologists.push(
-      await createEcosUser(
-        prisma,
-        `psychologist.${institutionKey}${i}@${SEED_EMAIL_DOMAIN}`,
-        `Psic. Demo ${institutionKey.toUpperCase()}${i}`,
-        Role.psychologist,
-        institution.id,
-      ),
+    const psychologist = await createEcosUser(
+      prisma,
+      `psychologist.${institutionKey}${i}@${SEED_EMAIL_DOMAIN}`,
+      `Psic. Demo ${institutionKey.toUpperCase()}${i}`,
+      Role.psychologist,
+      institution.id,
     );
+    await prisma.psychologistProfile.create({
+      data: {
+        userId: psychologist.id,
+        professionalLicense: `[SEED]-${institutionKey.toUpperCase()}${i}`,
+        specialty: SPECIALTIES[(i - 1) % SPECIALTIES.length],
+        phone: '0000-0000',
+      },
+    });
+    psychologists.push(psychologist);
   }
 
   for (let i = 1; i <= STUDENTS_PER_INSTITUTION; i++) {
@@ -207,6 +254,18 @@ async function seedInstitution(
         studentCode: `STU-${institutionKey.toUpperCase()}${i}`,
         primaryDiagnosis: DIAGNOSES[(i - 1) % DIAGNOSES.length],
         assignedDoctorId: assignedDoctor.id,
+      },
+    });
+
+    // Keeps assignedDoctorId in sync with a real history row, matching the invariant
+    // TherapistAssignmentsService enforces going forward (see AGENTS.md §11 / GOALS.md).
+    await prisma.therapistAssignment.create({
+      data: {
+        studentId: profile.id,
+        therapistId: assignedDoctor.id,
+        isPrimary: true,
+        startsAt: daysAgo(30),
+        reason: '[SEED] Asignación inicial',
       },
     });
 
@@ -243,7 +302,8 @@ async function seedInstitution(
         studentId: profile.id,
         biometricRecordId: lastAnomalousRecordId,
         alertType: AlertType.biometric_anomaly,
-        description: 'Frecuencia cardíaca elevada detectada durante horario de clases.',
+        description:
+          'Frecuencia cardíaca elevada detectada durante horario de clases.',
         resolved: true,
       },
     });
@@ -251,7 +311,8 @@ async function seedInstitution(
       data: {
         studentId: profile.id,
         alertType: AlertType.ai_risk,
-        description: 'El asistente de IA detectó lenguaje de riesgo en una conversación reciente.',
+        description:
+          'El asistente de IA detectó lenguaje de riesgo en una conversación reciente.',
         resolved: false,
       },
     });
@@ -284,8 +345,10 @@ async function seedInstitution(
         studentId: profile.id,
         sessionDiagnosis: DIAGNOSES[(i - 1) % DIAGNOSES.length],
         observedEmotionalState: EmotionalState.calm,
-        observations: 'El estudiante muestra progreso favorable desde la última sesión.',
-        aiAssistantAnalysis: 'Sin señales de riesgo detectadas en el análisis de la conversación.',
+        observations:
+          'El estudiante muestra progreso favorable desde la última sesión.',
+        aiAssistantAnalysis:
+          'Sin señales de riesgo detectadas en el análisis de la conversación.',
       },
     });
 
@@ -293,7 +356,8 @@ async function seedInstitution(
       data: {
         studentId: profile.id,
         entryType: EntryType.personal_journal,
-        userContent: 'Hoy me sentí un poco cansado, pero el día estuvo tranquilo.',
+        userContent:
+          'Hoy me sentí un poco cansado, pero el día estuvo tranquilo.',
         detectedAlertLevel: 'low',
       },
     });
@@ -302,7 +366,8 @@ async function seedInstitution(
         studentId: profile.id,
         entryType: EntryType.ai_chat,
         userContent: 'Tuve un examen difícil hoy y no dormí bien anoche.',
-        aiResponse: 'Gracias por compartirlo. ¿Quieres contarme un poco más sobre cómo te sientes?',
+        aiResponse:
+          'Gracias por compartirlo. ¿Quieres contarme un poco más sobre cómo te sientes?',
         detectedAlertLevel: 'low',
       },
     });
