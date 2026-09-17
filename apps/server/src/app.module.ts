@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { PsychologistsModule } from './psychologists/psychologists.module';
 import { TherapistAssignmentsModule } from './therapist-assignments/therapist-assignments.module';
 import { StudentsModule } from './students/students.module';
+import { SchedulesModule } from './schedules/schedules.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RlsContextInterceptor } from './common/interceptors/rls-context.interceptor';
 
@@ -31,6 +32,7 @@ import { RlsContextInterceptor } from './common/interceptors/rls-context.interce
     PsychologistsModule,
     TherapistAssignmentsModule,
     StudentsModule,
+    SchedulesModule,
   ],
   controllers: [AppController],
   providers: [
