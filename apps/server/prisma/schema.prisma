@@ -61,8 +61,9 @@ model Institution {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users     User[]
-  auditLogs AuditLog[]
+  users      User[]
+  auditLogs  AuditLog[]
+  activities Activity[]
 
   @@map("remote_institutions")
 }
@@ -92,6 +93,8 @@ model User {
   createdAppointments Appointment[] @relation("CreatedAppointments")
   voidedClinicalNotes ClinicalNote[] @relation("VoidedClinicalNotes")
   auditLogs AuditLog[]
+  treatmentPlansAuthored TreatmentPlan[] @relation("TreatmentPlanTherapist")
+  studentActivitiesAssigned StudentActivity[] @relation("StudentActivityTherapist")
 
   @@index([institutionId])
   @@map("remote_users")
@@ -115,6 +118,9 @@ model StudentProfile {
   clinicalNotes     ClinicalNote[]
   therapistAssignments TherapistAssignment[]
   clinicalRecord    ClinicalRecord?
+  treatmentPlans    TreatmentPlan[]
+  treatmentGoals    TreatmentGoal[]
+  studentActivities StudentActivity[]
 
   @@index([assignedDoctorId])
   @@map("remote_student_profiles")
@@ -276,6 +282,87 @@ model ClinicalRecord {
   student StudentProfile @relation(fields: [studentId], references: [id])
 
   @@map("remote_clinical_records")
+}
+
+model TreatmentPlan {
+  id          Int       @id @default(autoincrement())
+  studentId   Int       @map("student_id")
+  therapistId String    @map("therapist_id") @db.Uuid
+  title       String?   @db.VarChar(255)
+  generalGoal String?   @map("general_goal") @db.Text
+  startsAt    DateTime  @default(now()) @map("starts_at")
+  endsAt      DateTime? @map("ends_at")
+  status      String    @default("active") @db.VarChar(50)
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  student   StudentProfile  @relation(fields: [studentId], references: [id])
+  therapist User            @relation("TreatmentPlanTherapist", fields: [therapistId], references: [id])
+  goals     TreatmentGoal[]
+
+  @@index([studentId])
+  @@index([therapistId])
+  @@map("remote_treatment_plans")
+}
+
+model TreatmentGoal {
+  id          Int       @id @default(autoincrement())
+  planId      Int       @map("plan_id")
+  studentId   Int       @map("student_id")
+  description String    @db.Text
+  status      String    @default("pending") @db.VarChar(50)
+  targetDate  DateTime? @db.Date @map("target_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  plan    TreatmentPlan  @relation(fields: [planId], references: [id])
+  student StudentProfile @relation(fields: [studentId], references: [id])
+
+  @@index([planId])
+  @@index([studentId])
+  @@map("remote_treatment_goals")
+}
+
+model Activity {
+  id            Int      @id @default(autoincrement())
+  institutionId Int?     @map("institution_id")
+  title         String   @db.VarChar(255)
+  description   String?  @db.Text
+  instructions  String?  @db.Text
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  institution       Institution?      @relation(fields: [institutionId], references: [id])
+  studentActivities StudentActivity[]
+
+  @@index([institutionId])
+  @@map("remote_activities")
+}
+
+model StudentActivity {
+  id          Int       @id @default(autoincrement())
+  studentId   Int       @map("student_id")
+  activityId  Int       @map("activity_id")
+  therapistId String?   @map("therapist_id") @db.Uuid
+  origin      String    @db.VarChar(20)
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  dueAt       DateTime? @map("due_at")
+  status      String    @default("pending") @db.VarChar(50)
+  response    String?   @db.Text
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  activity  Activity       @relation(fields: [activityId], references: [id])
+  therapist User?          @relation("StudentActivityTherapist", fields: [therapistId], references: [id])
+
+  @@index([studentId])
+  @@index([activityId])
+  @@index([therapistId])
+  @@map("remote_student_activities")
 }
 
 model AuditLog {
