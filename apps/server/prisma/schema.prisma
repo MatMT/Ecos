@@ -57,6 +57,7 @@ enum EmotionalState {
 model Institution {
   id        Int      @id @default(autoincrement())
   name      String?  @db.VarChar(255)
+  timezone  String   @default("America/El_Salvador") @db.VarChar(100)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -85,6 +86,9 @@ model User {
   psychologistProfile PsychologistProfile?
   therapistAssignments TherapistAssignment[] @relation("TherapistAssignments")
   assignedTherapistAssignments TherapistAssignment[] @relation("AssignedTherapistAssignments")
+  therapistSchedules TherapistSchedule[] @relation("TherapistSchedules")
+  therapistScheduleExceptions TherapistScheduleException[] @relation("TherapistScheduleExceptions")
+  createdAppointments Appointment[] @relation("CreatedAppointments")
 
   @@index([institutionId])
   @@map("remote_users")
@@ -188,22 +192,35 @@ model EmotionalJournal {
 }
 
 model Appointment {
-  id              Int                @id @default(autoincrement())
-  studentId       Int?               @map("student_id")
-  doctorId        String?            @map("doctor_id") @db.Uuid
-  sessionTitle    String?            @map("session_title") @db.VarChar(255)
-  sessionType     String?            @map("session_type") @db.VarChar(255)
-  appointmentDate DateTime?          @map("appointment_date")
-  status          AppointmentStatus?
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
+  id                Int                @id @default(autoincrement())
+  studentId         Int?               @map("student_id")
+  doctorId          String?            @map("doctor_id") @db.Uuid
+  sessionTitle      String?            @map("session_title") @db.VarChar(255)
+  sessionType       String?            @map("session_type") @db.VarChar(255)
+  appointmentDate   DateTime?          @map("appointment_date")
+  status            AppointmentStatus?
+  durationMinutes   Int?               @map("duration_minutes")
+  endAt             DateTime?          @map("end_at")
+  modality          String?            @db.VarChar(50)
+  reason            String?            @db.VarChar(500)
+  cancelReason      String?            @map("cancel_reason") @db.VarChar(500)
+  createdById       String?            @map("created_by_id") @db.Uuid
+  rescheduledFromId Int?               @unique @map("rescheduled_from_id")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  student      StudentProfile? @relation(fields: [studentId], references: [id])
-  doctor       User?           @relation("DoctorAppointments", fields: [doctorId], references: [id])
-  clinicalNote ClinicalNote?
+  student         StudentProfile? @relation(fields: [studentId], references: [id])
+  doctor          User?           @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  createdBy       User?           @relation("CreatedAppointments", fields: [createdById], references: [id])
+  rescheduledFrom Appointment?    @relation("AppointmentReschedule", fields: [rescheduledFromId], references: [id])
+  rescheduledTo   Appointment?    @relation("AppointmentReschedule")
+  clinicalNote    ClinicalNote?
 
   @@index([studentId])
   @@index([doctorId])
+  @@index([createdById])
+  @@index([doctorId, appointmentDate])
+  @@index([studentId, appointmentDate])
   @@map("remote_appointments")
 }
 
@@ -264,4 +281,43 @@ model PsychologistProfile {
   user User @relation(fields: [userId], references: [id])
 
   @@map("remote_psychologist_profiles")
+}
+
+model TherapistSchedule {
+  id                     Int       @id @default(autoincrement())
+  therapistId            String    @map("therapist_id") @db.Uuid
+  dayOfWeek              Int       @map("day_of_week") // 1=Monday ... 7=Sunday
+  startTime              DateTime  @db.Time(0) @map("start_time")
+  endTime                DateTime  @db.Time(0) @map("end_time")
+  sessionDurationMinutes Int       @default(60) @map("session_duration_minutes")
+  breakMinutes           Int       @default(0) @map("break_minutes")
+  validFrom              DateTime? @db.Date @map("valid_from")
+  validTo                DateTime? @db.Date @map("valid_to")
+  active                 Boolean   @default(true)
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  therapist User @relation("TherapistSchedules", fields: [therapistId], references: [id])
+
+  @@index([therapistId])
+  @@index([therapistId, dayOfWeek])
+  @@map("remote_therapist_schedules")
+}
+
+model TherapistScheduleException {
+  id          Int       @id @default(autoincrement())
+  therapistId String    @map("therapist_id") @db.Uuid
+  date        DateTime  @db.Date
+  startTime   DateTime? @db.Time(0) @map("start_time")
+  endTime     DateTime? @db.Time(0) @map("end_time")
+  available   Boolean   @default(false)
+  reason      String?   @db.VarChar(255)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  therapist User @relation("TherapistScheduleExceptions", fields: [therapistId], references: [id])
+
+  @@index([therapistId])
+  @@index([therapistId, date])
+  @@map("remote_therapist_schedule_exceptions")
 }
