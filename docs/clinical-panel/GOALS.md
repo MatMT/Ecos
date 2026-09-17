@@ -198,14 +198,14 @@ routing layer, so it is unaffected either way.
 
 ## 7. Process — how a phase goes from here to merged
 
-1. Before starting a phase, write `docs/clinical-panel/phase-N-<slug>.md` — the concrete
-   implementation plan (schema diff, services, endpoints, RLS policies, tests) for **that phase
-   only**, grounded in whatever the schema/codebase actually looks like at that point (not
-   re-derived from this document blindly — check `schema.prisma` and `apps/server/AGENTS.md` first,
-   since earlier phases will have changed both).
-2. Implement against that plan, following `apps/server/AGENTS.md` §12's definition of done
-   (RLS policies, tests, Scalar docs, lint) for every endpoint the phase adds.
-3. Update the phase's row in the table in §6 to `Done` once merged, and note anything the plan
+1. Before starting a phase, draft the concrete implementation plan (schema diff, services,
+   endpoints, RLS policies, tests) for **that phase only** and present it in chat — it is **not**
+   written to a file in this repo, and never committed. Ground it in whatever the schema/codebase
+   actually looks like at that point (not re-derived from this document blindly — check
+   `schema.prisma` and `apps/server/AGENTS.md` first, since earlier phases will have changed both).
+2. Once the plan is agreed, implement it in small commits, following `apps/server/AGENTS.md` §12's
+   definition of done (RLS policies, tests, Scalar docs, lint) for every endpoint the phase adds.
+3. Update the phase's row in the table in §6 to `Done` once merged, and fold anything the plan
    didn't anticipate (a schema correction, a policy that needed a helper function, etc.) back into
    this file if it changes a principle in §3–5 for later phases.
 
