@@ -61,7 +61,8 @@ model Institution {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users User[]
+  users     User[]
+  auditLogs AuditLog[]
 
   @@map("remote_institutions")
 }
@@ -89,6 +90,8 @@ model User {
   therapistSchedules TherapistSchedule[] @relation("TherapistSchedules")
   therapistScheduleExceptions TherapistScheduleException[] @relation("TherapistScheduleExceptions")
   createdAppointments Appointment[] @relation("CreatedAppointments")
+  voidedClinicalNotes ClinicalNote[] @relation("VoidedClinicalNotes")
+  auditLogs AuditLog[]
 
   @@index([institutionId])
   @@map("remote_users")
@@ -111,6 +114,7 @@ model StudentProfile {
   appointments      Appointment[]
   clinicalNotes     ClinicalNote[]
   therapistAssignments TherapistAssignment[]
+  clinicalRecord    ClinicalRecord?
 
   @@index([assignedDoctorId])
   @@map("remote_student_profiles")
@@ -233,16 +237,65 @@ model ClinicalNote {
   observedEmotionalState EmotionalState? @map("observed_emotional_state")
   observations          String?         @db.Text
   aiAssistantAnalysis   String?         @map("ai_assistant_analysis") @db.Text
+  sessionSummary        String?         @map("session_summary") @db.Text
+  clinicalImpression    String?         @map("clinical_impression") @db.Text
+  interventions         String?         @db.Text
+  agreements            String?         @db.Text
+  followUpPlan          String?         @map("follow_up_plan") @db.Text
+  voidedAt              DateTime?       @map("voided_at")
+  voidedById            String?         @map("voided_by_id") @db.Uuid
+  voidReason            String?         @map("void_reason") @db.VarChar(500)
   createdAt             DateTime        @default(now()) @map("created_at")
   updatedAt             DateTime        @updatedAt @map("updated_at")
 
   appointment  Appointment     @relation(fields: [appointmentId], references: [id])
   doctor       User?           @relation("DoctorClinicalNotes", fields: [doctorId], references: [id])
   student      StudentProfile? @relation(fields: [studentId], references: [id])
+  voidedBy     User?           @relation("VoidedClinicalNotes", fields: [voidedById], references: [id])
 
   @@index([doctorId])
   @@index([studentId])
+  @@index([voidedById])
   @@map("remote_clinical_notes")
+}
+
+model ClinicalRecord {
+  id                    Int      @id @default(autoincrement())
+  studentId             Int      @unique @map("student_id")
+  openedAt              DateTime @default(now()) @map("opened_at")
+  initialReason         String?  @map("initial_reason") @db.Text
+  psychologicalHistory  String?  @map("psychological_history") @db.Text
+  psychiatricHistory    String?  @map("psychiatric_history") @db.Text
+  relevantFamilyHistory String?  @map("relevant_family_history") @db.Text
+  previousTreatments    String?  @map("previous_treatments") @db.Text
+  currentMedication     String?  @map("current_medication") @db.Text
+  generalObservations   String?  @map("general_observations") @db.Text
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  student StudentProfile @relation(fields: [studentId], references: [id])
+
+  @@map("remote_clinical_records")
+}
+
+model AuditLog {
+  id            Int      @id @default(autoincrement())
+  userId        String   @map("user_id") @db.Uuid
+  institutionId Int?     @map("institution_id")
+  action        String   @db.VarChar(100)
+  entity        String   @db.VarChar(100)
+  entityId      String?  @map("entity_id") @db.VarChar(100)
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user        User         @relation(fields: [userId], references: [id])
+  institution Institution? @relation(fields: [institutionId], references: [id])
+
+  @@index([userId])
+  @@index([institutionId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("remote_audit_logs")
 }
 
 model TherapistAssignment {
