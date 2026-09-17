@@ -180,9 +180,23 @@ security is enforced in two independent layers, and both matter:
   below — a bare call runs as the `authenticator` role with no privileges switched in and will
   simply fail (not silently bypass RLS).
 - Schema changes always go through `prisma migrate` — never hand-edit the database or generated
-  client. RLS policies/functions/triggers are the one exception: they're plain SQL inside a
-  migration file (`prisma migrate dev --create-only` then hand-write the SQL, since they aren't
-  representable in `schema.prisma`) — see "Row Level Security (RLS) & Supabase Auth" below.
+  client. **`prisma migrate dev`, in any form (including `--create-only`), is permanently
+  unusable in this project** — confirmed by testing it directly: it fails rebuilding the shadow
+  database, because replaying `20260913120000_uuid_auth_migration` (which adds `remote_users.id ->
+  auth.users.id`) hits `schema "auth" does not exist` — the shadow DB is a bare Postgres instance
+  that never has Supabase's `auth` schema bootstrapped into it, and `migrate dev` always rebuilds
+  the shadow DB by replaying the *entire* migration history before computing anything new. This
+  applies to every migration, not just RLS-only ones. The actual workflow, for any schema change:
+  1. Edit `schema.prisma` to the desired end state.
+  2. Manually create `prisma/migrations/<timestamp>_<name>/migration.sql` and hand-write the full
+     DDL yourself — including the `CREATE TABLE`/`CREATE INDEX`/`ALTER TABLE` statements Prisma
+     would normally auto-generate from a schema diff (mirror the existing migrations' style:
+     double-quoted identifiers, `-- CreateTable`/`-- CreateIndex`/`-- AddForeignKey` comments for
+     the Prisma-representable parts; plain SQL for RLS policies/functions/triggers, which aren't
+     representable in `schema.prisma` regardless).
+  3. `prisma migrate deploy` (reads/writes only the real `_prisma_migrations` table against the
+     target DB — no shadow DB involved) then `prisma generate`.
+  See "Row Level Security (RLS) & Supabase Auth" below for the RLS-specific SQL patterns.
 - Add `@@index` on foreign-key columns that are queried or joined on often (`studentId`, `doctorId`,
   `deviceId`, `biometricRecordId`, etc.) — Postgres does not auto-index FK columns, and this schema
   has several one-to-many relations that will be queried by parent id.
