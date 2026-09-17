@@ -28,6 +28,8 @@ enum AppointmentStatus {
   confirmed
   completed
   cancelled
+  rescheduled
+  no_show
 
   @@map("enum_appointment_status")
 }
