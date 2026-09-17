@@ -1,8 +1,8 @@
 /**
  * Reusable demo-data seeder: populates a full, realistic ECOS ecosystem (institutions,
  * administrators, psychologists, students with profiles, band devices, biometric
- * records, alerts, appointments, clinical notes, emotional journal entries) for local
- * testing — on a fresh machine, or after wiping the DB.
+ * records, alerts, appointments, clinical records/notes, emotional journal entries) for
+ * local testing — on a fresh machine, or after wiping the DB.
  *
  * Idempotent by construction, not by flag: every seed row is tagged with a marker
  * (`[SEED]` institution name prefix, `@seed.ecos.local` user emails). Every run first
@@ -149,6 +149,9 @@ async function cleanup(prisma: PrismaClient) {
     await prisma.clinicalNote.deleteMany({
       where: { studentId: { in: profileIds } },
     });
+    await prisma.clinicalRecord.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
     await prisma.appointment.deleteMany({
       where: { studentId: { in: profileIds } },
     });
@@ -182,6 +185,7 @@ async function cleanup(prisma: PrismaClient) {
     await prisma.studentProfile.deleteMany({
       where: { userId: { in: userIds } },
     });
+    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     await prisma.institution.deleteMany({
       where: { id: { in: institutionIds } },
@@ -391,6 +395,27 @@ async function seedInstitution(
           'El estudiante muestra progreso favorable desde la última sesión.',
         aiAssistantAnalysis:
           'Sin señales de riesgo detectadas en el análisis de la conversación.',
+        sessionSummary:
+          'Se revisó el progreso desde la sesión anterior y se reforzaron las estrategias de afrontamiento acordadas.',
+        clinicalImpression: 'Evolución favorable, sin señales de alarma.',
+        interventions: 'Técnicas de respiración y reestructuración cognitiva.',
+        agreements:
+          'El estudiante practicará los ejercicios de respiración diariamente.',
+        followUpPlan: 'Continuar con sesiones mensuales de seguimiento.',
+      },
+    });
+
+    await prisma.clinicalRecord.create({
+      data: {
+        studentId: profile.id,
+        initialReason: 'Dificultades de concentración reportadas por el tutor.',
+        psychologicalHistory: 'Sin antecedentes psicológicos previos relevantes.',
+        psychiatricHistory: 'Ninguno reportado.',
+        relevantFamilyHistory: 'Sin antecedentes familiares relevantes.',
+        previousTreatments: 'Ninguno.',
+        currentMedication: 'Ninguno.',
+        generalObservations:
+          'Estudiante colaborador, con buena disposición hacia el proceso terapéutico.',
       },
     });
 
