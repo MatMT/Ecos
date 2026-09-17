@@ -1,8 +1,9 @@
 /**
  * Reusable demo-data seeder: populates a full, realistic ECOS ecosystem (institutions,
  * administrators, psychologists, students with profiles, band devices, biometric
- * records, alerts, appointments, clinical records/notes, emotional journal entries) for
- * local testing — on a fresh machine, or after wiping the DB.
+ * records, alerts, appointments, clinical records/notes, treatment plans/goals,
+ * activities and their assignments, emotional journal entries) for local testing — on a
+ * fresh machine, or after wiping the DB.
  *
  * Idempotent by construction, not by flag: every seed row is tagged with a marker
  * (`[SEED]` institution name prefix, `@seed.ecos.local` user emails). Every run first
@@ -152,6 +153,18 @@ async function cleanup(prisma: PrismaClient) {
     await prisma.clinicalRecord.deleteMany({
       where: { studentId: { in: profileIds } },
     });
+    await prisma.studentActivity.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await prisma.activity.deleteMany({
+      where: { institutionId: { in: institutionIds } },
+    });
+    await prisma.treatmentGoal.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await prisma.treatmentPlan.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
     await prisma.appointment.deleteMany({
       where: { studentId: { in: profileIds } },
     });
@@ -267,6 +280,26 @@ async function seedInstitution(
     }
     psychologists.push(psychologist);
   }
+
+  const activities = await Promise.all([
+    prisma.activity.create({
+      data: {
+        institutionId: institution.id,
+        title: 'Diario de gratitud',
+        instructions:
+          'Escribe tres cosas por las que te sientas agradecido cada noche.',
+      },
+    }),
+    prisma.activity.create({
+      data: {
+        institutionId: institution.id,
+        title: 'Ejercicio de respiración',
+        description: 'Respiración diafragmática guiada.',
+        instructions:
+          'Inhala en 4 segundos, sostén 4 segundos, exhala en 6 segundos. Repite 10 veces.',
+      },
+    }),
+  ]);
 
   for (let i = 1; i <= STUDENTS_PER_INSTITUTION; i++) {
     const studentUser = await createEcosUser(
@@ -416,6 +449,35 @@ async function seedInstitution(
         currentMedication: 'Ninguno.',
         generalObservations:
           'Estudiante colaborador, con buena disposición hacia el proceso terapéutico.',
+      },
+    });
+
+    const plan = await prisma.treatmentPlan.create({
+      data: {
+        studentId: profile.id,
+        therapistId: assignedDoctor.id,
+        title: 'Plan de manejo de ansiedad',
+        generalGoal:
+          'Reducir la frecuencia e intensidad de los episodios de ansiedad.',
+        startsAt: daysAgo(30),
+      },
+    });
+    await prisma.treatmentGoal.create({
+      data: {
+        planId: plan.id,
+        studentId: profile.id,
+        description: 'Practicar respiración diafragmática dos veces al día.',
+        status: 'in_progress',
+      },
+    });
+
+    await prisma.studentActivity.create({
+      data: {
+        studentId: profile.id,
+        activityId: activities[i % activities.length].id,
+        therapistId: assignedDoctor.id,
+        origin: 'psychologist',
+        dueAt: daysFromNow(3),
       },
     });
 
