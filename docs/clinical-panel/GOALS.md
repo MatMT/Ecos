@@ -112,7 +112,7 @@ already documented, not retrofitted later.
 |---|---|---|---|
 | **0 · API foundation (docs & versioning)** | Scalar/Swagger actually documents every existing route and model; every route moves under `/api/v1` (see §6.1) | none | Server-side done — mobile's base-path bump still pending (§6.1.2) |
 | **1 · Operational base** | `TherapistAssignment`, `PsychologistProfile`; institution/assignment-scoped authorization; patient & therapist endpoints | `TherapistAssignment`, `PsychologistProfile` | Done |
-| **2 · Scheduling & agenda** | `TherapistSchedule` + exceptions, availability engine, `Appointment` extensions, reschedule/conflict handling | `TherapistSchedule`, `TherapistScheduleException` | Not started |
+| **2 · Scheduling & agenda** | `TherapistSchedule` + exceptions, availability engine, `Appointment` extensions, reschedule/conflict handling | `TherapistSchedule`, `TherapistScheduleException` | Done |
 | **3 · Clinical record** | `ClinicalRecord`, extended `ClinicalNote`, edit restrictions, clinical audit events | `ClinicalRecord` | Not started |
 | **4 · Therapeutic continuity** | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | Not started |
 | **5 · Alerts & biometrics** | `Alert` lifecycle (priority/status), `AlertAction`, biometric summaries/trends | `AlertAction` | Not started |
