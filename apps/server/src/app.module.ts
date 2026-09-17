@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { PsychologistsModule } from './psychologists/psychologists.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RlsContextInterceptor } from './common/interceptors/rls-context.interceptor';
 
@@ -25,6 +26,7 @@ import { RlsContextInterceptor } from './common/interceptors/rls-context.interce
     PrismaModule,
     AuthModule,
     UsersModule,
+    PsychologistsModule,
   ],
   controllers: [AppController],
   providers: [
