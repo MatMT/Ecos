@@ -331,6 +331,17 @@ other call, in any service, should call `withRls(fn)` with no override and let A
 8. Don't forget the DB-side FK-index audit while you're adding a table with foreign keys — Postgres
    never creates one automatically. Add `@@index([...])` in `schema.prisma` for every FK column that
    doesn't already have a `@unique` (which creates one for free).
+9. **An INSERT policy alone is not enough if the caller also needs to see the row it just
+   inserted.** Prisma's `create()` always issues `INSERT ... RETURNING`, and Postgres requires the
+   table's SELECT policy — not just the INSERT policy's `WITH CHECK` — to permit the new row before
+   it can be returned. A write-only-visible-to-admins design (e.g. an append-only audit log an
+   ordinary actor writes to but can't browse) will make every non-admin `create()` fail outright with
+   `new row violates row-level security policy for table "x"`, even though the insert itself was
+   perfectly authorized. Hit and fixed live in the Phase 3 `remote_audit_logs` policy (migration
+   `20260917051000_fix_audit_logs_select_self_visibility`): the fix is a `user_id = (SELECT
+   auth.uid())` branch on the SELECT policy alongside the admin branch, not a change to INSERT at
+   all. If a table is ever meant to be write-blind even to its own author, the insert has to go
+   through raw SQL without `RETURNING` instead of a typed Prisma `create()`.
 
 **Known follow-up, not yet solved**: automated device ingestion (a band device pushing biometric
 readings with no logged-in clinician present) has no `auth.uid()` to check against — that path
@@ -355,6 +366,9 @@ checklist is still:
 - [ ] A trigger if any column needs to be off-limits beyond what row-level access already implies
 - [ ] A test proving both the allowed and the denied case (see "Testing" above)
 - [ ] `@@index` on every new FK column without a `@unique`
+- [ ] If the table is ever written via a typed Prisma `create()`, confirm the SELECT policy also
+      permits the inserting caller to see their own new row (point 9 above) — test it live, not just
+      by reading the policy text
 
 ## 12. Definition of done for a new endpoint
 
