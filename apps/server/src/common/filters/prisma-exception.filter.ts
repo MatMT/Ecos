@@ -57,6 +57,15 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         status = HttpStatus.FORBIDDEN;
         message = driverCause?.message ?? message;
         break;
+      case '23P01':
+        // Exclusion constraint violation (e.g. remote_appointments_no_doctor_overlap) —
+        // Postgres's own code for this, distinct from 23505/P2002 which only covers plain
+        // unique-constraint violations. Not representable in schema.prisma, so Prisma has no
+        // native mapping for it — same raw-driver-passthrough situation as P0001 above.
+        status = HttpStatus.CONFLICT;
+        message =
+          'El horario indicado se superpone con otra cita ya existente.';
+        break;
     }
 
     this.logger.error(
