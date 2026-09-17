@@ -28,6 +28,12 @@ import {
   Role,
 } from '@prisma/client';
 
+/** Matches schedules.service.ts's HH:mm <-> Date convention: @db.Time(0) columns always
+ *  round-trip as a JS Date anchored at 1970-01-01 UTC. */
+function timeOfDay(hours: number, minutes = 0): Date {
+  return new Date(Date.UTC(1970, 0, 1, hours, minutes, 0));
+}
+
 const SEED_EMAIL_DOMAIN = 'seed.ecos.local';
 const SEED_PASSWORD = 'Seed1234!';
 
@@ -138,7 +144,8 @@ async function cleanup(prisma: PrismaClient) {
     const deviceIds = devices.map((d) => d.id);
 
     // Child -> parent, respecting ON DELETE RESTRICT on studentProfile.userId /
-    // therapistAssignment.studentId|therapistId / psychologistProfile.userId.
+    // therapistAssignment.studentId|therapistId / psychologistProfile.userId /
+    // therapistSchedule(Exception).therapistId.
     await prisma.clinicalNote.deleteMany({
       where: { studentId: { in: profileIds } },
     });
@@ -162,6 +169,12 @@ async function cleanup(prisma: PrismaClient) {
           { therapistId: { in: userIds } },
         ],
       },
+    });
+    await prisma.therapistScheduleException.deleteMany({
+      where: { therapistId: { in: userIds } },
+    });
+    await prisma.therapistSchedule.deleteMany({
+      where: { therapistId: { in: userIds } },
     });
     await prisma.psychologistProfile.deleteMany({
       where: { userId: { in: userIds } },
@@ -210,7 +223,7 @@ async function seedInstitution(
     data: { name: institutionName },
   });
 
-  await createEcosUser(
+  const admin = await createEcosUser(
     prisma,
     `admin.${institutionKey}@${SEED_EMAIL_DOMAIN}`,
     `Admin ${institutionName.replace('[SEED] ', '')}`,
@@ -235,6 +248,19 @@ async function seedInstitution(
         phone: '0000-0000',
       },
     });
+    // Mon-Fri 08:00-16:00, so /psychologists/:id/availability has something to show —
+    // without this, the availability engine returns [] for every seeded psychologist.
+    for (let dayOfWeek = 1; dayOfWeek <= 5; dayOfWeek++) {
+      await prisma.therapistSchedule.create({
+        data: {
+          therapistId: psychologist.id,
+          dayOfWeek,
+          startTime: timeOfDay(8),
+          endTime: timeOfDay(16),
+          sessionDurationMinutes: 60,
+        },
+      });
+    }
     psychologists.push(psychologist);
   }
 
@@ -317,13 +343,25 @@ async function seedInstitution(
       },
     });
 
+    // Offset by student index so two students sharing the same doctor (there are more
+    // students than psychologists per institution) never land on the exact same instant —
+    // remote_appointments_no_doctor_overlap now rejects that outright.
+    const pastDate = new Date(daysAgo(3).getTime() + i * 60 * 60 * 1000);
+    const pastDuration = 60;
+    const futureDate = new Date(daysFromNow(7).getTime() + i * 60 * 60 * 1000);
+    const futureDuration = 60;
+
     const completedAppointment = await prisma.appointment.create({
       data: {
         studentId: profile.id,
         doctorId: assignedDoctor.id,
         sessionTitle: 'Sesión de seguimiento mensual',
         sessionType: 'Individual',
-        appointmentDate: daysAgo(3),
+        appointmentDate: pastDate,
+        endAt: new Date(pastDate.getTime() + pastDuration * 60 * 1000),
+        durationMinutes: pastDuration,
+        modality: 'in_person',
+        createdById: admin.id,
         status: AppointmentStatus.completed,
       },
     });
@@ -333,7 +371,11 @@ async function seedInstitution(
         doctorId: assignedDoctor.id,
         sessionTitle: 'Próxima sesión de seguimiento',
         sessionType: 'Individual',
-        appointmentDate: daysFromNow(7),
+        appointmentDate: futureDate,
+        endAt: new Date(futureDate.getTime() + futureDuration * 60 * 1000),
+        durationMinutes: futureDuration,
+        modality: 'in_person',
+        createdById: admin.id,
         status: AppointmentStatus.pending,
       },
     });
