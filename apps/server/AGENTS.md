@@ -346,7 +346,9 @@ other call, in any service, should call `withRls(fn)` with no override and let A
 **Known follow-up, not yet solved**: automated device ingestion (a band device pushing biometric
 readings with no logged-in clinician present) has no `auth.uid()` to check against — that path
 needs its own decision (likely a `service_role`-authenticated ingestion endpoint), not the
-`authenticated`-role policy used for interactive access.
+`authenticated`-role policy used for interactive access. A second instance of the same gap:
+Phase 4's `StudentActivity.origin = 'ecos'` (a system/AI-suggested activity, not assigned by a
+logged-in psychologist) has the identical problem — not solved either, same reasoning applies.
 
 **Current coverage**: all nine domain tables now have RLS enabled and forced —
 `remote_users`/`remote_student_profiles`/`remote_biometric_records` (migration

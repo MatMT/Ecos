@@ -97,10 +97,21 @@ RLS awareness, transaction boundaries) already matches this codebase's conventio
   future initiative.
 - **A standalone `Session` model.** The source guide itself rules this out for now —
   `Appointment` + `ClinicalNote` remain the unit of a clinical session.
-- **Enums for fast-moving catalogs** (`AlertAction.actionType`, `Appointment.modality`). Start as a
+- **Enums for fast-moving catalogs** (`AlertAction.actionType`, `Appointment.modality`,
+  `TreatmentPlan.status`, `TreatmentGoal.status`, `StudentActivity.status`/`origin`). Start as a
   `class-validator`-checked string union in the DTO; promote to a Prisma `enum` later once the
-  catalog is stable — a Postgres enum is cheap to extend but annoying to rename/remove values from,
-  and these two are the ones still most likely to change during Phases 2 and 5.
+  catalog is stable — a Postgres enum is cheap to extend but annoying to rename/remove values from
+  (`ALTER TYPE ... ADD VALUE` even has its own transaction-boundary restriction), and none of these
+  fields has an exhaustive value list given anywhere in `technical-guide.md`.
+- **`origin: 'ecos'`-authored `StudentActivity` rows** (a system/AI process assigning an activity
+  with no logged-in psychologist) have no `auth.uid()` to authorize an insert against under Phase
+  4's RLS design — the same class of gap as the automated-device-ingestion follow-up already
+  documented in `apps/server/AGENTS.md` §11. Not solved; needs its own `service_role`-authenticated
+  path if/when something actually generates these unattended.
+- **Student-side access to `StudentActivity.response`/`completedAt`.** Nothing built so far lets the
+  *student* (mobile app) read their assigned activities or submit a response — every Phase 1-4
+  endpoint is therapist/admin-facing. Mobile's own consumption of these fields is a separate,
+  later integration, not a gap in what's shipped.
 
 ## 6. Phases
 
@@ -114,7 +125,7 @@ already documented, not retrofitted later.
 | **1 · Operational base** | `TherapistAssignment`, `PsychologistProfile`; institution/assignment-scoped authorization; patient & therapist endpoints | `TherapistAssignment`, `PsychologistProfile` | Done |
 | **2 · Scheduling & agenda** | `TherapistSchedule` + exceptions, availability engine, `Appointment` extensions, reschedule/conflict handling | `TherapistSchedule`, `TherapistScheduleException` | Done |
 | **3 · Clinical record** | `ClinicalRecord`, extended `ClinicalNote`, edit restrictions, clinical audit events | `ClinicalRecord` | Done |
-| **4 · Therapeutic continuity** | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | Not started |
+| **4 · Therapeutic continuity** | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | Done |
 | **5 · Alerts & biometrics** | `Alert` lifecycle (priority/status), `AlertAction`, biometric summaries/trends | `AlertAction` | Not started |
 | **6 · Shared content** | `SharedPatientContent` and panel access rules | `SharedPatientContent` | Not started |
 | **7 · Dashboards** | `/students/:id/overview`, clinical timeline, `/dashboard/psychologist`, `/dashboard/administrator` | none (query-only) | Not started |
