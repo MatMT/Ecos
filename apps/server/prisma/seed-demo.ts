@@ -174,6 +174,9 @@ async function cleanup(prisma: PrismaClient) {
       where: { studentId: { in: profileIds } },
     });
     await prisma.alert.deleteMany({ where: { studentId: { in: profileIds } } });
+    await prisma.sharedPatientContent.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
     await prisma.emotionalJournal.deleteMany({
       where: { studentId: { in: profileIds } },
     });
@@ -518,6 +521,15 @@ async function seedInstitution(
         aiResponse:
           'Gracias por compartirlo. ¿Quieres contarme un poco más sobre cómo te sientes?',
         detectedAlertLevel: 'low',
+      },
+    });
+
+    await prisma.sharedPatientContent.create({
+      data: {
+        studentId: profile.id,
+        therapistId: assignedDoctor.id,
+        contentType: 'journal_entry',
+        content: 'Hoy me sentí un poco cansado, pero el día estuvo tranquilo.',
       },
     });
   }
