@@ -28,6 +28,8 @@ enum AppointmentStatus {
   confirmed
   completed
   cancelled
+  rescheduled
+  no_show
 
   @@map("enum_appointment_status")
 }
@@ -50,15 +52,36 @@ enum EmotionalState {
   @@map("enum_emotional_state")
 }
 
+enum AlertPriority {
+  low
+  medium
+  high
+  critical
+
+  @@map("enum_alert_priority")
+}
+
+enum AlertStatus {
+  new
+  reviewed
+  in_follow_up
+  closed
+
+  @@map("enum_alert_status")
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model Institution {
   id        Int      @id @default(autoincrement())
   name      String?  @db.VarChar(255)
+  timezone  String   @default("America/El_Salvador") @db.VarChar(100)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users User[]
+  users      User[]
+  auditLogs  AuditLog[]
+  activities Activity[]
 
   @@map("remote_institutions")
 }
@@ -67,40 +90,60 @@ model User {
   /// Matches auth.users.id (Supabase Auth / GoTrue) — see the FK added by the
   /// uuid_auth_migration; not modeled as a Prisma relation because auth.users
   /// lives outside this schema's ownership.
-  id             String   @id @db.Uuid
-  institutionId  Int?     @map("institution_id")
-  fullName       String?  @map("full_name") @db.VarChar(255)
-  email          String?  @db.VarChar(255)
-  role           Role?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id            String   @id @db.Uuid
+  institutionId Int?     @map("institution_id")
+  fullName      String?  @map("full_name") @db.VarChar(255)
+  email         String?  @db.VarChar(255)
+  role          Role?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  institution    Institution? @relation(fields: [institutionId], references: [id])
-  studentProfile StudentProfile?
-  assignedStudents StudentProfile[] @relation("AssignedDoctor")
-  doctorAppointments Appointment[] @relation("DoctorAppointments")
-  doctorClinicalNotes ClinicalNote[] @relation("DoctorClinicalNotes")
+  institution                  Institution?                 @relation(fields: [institutionId], references: [id])
+  studentProfile               StudentProfile?
+  assignedStudents             StudentProfile[]             @relation("AssignedDoctor")
+  doctorAppointments           Appointment[]                @relation("DoctorAppointments")
+  doctorClinicalNotes          ClinicalNote[]               @relation("DoctorClinicalNotes")
+  psychologistProfile          PsychologistProfile?
+  therapistAssignments         TherapistAssignment[]        @relation("TherapistAssignments")
+  assignedTherapistAssignments TherapistAssignment[]        @relation("AssignedTherapistAssignments")
+  therapistSchedules           TherapistSchedule[]          @relation("TherapistSchedules")
+  therapistScheduleExceptions  TherapistScheduleException[] @relation("TherapistScheduleExceptions")
+  createdAppointments          Appointment[]                @relation("CreatedAppointments")
+  voidedClinicalNotes          ClinicalNote[]               @relation("VoidedClinicalNotes")
+  auditLogs                    AuditLog[]
+  treatmentPlansAuthored       TreatmentPlan[]              @relation("TreatmentPlanTherapist")
+  studentActivitiesAssigned    StudentActivity[]            @relation("StudentActivityTherapist")
+  reviewedAlerts               Alert[]                      @relation("AlertReviewedBy")
+  alertActionsAuthored         AlertAction[]                @relation("AlertActionTherapist")
+  sharedContentReceived        SharedPatientContent[]       @relation("SharedPatientContentTherapist")
 
   @@index([institutionId])
   @@map("remote_users")
 }
 
 model StudentProfile {
-  id                Int      @id @default(autoincrement())
-  userId            String   @unique @map("user_id") @db.Uuid
-  studentCode       String?  @map("student_code") @db.VarChar(255)
-  primaryDiagnosis  String?  @map("primary_diagnosis") @db.VarChar(255)
-  assignedDoctorId  String?  @map("assigned_doctor_id") @db.Uuid
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id               Int      @id @default(autoincrement())
+  userId           String   @unique @map("user_id") @db.Uuid
+  studentCode      String?  @map("student_code") @db.VarChar(255)
+  primaryDiagnosis String?  @map("primary_diagnosis") @db.VarChar(255)
+  assignedDoctorId String?  @map("assigned_doctor_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
-  user              User     @relation(fields: [userId], references: [id])
-  assignedDoctor    User?    @relation("AssignedDoctor", fields: [assignedDoctorId], references: [id])
-  bandDevices       BandDevice[]
-  alerts            Alert[]
-  emotionalJournals EmotionalJournal[]
-  appointments      Appointment[]
-  clinicalNotes     ClinicalNote[]
+  user                 User                   @relation(fields: [userId], references: [id])
+  assignedDoctor       User?                  @relation("AssignedDoctor", fields: [assignedDoctorId], references: [id])
+  bandDevices          BandDevice[]
+  alerts               Alert[]
+  emotionalJournals    EmotionalJournal[]
+  appointments         Appointment[]
+  clinicalNotes        ClinicalNote[]
+  therapistAssignments TherapistAssignment[]
+  clinicalRecord       ClinicalRecord?
+  treatmentPlans       TreatmentPlan[]
+  treatmentGoals       TreatmentGoal[]
+  studentActivities    StudentActivity[]
+  alertActions         AlertAction[]
+  sharedContent        SharedPatientContent[]
 
   @@index([assignedDoctorId])
   @@map("remote_student_profiles")
@@ -115,7 +158,7 @@ model BandDevice {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  student          StudentProfile? @relation(fields: [studentId], references: [id])
+  student          StudentProfile?   @relation(fields: [studentId], references: [id])
   biometricRecords BiometricRecord[]
 
   @@index([studentId])
@@ -136,7 +179,7 @@ model BiometricRecord {
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
 
-  device            BandDevice?       @relation(fields: [deviceId], references: [id])
+  device            BandDevice?        @relation(fields: [deviceId], references: [id])
   alerts            Alert[]
   emotionalJournals EmotionalJournal[]
 
@@ -145,36 +188,84 @@ model BiometricRecord {
 }
 
 model Alert {
-  id                Int       @id @default(autoincrement())
-  studentId         Int?      @map("student_id")
-  biometricRecordId Int?      @map("biometric_record_id")
-  alertType         AlertType? @map("alert_type")
-  description       String?   @db.VarChar(255)
-  resolved          Boolean   @default(false)
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  id                Int            @id @default(autoincrement())
+  studentId         Int?           @map("student_id")
+  biometricRecordId Int?           @map("biometric_record_id")
+  alertType         AlertType?     @map("alert_type")
+  description       String?        @db.VarChar(255)
+  resolved          Boolean        @default(false)
+  priority          AlertPriority? @map("priority")
+  status            AlertStatus    @default(new) @map("status")
+  reviewedAt        DateTime?      @map("reviewed_at")
+  reviewedById      String?        @map("reviewed_by_id") @db.Uuid
+  closedAt          DateTime?      @map("closed_at")
+  contextSummary    String?        @map("context_summary") @db.Text
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
 
-  student          StudentProfile?  @relation(fields: [studentId], references: [id])
-  biometricRecord  BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
+  student         StudentProfile?  @relation(fields: [studentId], references: [id])
+  biometricRecord BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
+  reviewedBy      User?            @relation("AlertReviewedBy", fields: [reviewedById], references: [id])
+  actions         AlertAction[]
 
   @@index([studentId])
   @@index([biometricRecordId])
+  @@index([reviewedById])
+  @@index([studentId, status, createdAt])
   @@map("remote_alerts")
 }
 
-model EmotionalJournal {
-  id                Int        @id @default(autoincrement())
-  studentId         Int?       @map("student_id")
-  biometricRecordId Int?       @map("biometric_record_id")
-  entryType         EntryType? @map("entry_type")
-  userContent       String?    @map("user_content") @db.Text
-  aiResponse        String?    @map("ai_response") @db.Text
-  detectedAlertLevel String?   @map("detected_alert_level") @db.VarChar(255)
-  createdAt         DateTime   @default(now()) @map("created_at")
-  updatedAt         DateTime   @updatedAt @map("updated_at")
+model AlertAction {
+  id          Int      @id @default(autoincrement())
+  alertId     Int      @map("alert_id")
+  studentId   Int      @map("student_id")
+  therapistId String   @map("therapist_id") @db.Uuid
+  actionType  String   @map("action_type") @db.VarChar(50)
+  comment     String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  student          StudentProfile?  @relation(fields: [studentId], references: [id])
-  biometricRecord  BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
+  alert     Alert          @relation(fields: [alertId], references: [id])
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  therapist User           @relation("AlertActionTherapist", fields: [therapistId], references: [id])
+
+  @@index([alertId])
+  @@index([studentId])
+  @@index([therapistId])
+  @@map("remote_alert_actions")
+}
+
+model SharedPatientContent {
+  id            Int       @id @default(autoincrement())
+  studentId     Int       @map("student_id")
+  therapistId   String?   @map("therapist_id") @db.Uuid
+  contentType   String    @map("content_type") @db.VarChar(50)
+  content       String    @db.Text
+  sourceLocalId String?   @map("source_local_id") @db.VarChar(255)
+  sharedAt      DateTime  @default(now()) @map("shared_at")
+  revokedAt     DateTime? @map("revoked_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  therapist User?          @relation("SharedPatientContentTherapist", fields: [therapistId], references: [id])
+
+  @@index([studentId])
+  @@index([therapistId])
+  @@map("remote_shared_patient_content")
+}
+
+model EmotionalJournal {
+  id                 Int        @id @default(autoincrement())
+  studentId          Int?       @map("student_id")
+  biometricRecordId  Int?       @map("biometric_record_id")
+  entryType          EntryType? @map("entry_type")
+  userContent        String?    @map("user_content") @db.Text
+  aiResponse         String?    @map("ai_response") @db.Text
+  detectedAlertLevel String?    @map("detected_alert_level") @db.VarChar(255)
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  student         StudentProfile?  @relation(fields: [studentId], references: [id])
+  biometricRecord BiometricRecord? @relation(fields: [biometricRecordId], references: [id])
 
   @@index([studentId])
   @@index([biometricRecordId])
@@ -182,42 +273,262 @@ model EmotionalJournal {
 }
 
 model Appointment {
-  id              Int                @id @default(autoincrement())
-  studentId       Int?               @map("student_id")
-  doctorId        String?            @map("doctor_id") @db.Uuid
-  sessionTitle    String?            @map("session_title") @db.VarChar(255)
-  sessionType     String?            @map("session_type") @db.VarChar(255)
-  appointmentDate DateTime?          @map("appointment_date")
-  status          AppointmentStatus?
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
+  id                Int                @id @default(autoincrement())
+  studentId         Int?               @map("student_id")
+  doctorId          String?            @map("doctor_id") @db.Uuid
+  sessionTitle      String?            @map("session_title") @db.VarChar(255)
+  sessionType       String?            @map("session_type") @db.VarChar(255)
+  appointmentDate   DateTime?          @map("appointment_date")
+  status            AppointmentStatus?
+  durationMinutes   Int?               @map("duration_minutes")
+  endAt             DateTime?          @map("end_at")
+  modality          String?            @db.VarChar(50)
+  reason            String?            @db.VarChar(500)
+  cancelReason      String?            @map("cancel_reason") @db.VarChar(500)
+  createdById       String?            @map("created_by_id") @db.Uuid
+  rescheduledFromId Int?               @unique @map("rescheduled_from_id")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  student      StudentProfile? @relation(fields: [studentId], references: [id])
-  doctor       User?           @relation("DoctorAppointments", fields: [doctorId], references: [id])
-  clinicalNote ClinicalNote?
+  student         StudentProfile? @relation(fields: [studentId], references: [id])
+  doctor          User?           @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  createdBy       User?           @relation("CreatedAppointments", fields: [createdById], references: [id])
+  rescheduledFrom Appointment?    @relation("AppointmentReschedule", fields: [rescheduledFromId], references: [id])
+  rescheduledTo   Appointment?    @relation("AppointmentReschedule")
+  clinicalNote    ClinicalNote?
 
   @@index([studentId])
   @@index([doctorId])
+  @@index([createdById])
+  @@index([doctorId, appointmentDate])
+  @@index([studentId, appointmentDate])
   @@map("remote_appointments")
 }
 
 model ClinicalNote {
-  id                    Int             @id @default(autoincrement())
-  appointmentId         Int             @unique @map("appointment_id")
-  doctorId              String?         @map("doctor_id") @db.Uuid
-  studentId             Int?            @map("student_id")
-  sessionDiagnosis      String?         @map("session_diagnosis") @db.VarChar(255)
+  id                     Int             @id @default(autoincrement())
+  appointmentId          Int             @unique @map("appointment_id")
+  doctorId               String?         @map("doctor_id") @db.Uuid
+  studentId              Int?            @map("student_id")
+  sessionDiagnosis       String?         @map("session_diagnosis") @db.VarChar(255)
   observedEmotionalState EmotionalState? @map("observed_emotional_state")
-  observations          String?         @db.Text
-  aiAssistantAnalysis   String?         @map("ai_assistant_analysis") @db.Text
-  createdAt             DateTime        @default(now()) @map("created_at")
-  updatedAt             DateTime        @updatedAt @map("updated_at")
+  observations           String?         @db.Text
+  aiAssistantAnalysis    String?         @map("ai_assistant_analysis") @db.Text
+  sessionSummary         String?         @map("session_summary") @db.Text
+  clinicalImpression     String?         @map("clinical_impression") @db.Text
+  interventions          String?         @db.Text
+  agreements             String?         @db.Text
+  followUpPlan           String?         @map("follow_up_plan") @db.Text
+  voidedAt               DateTime?       @map("voided_at")
+  voidedById             String?         @map("voided_by_id") @db.Uuid
+  voidReason             String?         @map("void_reason") @db.VarChar(500)
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
 
-  appointment  Appointment     @relation(fields: [appointmentId], references: [id])
-  doctor       User?           @relation("DoctorClinicalNotes", fields: [doctorId], references: [id])
-  student      StudentProfile? @relation(fields: [studentId], references: [id])
+  appointment Appointment     @relation(fields: [appointmentId], references: [id])
+  doctor      User?           @relation("DoctorClinicalNotes", fields: [doctorId], references: [id])
+  student     StudentProfile? @relation(fields: [studentId], references: [id])
+  voidedBy    User?           @relation("VoidedClinicalNotes", fields: [voidedById], references: [id])
 
   @@index([doctorId])
   @@index([studentId])
+  @@index([voidedById])
   @@map("remote_clinical_notes")
+}
+
+model ClinicalRecord {
+  id                    Int      @id @default(autoincrement())
+  studentId             Int      @unique @map("student_id")
+  openedAt              DateTime @default(now()) @map("opened_at")
+  initialReason         String?  @map("initial_reason") @db.Text
+  psychologicalHistory  String?  @map("psychological_history") @db.Text
+  psychiatricHistory    String?  @map("psychiatric_history") @db.Text
+  relevantFamilyHistory String?  @map("relevant_family_history") @db.Text
+  previousTreatments    String?  @map("previous_treatments") @db.Text
+  currentMedication     String?  @map("current_medication") @db.Text
+  generalObservations   String?  @map("general_observations") @db.Text
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  student StudentProfile @relation(fields: [studentId], references: [id])
+
+  @@map("remote_clinical_records")
+}
+
+model TreatmentPlan {
+  id          Int       @id @default(autoincrement())
+  studentId   Int       @map("student_id")
+  therapistId String    @map("therapist_id") @db.Uuid
+  title       String?   @db.VarChar(255)
+  generalGoal String?   @map("general_goal") @db.Text
+  startsAt    DateTime  @default(now()) @map("starts_at")
+  endsAt      DateTime? @map("ends_at")
+  status      String    @default("active") @db.VarChar(50)
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  student   StudentProfile  @relation(fields: [studentId], references: [id])
+  therapist User            @relation("TreatmentPlanTherapist", fields: [therapistId], references: [id])
+  goals     TreatmentGoal[]
+
+  @@index([studentId])
+  @@index([therapistId])
+  @@map("remote_treatment_plans")
+}
+
+model TreatmentGoal {
+  id          Int       @id @default(autoincrement())
+  planId      Int       @map("plan_id")
+  studentId   Int       @map("student_id")
+  description String    @db.Text
+  status      String    @default("pending") @db.VarChar(50)
+  targetDate  DateTime? @map("target_date") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  plan    TreatmentPlan  @relation(fields: [planId], references: [id])
+  student StudentProfile @relation(fields: [studentId], references: [id])
+
+  @@index([planId])
+  @@index([studentId])
+  @@map("remote_treatment_goals")
+}
+
+model Activity {
+  id            Int      @id @default(autoincrement())
+  institutionId Int?     @map("institution_id")
+  title         String   @db.VarChar(255)
+  description   String?  @db.Text
+  instructions  String?  @db.Text
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  institution       Institution?      @relation(fields: [institutionId], references: [id])
+  studentActivities StudentActivity[]
+
+  @@index([institutionId])
+  @@map("remote_activities")
+}
+
+model StudentActivity {
+  id          Int       @id @default(autoincrement())
+  studentId   Int       @map("student_id")
+  activityId  Int       @map("activity_id")
+  therapistId String?   @map("therapist_id") @db.Uuid
+  origin      String    @db.VarChar(20)
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  dueAt       DateTime? @map("due_at")
+  status      String    @default("pending") @db.VarChar(50)
+  response    String?   @db.Text
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  activity  Activity       @relation(fields: [activityId], references: [id])
+  therapist User?          @relation("StudentActivityTherapist", fields: [therapistId], references: [id])
+
+  @@index([studentId])
+  @@index([activityId])
+  @@index([therapistId])
+  @@map("remote_student_activities")
+}
+
+model AuditLog {
+  id            Int      @id @default(autoincrement())
+  userId        String   @map("user_id") @db.Uuid
+  institutionId Int?     @map("institution_id")
+  action        String   @db.VarChar(100)
+  entity        String   @db.VarChar(100)
+  entityId      String?  @map("entity_id") @db.VarChar(100)
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user        User         @relation(fields: [userId], references: [id])
+  institution Institution? @relation(fields: [institutionId], references: [id])
+
+  @@index([userId])
+  @@index([institutionId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("remote_audit_logs")
+}
+
+model TherapistAssignment {
+  id           Int       @id @default(autoincrement())
+  studentId    Int       @map("student_id")
+  therapistId  String    @map("therapist_id") @db.Uuid
+  assignedById String?   @map("assigned_by_id") @db.Uuid
+  startsAt     DateTime  @default(now()) @map("starts_at")
+  endsAt       DateTime? @map("ends_at")
+  isPrimary    Boolean   @default(true) @map("is_primary")
+  reason       String?   @db.VarChar(500)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  student    StudentProfile @relation(fields: [studentId], references: [id])
+  therapist  User           @relation("TherapistAssignments", fields: [therapistId], references: [id])
+  assignedBy User?          @relation("AssignedTherapistAssignments", fields: [assignedById], references: [id])
+
+  @@index([studentId])
+  @@index([therapistId])
+  @@index([assignedById])
+  @@map("remote_therapist_assignments")
+}
+
+model PsychologistProfile {
+  id                    Int      @id @default(autoincrement())
+  userId                String   @unique @map("user_id") @db.Uuid
+  professionalLicense   String?  @map("professional_license") @db.VarChar(100)
+  specialty             String?  @db.VarChar(255)
+  phone                 String?  @db.VarChar(50)
+  defaultSessionMinutes Int      @default(60) @map("default_session_minutes")
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("remote_psychologist_profiles")
+}
+
+model TherapistSchedule {
+  id                     Int       @id @default(autoincrement())
+  therapistId            String    @map("therapist_id") @db.Uuid
+  dayOfWeek              Int       @map("day_of_week") // 1=Monday ... 7=Sunday
+  startTime              DateTime  @map("start_time") @db.Time(0)
+  endTime                DateTime  @map("end_time") @db.Time(0)
+  sessionDurationMinutes Int       @default(60) @map("session_duration_minutes")
+  breakMinutes           Int       @default(0) @map("break_minutes")
+  validFrom              DateTime? @map("valid_from") @db.Date
+  validTo                DateTime? @map("valid_to") @db.Date
+  active                 Boolean   @default(true)
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  therapist User @relation("TherapistSchedules", fields: [therapistId], references: [id])
+
+  @@index([therapistId])
+  @@index([therapistId, dayOfWeek])
+  @@map("remote_therapist_schedules")
+}
+
+model TherapistScheduleException {
+  id          Int       @id @default(autoincrement())
+  therapistId String    @map("therapist_id") @db.Uuid
+  date        DateTime  @db.Date
+  startTime   DateTime? @map("start_time") @db.Time(0)
+  endTime     DateTime? @map("end_time") @db.Time(0)
+  available   Boolean   @default(false)
+  reason      String?   @db.VarChar(255)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  therapist User @relation("TherapistScheduleExceptions", fields: [therapistId], references: [id])
+
+  @@index([therapistId])
+  @@index([therapistId, date])
+  @@map("remote_therapist_schedule_exceptions")
 }
