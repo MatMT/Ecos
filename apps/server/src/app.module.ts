@@ -9,6 +9,20 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { PsychologistsModule } from './psychologists/psychologists.module';
+import { TherapistAssignmentsModule } from './therapist-assignments/therapist-assignments.module';
+import { StudentsModule } from './students/students.module';
+import { SchedulesModule } from './schedules/schedules.module';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { AuditModule } from './audit/audit.module';
+import { ClinicalRecordsModule } from './clinical-records/clinical-records.module';
+import { ClinicalNotesModule } from './clinical-notes/clinical-notes.module';
+import { TreatmentPlansModule } from './treatment-plans/treatment-plans.module';
+import { ActivitiesModule } from './activities/activities.module';
+import { AlertsModule } from './alerts/alerts.module';
+import { BiometricsModule } from './biometrics/biometrics.module';
+import { SharedContentModule } from './shared-content/shared-content.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RlsContextInterceptor } from './common/interceptors/rls-context.interceptor';
 
@@ -25,6 +39,20 @@ import { RlsContextInterceptor } from './common/interceptors/rls-context.interce
     PrismaModule,
     AuthModule,
     UsersModule,
+    PsychologistsModule,
+    TherapistAssignmentsModule,
+    StudentsModule,
+    SchedulesModule,
+    AppointmentsModule,
+    AuditModule,
+    ClinicalRecordsModule,
+    ClinicalNotesModule,
+    TreatmentPlansModule,
+    ActivitiesModule,
+    AlertsModule,
+    BiometricsModule,
+    SharedContentModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

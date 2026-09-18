@@ -57,6 +57,25 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         status = HttpStatus.FORBIDDEN;
         message = driverCause?.message ?? message;
         break;
+      case '23P01':
+        // Exclusion constraint violation (e.g. remote_appointments_no_doctor_overlap) —
+        // Postgres's own code for this, distinct from 23505/P2002 which only covers plain
+        // unique-constraint violations. Not representable in schema.prisma, so Prisma has no
+        // native mapping for it — same raw-driver-passthrough situation as P0001 above.
+        status = HttpStatus.CONFLICT;
+        message =
+          'El horario indicado se superpone con otra cita ya existente.';
+        break;
+      case '42501':
+        // A bare RLS policy rejected an INSERT/UPDATE outright (insufficient_privilege) —
+        // this happens whenever a table's authorization relies on RLS alone with no
+        // app-layer guard/pre-check catching the case earlier (e.g. self-or-admin schedule
+        // writes). An authorization refusal, not a server bug — same category as P0001, but
+        // the raw Postgres message here names internal table identifiers, so use a fixed
+        // message rather than surfacing it as-is.
+        status = HttpStatus.FORBIDDEN;
+        message = 'No tiene permisos suficientes para realizar esta acción.';
+        break;
     }
 
     this.logger.error(

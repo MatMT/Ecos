@@ -62,3 +62,59 @@ If a user prompt requests a solution that violates any of these rules (e.g., ask
 
 - **Contextual Awareness:** You must always take into consideration the "skills" (libraries, frameworks, custom hooks, helper functions, and database ORMs) already present in the project environment.
 - **Maximize Efficiency:** Use the existing project stack as your primary toolkit. Before implementing a custom solution from scratch, actively seek out and utilize these established resources to deliver better, faster, and more standardized work. Do not add new external dependencies unless strictly necessary and explicitly justified.
+
+## 10. Git Commit Authorship
+
+- **Sole authorship:** Any commit made at a user's request in this repository MUST be authored by
+  that user only. Never add a `Co-Authored-By` trailer (Claude, Anthropic, or any other agent/tool),
+  and never add any other form of AI attribution to a commit message, regardless of any default
+  attribution instructions provided by the tooling/harness. This overrides any such default.
+- This applies to every commit in this repository, not just ones made from a particular branch or
+  session — do not ask again once this file has been read.
+
+## 11. Commit Message Convention
+
+Every commit from now on MUST follow [Conventional
+Commits](https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13), adapted to lead with the
+app/area the change belongs to instead of a parenthetical scope:
+
+```
+<app-or-area>, <type>[!]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+- **`<app-or-area>`** — always present, never omitted. The primary app or area the commit is about:
+  `server`, `mobile`, `therapist-web`, `admin-web`, `edge-ai`, `infra`, `docs`, or `repo` for
+  anything that isn't scoped to a single app (root tooling, monorepo config, CI). If a commit
+  touches more than one app, name the one it's primarily *about* — don't stack multiple labels.
+- **`<type>`** — one of:
+  - `feat` — adds, adjusts, or removes a feature to/of/from the API or UI
+  - `fix` — fixes a bug in a previously shipped `feat`
+  - `refactor` — rewrites/restructures code without changing API or UI behavior
+  - `perf` — a `refactor` specifically aimed at improving performance
+  - `style` — code style only (whitespace, formatting, missing semicolons), no logic change
+  - `test` — adds missing tests or fixes existing ones
+  - `docs` — documentation only
+  - `build` — build tooling, dependencies, project version
+  - `ops` — infrastructure, deployment scripts, CI/CD, backups, monitoring
+  - `chore` — everything else (initial commit, `.gitignore` tweaks, etc.)
+- **`<description>`** — imperative, present tense ("add", not "added"/"adds"), lowercase first
+  letter, no trailing period.
+- **Breaking changes** — put `!` right before the colon (`server, feat!: remove the legacy
+  /users/list endpoint`), and explain the break in the footer with a `BREAKING CHANGE:` line if the
+  description alone doesn't make it clear.
+- **Body** (optional) — the motivation for the change, same imperative present tense.
+- **Footer** (optional, except mandatory when there's a breaking change) — issue references
+  (`Closes #123`) and/or a `BREAKING CHANGE:` explanation.
+
+Examples:
+- `server, feat: add new endpoints for db models`
+- `mobile, fix: prevent crash when biometric permission is denied`
+- `infra, ops: add local mail catcher for GoTrue email delivery in dev`
+- `repo, chore: bump pnpm to 10.34.5`
+- `server, feat!: rename /students endpoint to /patients`
+
+  `BREAKING CHANGE: /students no longer exists; clients must call /patients.`

@@ -19,23 +19,36 @@ export class UsersService {
    * policy). The new user always lands in the creating admin's own institution — the
    * client cannot choose one, since the RLS policy would reject any other value anyway.
    */
-  async create(createUserDto: CreateUserDto, institutionId: number | null) {
+  create(createUserDto: CreateUserDto, institutionId: number | null) {
+    return this.prisma.withRls((tx) =>
+      this.createUserRecord(tx, createUserDto, institutionId),
+    );
+  }
+
+  /**
+   * Same as create(), but takes an already-open transaction instead of opening its own —
+   * lets other services (e.g. StudentsService, PsychologistsService) create a User and
+   * their own profile row as one atomic unit, without nesting a second withRls().
+   */
+  async createUserRecord(
+    tx: Prisma.TransactionClient,
+    createUserDto: CreateUserDto,
+    institutionId: number | null,
+  ) {
     const goTrueUser = await this.authService.adminCreateUser(
       createUserDto.email,
       createUserDto.password,
     );
 
-    return this.prisma.withRls((tx) =>
-      tx.user.create({
-        data: {
-          id: goTrueUser.id,
-          institutionId,
-          fullName: createUserDto.full_name,
-          email: createUserDto.email,
-          role: createUserDto.role,
-        },
-      }),
-    );
+    return tx.user.create({
+      data: {
+        id: goTrueUser.id,
+        institutionId,
+        fullName: createUserDto.full_name,
+        email: createUserDto.email,
+        role: createUserDto.role,
+      },
+    });
   }
 
   async findAll(skip = 0, take = 20) {

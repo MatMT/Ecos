@@ -180,9 +180,23 @@ security is enforced in two independent layers, and both matter:
   below — a bare call runs as the `authenticator` role with no privileges switched in and will
   simply fail (not silently bypass RLS).
 - Schema changes always go through `prisma migrate` — never hand-edit the database or generated
-  client. RLS policies/functions/triggers are the one exception: they're plain SQL inside a
-  migration file (`prisma migrate dev --create-only` then hand-write the SQL, since they aren't
-  representable in `schema.prisma`) — see "Row Level Security (RLS) & Supabase Auth" below.
+  client. **`prisma migrate dev`, in any form (including `--create-only`), is permanently
+  unusable in this project** — confirmed by testing it directly: it fails rebuilding the shadow
+  database, because replaying `20260913120000_uuid_auth_migration` (which adds `remote_users.id ->
+  auth.users.id`) hits `schema "auth" does not exist` — the shadow DB is a bare Postgres instance
+  that never has Supabase's `auth` schema bootstrapped into it, and `migrate dev` always rebuilds
+  the shadow DB by replaying the *entire* migration history before computing anything new. This
+  applies to every migration, not just RLS-only ones. The actual workflow, for any schema change:
+  1. Edit `schema.prisma` to the desired end state.
+  2. Manually create `prisma/migrations/<timestamp>_<name>/migration.sql` and hand-write the full
+     DDL yourself — including the `CREATE TABLE`/`CREATE INDEX`/`ALTER TABLE` statements Prisma
+     would normally auto-generate from a schema diff (mirror the existing migrations' style:
+     double-quoted identifiers, `-- CreateTable`/`-- CreateIndex`/`-- AddForeignKey` comments for
+     the Prisma-representable parts; plain SQL for RLS policies/functions/triggers, which aren't
+     representable in `schema.prisma` regardless).
+  3. `prisma migrate deploy` (reads/writes only the real `_prisma_migrations` table against the
+     target DB — no shadow DB involved) then `prisma generate`.
+  See "Row Level Security (RLS) & Supabase Auth" below for the RLS-specific SQL patterns.
 - Add `@@index` on foreign-key columns that are queried or joined on often (`studentId`, `doctorId`,
   `deviceId`, `biometricRecordId`, etc.) — Postgres does not auto-index FK columns, and this schema
   has several one-to-many relations that will be queried by parent id.
@@ -281,6 +295,16 @@ other call, in any service, should call `withRls(fn)` with no override and let A
    previously had a bare `GRANT SELECT` and no RLS at all — `remote_band_devices` — silently meant
    *every* authenticated user could read *every* device row until RLS was actually enabled. A grant
    with no RLS on the table is not a safe intermediate state; don't leave one lying around.)
+   **The reverse mistake is just as real, and was found live in a post-Phase-8 security re-audit**:
+   if you write only `GRANT SELECT, INSERT, UPDATE` (deliberately omitting DELETE, intending "no
+   physical deletes") and then give the table a `FOR ALL` policy, that policy still covers DELETE —
+   and self-hosted Supabase's own `ALTER DEFAULT PRIVILEGES` silently grants DELETE to
+   `authenticated` anyway regardless of what this migration's own GRANT statement says. Omitting a
+   `GRANT DELETE` is **not** the same as denying it; if a table must never allow physical deletes,
+   add an explicit `REVOKE DELETE ON <table> FROM authenticated;` (this bit `remote_clinical_records`,
+   `remote_treatment_plans`, `remote_treatment_goals`, and `remote_student_activities` — fixed in
+   migration `20260918100000_revoke_unintended_deletes`, confirmed live with a rolled-back `DELETE`
+   as an assigned doctor before and after the fix, not just by reading the policy text).
 3. **Never let a policy directly query another RLS-protected table that might query back into this
    one** — that's an infinite-recursion trap Postgres will happily let you create (hit and fixed
    live in this session: `remote_student_profiles`'s policy queried `remote_users`, whose own policy
@@ -317,21 +341,54 @@ other call, in any service, should call `withRls(fn)` with no override and let A
 8. Don't forget the DB-side FK-index audit while you're adding a table with foreign keys — Postgres
    never creates one automatically. Add `@@index([...])` in `schema.prisma` for every FK column that
    doesn't already have a `@unique` (which creates one for free).
+9. **An INSERT policy alone is not enough if the caller also needs to see the row it just
+   inserted.** Prisma's `create()` always issues `INSERT ... RETURNING`, and Postgres requires the
+   table's SELECT policy — not just the INSERT policy's `WITH CHECK` — to permit the new row before
+   it can be returned. A write-only-visible-to-admins design (e.g. an append-only audit log an
+   ordinary actor writes to but can't browse) will make every non-admin `create()` fail outright with
+   `new row violates row-level security policy for table "x"`, even though the insert itself was
+   perfectly authorized. Hit and fixed live in the Phase 3 `remote_audit_logs` policy (migration
+   `20260917051000_fix_audit_logs_select_self_visibility`): the fix is a `user_id = (SELECT
+   auth.uid())` branch on the SELECT policy alongside the admin branch, not a change to INSERT at
+   all. If a table is ever meant to be write-blind even to its own author, the insert has to go
+   through raw SQL without `RETURNING` instead of a typed Prisma `create()`.
 
 **Known follow-up, not yet solved**: automated device ingestion (a band device pushing biometric
 readings with no logged-in clinician present) has no `auth.uid()` to check against — that path
 needs its own decision (likely a `service_role`-authenticated ingestion endpoint), not the
-`authenticated`-role policy used for interactive access.
+`authenticated`-role policy used for interactive access. A second instance of the same gap:
+Phase 4's `StudentActivity.origin = 'ecos'` (a system/AI-suggested activity, not assigned by a
+logged-in psychologist) has the identical problem — not solved either, same reasoning applies.
 
-**Current coverage**: all nine domain tables now have RLS enabled and forced —
-`remote_users`/`remote_student_profiles`/`remote_biometric_records` (migration
-`20260913120500_rls_policies`), plus `remote_institutions`/`remote_band_devices`/`remote_alerts`/
-`remote_appointments`/`remote_clinical_notes`/`remote_emotional_journal` (migration
-`20260913150500_rls_hardening_and_remaining_tables`). `public._prisma_migrations` is RLS-enabled
-with zero policies/grants (fully inaccessible via the API; `prisma migrate` is unaffected since it
-runs as `postgres`). Helper functions live in `app_private` (migration
-`20260913151000_move_rls_helpers_to_private_schema`). If you add a **tenth** domain table, the
-checklist is still:
+**Current coverage**: every domain table now has RLS enabled and forced, across three access
+"shapes":
+- **Self + assigned doctor + admin** (`can_access_student_profile`): `remote_users`,
+  `remote_student_profiles`, `remote_biometric_records`, `remote_institutions`,
+  `remote_band_devices`, `remote_alerts` (select/insert only — see below), `remote_appointments`.
+- **Assigned doctor only, no self, no admin** (`can_access_clinical_data`): `remote_clinical_records`,
+  `remote_treatment_plans`, `remote_treatment_goals`, `remote_student_activities`, plus
+  author-or-current-assigned variants on `remote_clinical_notes` and `remote_alert_actions`, and
+  `remote_alerts` UPDATE (narrowed from the self+doctor+admin SELECT/INSERT shape — reviewing/closing
+  an alert is a clinical judgment call, not something a student or admin does).
+- **Self only** (`is_students_own_profile`): `remote_emotional_journal` (narrowed in Phase 8 —
+  previously used the broader self+doctor+admin shape) and `remote_shared_patient_content`
+  (insert/update; its SELECT also allows the named `therapist_id` and the current assigned doctor,
+  but never falls back to an institution admin).
+
+Two catalog-style tables don't fit any of the three shapes above: `remote_activities`
+(role+institution — any psychologist/admin in-institution or a global row may read; only an admin
+may write, scoped to their own institution) and `remote_audit_logs` (append-only; insert is
+always-self, select is self-or-admin-of-own-institution).
+
+`public._prisma_migrations` is RLS-enabled with zero policies/grants (fully inaccessible via the
+API; `prisma migrate` is unaffected since it runs as `postgres`). Helper functions live in
+`app_private` (migration `20260913151000_move_rls_helpers_to_private_schema`), including
+`is_students_own_profile` (added in the `remote_shared_patient_content` migration, reused by
+`remote_emotional_journal`'s Phase 8 fix). `test/authorization.e2e-spec.ts` exercises real RLS
+against a live Postgres connection (not the mocked `withRls` every `*.service.spec.ts` uses) — one
+representative table per shape, plus regression tests for the two RLS bugs this project has
+actually hit (the audit-log `INSERT...RETURNING` self-visibility gap, the alert-admin-exclusion
+correction). If you add a **new** domain table, the checklist is still:
 - [ ] `ENABLE`/`FORCE ROW LEVEL SECURITY`
 - [ ] `GRANT`s for `authenticated` (table + any sequence) — **before** the policy, not after
 - [ ] select/insert/update/delete policies, reusing the `app_private` helpers where possible — add a
@@ -339,8 +396,12 @@ checklist is still:
       `authenticated`) only for a genuinely new cross-table lookup, and check it can't recurse
 - [ ] Every `auth.*()`/helper call wrapped in `(SELECT ...)`
 - [ ] A trigger if any column needs to be off-limits beyond what row-level access already implies
-- [ ] A test proving both the allowed and the denied case (see "Testing" above)
+- [ ] A test proving both the allowed and the denied case — add it to
+      `test/authorization.e2e-spec.ts` (real RLS, not a mocked `withRls`; see "Testing" above)
 - [ ] `@@index` on every new FK column without a `@unique`
+- [ ] If the table is ever written via a typed Prisma `create()`, confirm the SELECT policy also
+      permits the inserting caller to see their own new row (point 9 above) — test it live, not just
+      by reading the policy text
 
 ## 12. Definition of done for a new endpoint
 
