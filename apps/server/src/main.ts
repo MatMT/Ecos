@@ -35,7 +35,41 @@ async function bootstrap() {
     .setTitle('ECOS API')
     .setDescription('REST API for the ECOS health monitoring platform')
     .setVersion('0.1.0')
+    .setContact('The Code Artisans', '', 'javier@thecodeartisans.com')
     .addBearerAuth()
+    // Identity & Access
+    .addTag(
+      'auth',
+      'Login, token refresh, and password management via Supabase Auth (GoTrue).',
+    )
+    .addTag('users', 'Account management for all roles.')
+    // Clinical Team
+    .addTag(
+      'psychologists',
+      'Psychologist profiles and their assigned patients.',
+    )
+    .addTag('students', 'Student (patient) profiles.')
+    .addTag(
+      'therapist-assignments',
+      'Assigning and ending a student’s primary therapist relationship.',
+    )
+    // Care Delivery
+    .addTag('schedules', "Psychologists' recurring weekly availability.")
+    .addTag('appointments', 'Booking, rescheduling, and cancelling sessions.')
+    .addTag('clinical-notes', 'Session notes tied to an appointment.')
+    .addTag('clinical-records', "A student's longitudinal clinical record.")
+    .addTag('treatment-plans', 'Treatment plans and their goals.')
+    .addTag('biometrics', 'Wearable-device biometric readings.')
+    .addTag('alerts', 'Automated risk alerts and the actions taken on them.')
+    .addTag('activities', 'Assigned coping/wellness activities.')
+    .addTag(
+      'shared-content',
+      'Resources a therapist shares directly with a student.',
+    )
+    // Reporting
+    .addTag('dashboard', 'Aggregated overview, timeline, and summary views.')
+    // Ops
+    .addTag('health', 'Service health check.')
     .build();
 
   const documentFactory = () => SwaggerModule.createDocument(app, config);
