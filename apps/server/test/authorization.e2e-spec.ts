@@ -100,6 +100,7 @@ interface Fixture {
   sharedContentA: { id: number };
   activityGlobal: { id: number };
   activityInstitutionA: { id: number };
+  emotionalJournalA: { id: number };
 }
 
 async function cleanup(postgres: PrismaClient) {
@@ -128,6 +129,9 @@ async function cleanup(postgres: PrismaClient) {
     const deviceIds = devices.map((d) => d.id);
 
     await postgres.sharedPatientContent.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await postgres.emotionalJournal.deleteMany({
       where: { studentId: { in: profileIds } },
     });
     await postgres.alertAction.deleteMany({
@@ -341,6 +345,13 @@ async function seedFixture(postgres: PrismaClient): Promise<Fixture> {
     },
   });
 
+  const emotionalJournalA = await postgres.emotionalJournal.create({
+    data: {
+      studentId: studentAProfile.id,
+      userContent: '[RLS-TEST] journal entry',
+    },
+  });
+
   return {
     institutionA: { id: institutionA.id },
     institutionB: { id: institutionB.id },
@@ -360,6 +371,7 @@ async function seedFixture(postgres: PrismaClient): Promise<Fixture> {
     sharedContentA: { id: sharedContentA.id },
     activityGlobal: { id: activityGlobal.id },
     activityInstitutionA: { id: activityInstitutionA.id },
+    emotionalJournalA: { id: emotionalJournalA.id },
   };
 }
 
@@ -407,6 +419,66 @@ describe('Authorization (RLS) e2e', () => {
   });
 
   describe('can_access_student_profile shape (self + assigned doctor + admin)', () => {
+    it('remote_student_profiles: self, assigned doctor, and same-institution admin can read', async () => {
+      const asSelf = await withRlsAs(
+        fixture.studentA.userId,
+        'authenticated',
+        (tx) =>
+          tx.studentProfile.findUnique({
+            where: { id: fixture.studentA.profileId },
+          }),
+      );
+      const asDoctor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) =>
+          tx.studentProfile.findUnique({
+            where: { id: fixture.studentA.profileId },
+          }),
+      );
+      const asAdmin = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.studentProfile.findUnique({
+            where: { id: fixture.studentA.profileId },
+          }),
+      );
+      expect(asSelf).not.toBeNull();
+      expect(asDoctor).not.toBeNull();
+      expect(asAdmin).not.toBeNull();
+    });
+
+    it('remote_student_profiles: an unrelated psychologist and a different institution cannot read — no cross-tenant leak', async () => {
+      const asUnrelated = await withRlsAs(
+        fixture.psychA2.id,
+        'authenticated',
+        (tx) =>
+          tx.studentProfile.findUnique({
+            where: { id: fixture.studentA.profileId },
+          }),
+      );
+      const asOtherInstitutionAdmin = await withRlsAs(
+        fixture.adminB.id,
+        'authenticated',
+        (tx) =>
+          tx.studentProfile.findUnique({
+            where: { id: fixture.studentA.profileId },
+          }),
+      );
+      const asOtherInstitutionDoctor = await withRlsAs(
+        fixture.psychB1.id,
+        'authenticated',
+        (tx) =>
+          tx.studentProfile.findUnique({
+            where: { id: fixture.studentA.profileId },
+          }),
+      );
+      expect(asUnrelated).toBeNull();
+      expect(asOtherInstitutionAdmin).toBeNull();
+      expect(asOtherInstitutionDoctor).toBeNull();
+    });
+
     it('remote_alerts: self, assigned doctor, and same-institution admin can read', async () => {
       const asSelf = await withRlsAs(
         fixture.studentA.userId,
@@ -843,6 +915,58 @@ describe('Authorization (RLS) e2e', () => {
         (tx) => tx.auditLog.findUnique({ where: { id: created.id } }),
       );
       expect(asOtherInstitutionAdmin).toBeNull();
+    });
+  });
+
+  describe('Regression: Phase 8 EmotionalJournal self-only narrowing', () => {
+    it('remote_emotional_journal: only the student themselves can read their entries', async () => {
+      const asSelf = await withRlsAs(
+        fixture.studentA.userId,
+        'authenticated',
+        (tx) =>
+          tx.emotionalJournal.findUnique({
+            where: { id: fixture.emotionalJournalA.id },
+          }),
+      );
+      expect(asSelf).not.toBeNull();
+    });
+
+    it('remote_emotional_journal: the assigned doctor and an institution admin are both denied', async () => {
+      const asDoctor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) =>
+          tx.emotionalJournal.findUnique({
+            where: { id: fixture.emotionalJournalA.id },
+          }),
+      );
+      const asAdmin = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.emotionalJournal.findUnique({
+            where: { id: fixture.emotionalJournalA.id },
+          }),
+      );
+      expect(asDoctor).toBeNull();
+      expect(asAdmin).toBeNull();
+    });
+  });
+
+  describe('Regression: unauthenticated (anon) role never has a fallback path into patient data', () => {
+    // The `anon` Postgres role has full table-level grants everywhere (Supabase's own
+    // ALTER DEFAULT PRIVILEGES applies them regardless of our own GRANT statements —
+    // apps/server/AGENTS.md §11 point 2). Every app_private helper function this table's
+    // policy depends on revokes EXECUTE from anon, so an anonymous caller can't even
+    // evaluate the policy — confirmed here as a hard rejection, not just an empty result.
+    it('remote_student_profiles: anon cannot query at all, authenticated-but-unassigned still sees nothing', async () => {
+      await expect(
+        withRlsAs(fixture.studentA.userId, 'anon', (tx) =>
+          tx.studentProfile.findMany({
+            where: { id: fixture.studentA.profileId },
+          }),
+        ),
+      ).rejects.toThrow();
     });
   });
 });
