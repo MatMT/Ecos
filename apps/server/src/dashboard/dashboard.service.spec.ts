@@ -163,6 +163,7 @@ describe('DashboardService', () => {
 
       expect(tx.studentProfile.findMany).toHaveBeenCalledWith({
         where: { assignedDoctorId: CURRENT_USER.id },
+        select: { id: true, studentCode: true },
       });
     });
   });

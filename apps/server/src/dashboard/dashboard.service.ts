@@ -241,6 +241,7 @@ export class DashboardService {
       ] = await Promise.all([
         tx.studentProfile.findMany({
           where: { assignedDoctorId: therapistId },
+          select: { id: true, studentCode: true },
         }),
         tx.appointment.findMany({
           where: {
