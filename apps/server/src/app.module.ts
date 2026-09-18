@@ -22,6 +22,7 @@ import { ActivitiesModule } from './activities/activities.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { BiometricsModule } from './biometrics/biometrics.module';
 import { SharedContentModule } from './shared-content/shared-content.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RlsContextInterceptor } from './common/interceptors/rls-context.interceptor';
 
@@ -51,6 +52,7 @@ import { RlsContextInterceptor } from './common/interceptors/rls-context.interce
     AlertsModule,
     BiometricsModule,
     SharedContentModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [
