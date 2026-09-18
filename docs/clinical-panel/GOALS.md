@@ -134,7 +134,7 @@ already documented, not retrofitted later.
 | **4 · Therapeutic continuity** | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | Done |
 | **5 · Alerts & biometrics** | `Alert` lifecycle (priority/status), `AlertAction`, biometric summaries/trends | `AlertAction` | Done |
 | **6 · Shared content** | `SharedPatientContent` and panel access rules | `SharedPatientContent` | Done |
-| **7 · Dashboards** | `/students/:id/overview`, clinical timeline, `/dashboard/psychologist`, `/dashboard/administrator` | none (query-only) | Not started |
+| **7 · Dashboards** | `/students/:id/overview`, clinical timeline, `/dashboard/psychologist`, `/dashboard/administrator` | none (query-only) | Done |
 | **8 · Hardening** | Authorization tests (allowed + denied case per table), FK index audit, audit-log review, idempotency, full OpenAPI pass | none | Not started |
 
 Consent/TrustedContact/AuditLog (guide §3.11–3.12) aren't pinned to a single phase above — `AuditLog`
