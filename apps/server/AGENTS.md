@@ -350,15 +350,35 @@ needs its own decision (likely a `service_role`-authenticated ingestion endpoint
 Phase 4's `StudentActivity.origin = 'ecos'` (a system/AI-suggested activity, not assigned by a
 logged-in psychologist) has the identical problem — not solved either, same reasoning applies.
 
-**Current coverage**: all nine domain tables now have RLS enabled and forced —
-`remote_users`/`remote_student_profiles`/`remote_biometric_records` (migration
-`20260913120500_rls_policies`), plus `remote_institutions`/`remote_band_devices`/`remote_alerts`/
-`remote_appointments`/`remote_clinical_notes`/`remote_emotional_journal` (migration
-`20260913150500_rls_hardening_and_remaining_tables`). `public._prisma_migrations` is RLS-enabled
-with zero policies/grants (fully inaccessible via the API; `prisma migrate` is unaffected since it
-runs as `postgres`). Helper functions live in `app_private` (migration
-`20260913151000_move_rls_helpers_to_private_schema`). If you add a **tenth** domain table, the
-checklist is still:
+**Current coverage**: every domain table now has RLS enabled and forced, across three access
+"shapes":
+- **Self + assigned doctor + admin** (`can_access_student_profile`): `remote_users`,
+  `remote_student_profiles`, `remote_biometric_records`, `remote_institutions`,
+  `remote_band_devices`, `remote_alerts` (select/insert only — see below), `remote_appointments`.
+- **Assigned doctor only, no self, no admin** (`can_access_clinical_data`): `remote_clinical_records`,
+  `remote_treatment_plans`, `remote_treatment_goals`, `remote_student_activities`, plus
+  author-or-current-assigned variants on `remote_clinical_notes` and `remote_alert_actions`, and
+  `remote_alerts` UPDATE (narrowed from the self+doctor+admin SELECT/INSERT shape — reviewing/closing
+  an alert is a clinical judgment call, not something a student or admin does).
+- **Self only** (`is_students_own_profile`): `remote_emotional_journal` (narrowed in Phase 8 —
+  previously used the broader self+doctor+admin shape) and `remote_shared_patient_content`
+  (insert/update; its SELECT also allows the named `therapist_id` and the current assigned doctor,
+  but never falls back to an institution admin).
+
+Two catalog-style tables don't fit any of the three shapes above: `remote_activities`
+(role+institution — any psychologist/admin in-institution or a global row may read; only an admin
+may write, scoped to their own institution) and `remote_audit_logs` (append-only; insert is
+always-self, select is self-or-admin-of-own-institution).
+
+`public._prisma_migrations` is RLS-enabled with zero policies/grants (fully inaccessible via the
+API; `prisma migrate` is unaffected since it runs as `postgres`). Helper functions live in
+`app_private` (migration `20260913151000_move_rls_helpers_to_private_schema`), including
+`is_students_own_profile` (added in the `remote_shared_patient_content` migration, reused by
+`remote_emotional_journal`'s Phase 8 fix). `test/authorization.e2e-spec.ts` exercises real RLS
+against a live Postgres connection (not the mocked `withRls` every `*.service.spec.ts` uses) — one
+representative table per shape, plus regression tests for the two RLS bugs this project has
+actually hit (the audit-log `INSERT...RETURNING` self-visibility gap, the alert-admin-exclusion
+correction). If you add a **new** domain table, the checklist is still:
 - [ ] `ENABLE`/`FORCE ROW LEVEL SECURITY`
 - [ ] `GRANT`s for `authenticated` (table + any sequence) — **before** the policy, not after
 - [ ] select/insert/update/delete policies, reusing the `app_private` helpers where possible — add a
@@ -366,7 +386,8 @@ checklist is still:
       `authenticated`) only for a genuinely new cross-table lookup, and check it can't recurse
 - [ ] Every `auth.*()`/helper call wrapped in `(SELECT ...)`
 - [ ] A trigger if any column needs to be off-limits beyond what row-level access already implies
-- [ ] A test proving both the allowed and the denied case (see "Testing" above)
+- [ ] A test proving both the allowed and the denied case — add it to
+      `test/authorization.e2e-spec.ts` (real RLS, not a mocked `withRls`; see "Testing" above)
 - [ ] `@@index` on every new FK column without a `@unique`
 - [ ] If the table is ever written via a typed Prisma `create()`, confirm the SELECT policy also
       permits the inserting caller to see their own new row (point 9 above) — test it live, not just

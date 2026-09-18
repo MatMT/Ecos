@@ -112,12 +112,9 @@ RLS awareness, transaction boundaries) already matches this codebase's conventio
   *student* (mobile app) read their assigned activities or submit a response — every Phase 1-4
   endpoint is therapist/admin-facing. Mobile's own consumption of these fields is a separate,
   later integration, not a gap in what's shipped.
-- **`remote_emotional_journal`'s RLS is broader than the "panel never reads it directly" principle
-  implies.** It uses `can_access_student_profile` (self + assigned doctor + admin), not a
-  self-only policy — so a doctor/admin *could* already query journal entries directly at the DB
-  layer today. No panel code does this (confirmed by search), so the principle holds in practice,
-  but it isn't DB-enforced. Pre-existing since Phase 1, not something Phase 6 changes; worth a
-  look during Phase 8 hardening.
+- ~~**`remote_emotional_journal`'s RLS is broader than the "panel never reads it directly"
+  principle implies.**~~ Fixed in Phase 8: narrowed to a self-only policy (`is_students_own_profile`),
+  matching the principle at the DB layer instead of relying on no panel code happening to query it.
 
 ## 6. Phases
 
@@ -135,7 +132,7 @@ already documented, not retrofitted later.
 | **5 · Alerts & biometrics** | `Alert` lifecycle (priority/status), `AlertAction`, biometric summaries/trends | `AlertAction` | Done |
 | **6 · Shared content** | `SharedPatientContent` and panel access rules | `SharedPatientContent` | Done |
 | **7 · Dashboards** | `/students/:id/overview`, clinical timeline, `/dashboard/psychologist`, `/dashboard/administrator` | none (query-only) | Done |
-| **8 · Hardening** | Authorization tests (allowed + denied case per table), FK index audit, audit-log review, idempotency, full OpenAPI pass | none | Not started |
+| **8 · Hardening** | Authorization tests (allowed + denied case per table), FK index audit, audit-log review, idempotency, full OpenAPI pass | none | Done |
 
 Consent/TrustedContact/AuditLog (guide §3.11–3.12) aren't pinned to a single phase above — `AuditLog`
 is threaded through Phases 3, 5 and 6 (each phase adds the audit events relevant to what it ships,
