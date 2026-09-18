@@ -126,7 +126,7 @@ already documented, not retrofitted later.
 | **2 · Scheduling & agenda** | `TherapistSchedule` + exceptions, availability engine, `Appointment` extensions, reschedule/conflict handling | `TherapistSchedule`, `TherapistScheduleException` | Done |
 | **3 · Clinical record** | `ClinicalRecord`, extended `ClinicalNote`, edit restrictions, clinical audit events | `ClinicalRecord` | Done |
 | **4 · Therapeutic continuity** | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | `TreatmentPlan`, `TreatmentGoal`, `Activity`, `StudentActivity` | Done |
-| **5 · Alerts & biometrics** | `Alert` lifecycle (priority/status), `AlertAction`, biometric summaries/trends | `AlertAction` | Not started |
+| **5 · Alerts & biometrics** | `Alert` lifecycle (priority/status), `AlertAction`, biometric summaries/trends | `AlertAction` | Done |
 | **6 · Shared content** | `SharedPatientContent` and panel access rules | `SharedPatientContent` | Not started |
 | **7 · Dashboards** | `/students/:id/overview`, clinical timeline, `/dashboard/psychologist`, `/dashboard/administrator` | none (query-only) | Not started |
 | **8 · Hardening** | Authorization tests (allowed + denied case per table), FK index audit, audit-log review, idempotency, full OpenAPI pass | none | Not started |
