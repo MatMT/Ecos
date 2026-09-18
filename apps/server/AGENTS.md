@@ -295,6 +295,16 @@ other call, in any service, should call `withRls(fn)` with no override and let A
    previously had a bare `GRANT SELECT` and no RLS at all — `remote_band_devices` — silently meant
    *every* authenticated user could read *every* device row until RLS was actually enabled. A grant
    with no RLS on the table is not a safe intermediate state; don't leave one lying around.)
+   **The reverse mistake is just as real, and was found live in a post-Phase-8 security re-audit**:
+   if you write only `GRANT SELECT, INSERT, UPDATE` (deliberately omitting DELETE, intending "no
+   physical deletes") and then give the table a `FOR ALL` policy, that policy still covers DELETE —
+   and self-hosted Supabase's own `ALTER DEFAULT PRIVILEGES` silently grants DELETE to
+   `authenticated` anyway regardless of what this migration's own GRANT statement says. Omitting a
+   `GRANT DELETE` is **not** the same as denying it; if a table must never allow physical deletes,
+   add an explicit `REVOKE DELETE ON <table> FROM authenticated;` (this bit `remote_clinical_records`,
+   `remote_treatment_plans`, `remote_treatment_goals`, and `remote_student_activities` — fixed in
+   migration `20260918100000_revoke_unintended_deletes`, confirmed live with a rolled-back `DELETE`
+   as an assigned doctor before and after the fix, not just by reading the policy text).
 3. **Never let a policy directly query another RLS-protected table that might query back into this
    one** — that's an infinite-recursion trap Postgres will happily let you create (hit and fixed
    live in this session: `remote_student_profiles`'s policy queried `remote_users`, whose own policy
