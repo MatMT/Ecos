@@ -21,6 +21,8 @@ import 'dotenv/config';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
+  AlertPriority,
+  AlertStatus,
   AlertType,
   AppointmentStatus,
   EmotionalState,
@@ -166,6 +168,9 @@ async function cleanup(prisma: PrismaClient) {
       where: { studentId: { in: profileIds } },
     });
     await prisma.appointment.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await prisma.alertAction.deleteMany({
       where: { studentId: { in: profileIds } },
     });
     await prisma.alert.deleteMany({ where: { studentId: { in: profileIds } } });
@@ -360,7 +365,7 @@ async function seedInstitution(
       if (isAnomalous) lastAnomalousRecordId = record.id;
     }
 
-    await prisma.alert.create({
+    const closedAlert = await prisma.alert.create({
       data: {
         studentId: profile.id,
         biometricRecordId: lastAnomalousRecordId,
@@ -368,6 +373,20 @@ async function seedInstitution(
         description:
           'Frecuencia cardíaca elevada detectada durante horario de clases.',
         resolved: true,
+        priority: AlertPriority.high,
+        status: AlertStatus.closed,
+        reviewedAt: daysAgo(1),
+        reviewedById: assignedDoctor.id,
+        closedAt: daysAgo(1),
+      },
+    });
+    await prisma.alertAction.create({
+      data: {
+        alertId: closedAlert.id,
+        studentId: profile.id,
+        therapistId: assignedDoctor.id,
+        actionType: 'closed',
+        comment: 'Se contactó al estudiante; sin riesgo adicional detectado.',
       },
     });
     await prisma.alert.create({
@@ -377,6 +396,7 @@ async function seedInstitution(
         description:
           'El asistente de IA detectó lenguaje de riesgo en una conversación reciente.',
         resolved: false,
+        priority: AlertPriority.critical,
       },
     });
 
