@@ -19,6 +19,8 @@ import { ClinicalRecordsModule } from './clinical-records/clinical-records.modul
 import { ClinicalNotesModule } from './clinical-notes/clinical-notes.module';
 import { TreatmentPlansModule } from './treatment-plans/treatment-plans.module';
 import { ActivitiesModule } from './activities/activities.module';
+import { AlertsModule } from './alerts/alerts.module';
+import { BiometricsModule } from './biometrics/biometrics.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RlsContextInterceptor } from './common/interceptors/rls-context.interceptor';
 
@@ -45,6 +47,8 @@ import { RlsContextInterceptor } from './common/interceptors/rls-context.interce
     ClinicalNotesModule,
     TreatmentPlansModule,
     ActivitiesModule,
+    AlertsModule,
+    BiometricsModule,
   ],
   controllers: [AppController],
   providers: [

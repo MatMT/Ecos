@@ -1,5 +1,7 @@
-export type ClinicalAuditAction =
+export type AuditAction =
   | 'CLINICAL_RECORD_VIEWED'
   | 'CLINICAL_NOTE_CREATED'
   | 'CLINICAL_NOTE_UPDATED'
-  | 'CLINICAL_NOTE_VOIDED';
+  | 'CLINICAL_NOTE_VOIDED'
+  | 'ALERT_REVIEWED'
+  | 'ALERT_ACTION_CREATED';
