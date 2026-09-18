@@ -115,6 +115,7 @@ model User {
   studentActivitiesAssigned    StudentActivity[]            @relation("StudentActivityTherapist")
   reviewedAlerts               Alert[]                      @relation("AlertReviewedBy")
   alertActionsAuthored         AlertAction[]                @relation("AlertActionTherapist")
+  sharedContentReceived        SharedPatientContent[]       @relation("SharedPatientContentTherapist")
 
   @@index([institutionId])
   @@map("remote_users")
@@ -129,8 +130,8 @@ model StudentProfile {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
-  user                 User                  @relation(fields: [userId], references: [id])
-  assignedDoctor       User?                 @relation("AssignedDoctor", fields: [assignedDoctorId], references: [id])
+  user                 User                   @relation(fields: [userId], references: [id])
+  assignedDoctor       User?                  @relation("AssignedDoctor", fields: [assignedDoctorId], references: [id])
   bandDevices          BandDevice[]
   alerts               Alert[]
   emotionalJournals    EmotionalJournal[]
@@ -142,6 +143,7 @@ model StudentProfile {
   treatmentGoals       TreatmentGoal[]
   studentActivities    StudentActivity[]
   alertActions         AlertAction[]
+  sharedContent        SharedPatientContent[]
 
   @@index([assignedDoctorId])
   @@map("remote_student_profiles")
@@ -230,6 +232,25 @@ model AlertAction {
   @@index([studentId])
   @@index([therapistId])
   @@map("remote_alert_actions")
+}
+
+model SharedPatientContent {
+  id            Int       @id @default(autoincrement())
+  studentId     Int       @map("student_id")
+  therapistId   String?   @map("therapist_id") @db.Uuid
+  contentType   String    @map("content_type") @db.VarChar(50)
+  content       String    @db.Text
+  sourceLocalId String?   @map("source_local_id") @db.VarChar(255)
+  sharedAt      DateTime  @default(now()) @map("shared_at")
+  revokedAt     DateTime? @map("revoked_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  therapist User?          @relation("SharedPatientContentTherapist", fields: [therapistId], references: [id])
+
+  @@index([studentId])
+  @@index([therapistId])
+  @@map("remote_shared_patient_content")
 }
 
 model EmotionalJournal {
