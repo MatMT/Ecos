@@ -85,7 +85,10 @@ export class PsychologistsService {
   /** Patients with an active assignment — i.e. StudentProfile.assignedDoctorId = this psychologist. */
   findStudents(userId: string) {
     return this.prisma.withRls((tx) =>
-      tx.studentProfile.findMany({ where: { assignedDoctorId: userId } }),
+      tx.studentProfile.findMany({
+        where: { assignedDoctorId: userId },
+        include: { user: true },
+      }),
     );
   }
 }

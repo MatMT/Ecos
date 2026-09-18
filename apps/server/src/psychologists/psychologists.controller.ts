@@ -23,6 +23,7 @@ import { PsychologistsService } from './psychologists.service';
 import { CreatePsychologistDto } from './dto/create-psychologist.dto';
 import { UpdatePsychologistDto } from './dto/update-psychologist.dto';
 import { PsychologistResponseDto } from './dto/psychologist-response.dto';
+import { StudentResponseDto } from '../students/dto/student-response.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -134,7 +135,11 @@ export class PsychologistsController {
     description:
       'Patients whose StudentProfile.assignedDoctorId currently points at this psychologist. RLS scopes the result.',
   })
-  @ApiResponse({ status: 200, description: 'List of assigned patients.' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of assigned patients.',
+    type: [StudentResponseDto],
+  })
   findStudents(@Param('id', ParseUUIDPipe) id: string) {
     return this.psychologistsService.findStudents(id);
   }

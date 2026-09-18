@@ -1,11 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /** Mirrors GoTrueSession (auth.service.ts) — the shape GoTrue itself returns. */
 class AuthSessionUserDto {
   @ApiProperty({ description: 'Supabase Auth (GoTrue) user id.' })
   id!: string;
 
-  @ApiProperty({ description: 'Email address.', required: false })
+  @ApiPropertyOptional({ description: 'Email address.' })
   email?: string;
 }
 

@@ -109,6 +109,7 @@ describe('PsychologistsService', () => {
 
       expect(tx.studentProfile.findMany).toHaveBeenCalledWith({
         where: { assignedDoctorId: 'user-uuid' },
+        include: { user: true },
       });
     });
   });
