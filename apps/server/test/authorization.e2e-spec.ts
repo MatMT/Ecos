@@ -95,6 +95,8 @@ interface Fixture {
   alertA: { id: number };
   clinicalRecordA: { id: number };
   treatmentPlanA: { id: number };
+  treatmentGoalA: { id: number };
+  studentActivityA: { id: number };
   clinicalNoteA2: { id: number };
   alertActionA2: { id: number };
   sharedContentA: { id: number };
@@ -144,6 +146,12 @@ async function cleanup(postgres: PrismaClient) {
       where: { studentId: { in: profileIds } },
     });
     await postgres.clinicalRecord.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await postgres.studentActivity.deleteMany({
+      where: { studentId: { in: profileIds } },
+    });
+    await postgres.treatmentGoal.deleteMany({
       where: { studentId: { in: profileIds } },
     });
     await postgres.treatmentPlan.deleteMany({
@@ -292,6 +300,28 @@ async function seedFixture(postgres: PrismaClient): Promise<Fixture> {
       title: '[RLS-TEST] plan',
     },
   });
+  const treatmentGoalA = await postgres.treatmentGoal.create({
+    data: {
+      planId: treatmentPlanA.id,
+      studentId: studentAProfile.id,
+      description: '[RLS-TEST] goal',
+    },
+  });
+
+  const activityForStudentActivityA = await postgres.activity.create({
+    data: {
+      institutionId: institutionA.id,
+      title: '[RLS-TEST] delete-check activity',
+    },
+  });
+  const studentActivityA = await postgres.studentActivity.create({
+    data: {
+      studentId: studentAProfile.id,
+      activityId: activityForStudentActivityA.id,
+      therapistId: psychA1.id,
+      origin: 'psychologist',
+    },
+  });
 
   const appointmentA2 = await postgres.appointment.create({
     data: {
@@ -366,6 +396,8 @@ async function seedFixture(postgres: PrismaClient): Promise<Fixture> {
     alertA: { id: alertA.id },
     clinicalRecordA: { id: clinicalRecordA.id },
     treatmentPlanA: { id: treatmentPlanA.id },
+    treatmentGoalA: { id: treatmentGoalA.id },
+    studentActivityA: { id: studentActivityA.id },
     clinicalNoteA2: { id: clinicalNoteA2.id },
     alertActionA2: { id: alertActionA2.id },
     sharedContentA: { id: sharedContentA.id },
@@ -950,6 +982,46 @@ describe('Authorization (RLS) e2e', () => {
       );
       expect(asDoctor).toBeNull();
       expect(asAdmin).toBeNull();
+    });
+  });
+
+  describe('Regression: unintended physical DELETE on continuity/clinical tables', () => {
+    // remote_clinical_records, remote_treatment_plans, remote_treatment_goals, and
+    // remote_student_activities each use a single `FOR ALL` policy (which covers DELETE too)
+    // and never explicitly revoked the DELETE privilege Supabase's own default-privileges
+    // grant Supabase silently applies to every table (apps/server/AGENTS.md §11 point 2) —
+    // so an assigned doctor could physically delete a patient's clinical record, treatment
+    // plan, treatment goal, or assigned activity despite the design's explicit "never a
+    // physical delete" intent. Fixed by revoking DELETE at the table-privilege level,
+    // mirroring the same fix already applied to remote_alerts and remote_clinical_notes.
+    it('an assigned doctor cannot physically delete a ClinicalRecord, TreatmentPlan, TreatmentGoal, or StudentActivity', async () => {
+      await expect(
+        withRlsAs(fixture.psychA1.id, 'authenticated', (tx) =>
+          tx.clinicalRecord.delete({
+            where: { id: fixture.clinicalRecordA.id },
+          }),
+        ),
+      ).rejects.toThrow();
+
+      await expect(
+        withRlsAs(fixture.psychA1.id, 'authenticated', (tx) =>
+          tx.treatmentPlan.delete({ where: { id: fixture.treatmentPlanA.id } }),
+        ),
+      ).rejects.toThrow();
+
+      await expect(
+        withRlsAs(fixture.psychA1.id, 'authenticated', (tx) =>
+          tx.treatmentGoal.delete({ where: { id: fixture.treatmentGoalA.id } }),
+        ),
+      ).rejects.toThrow();
+
+      await expect(
+        withRlsAs(fixture.psychA1.id, 'authenticated', (tx) =>
+          tx.studentActivity.delete({
+            where: { id: fixture.studentActivityA.id },
+          }),
+        ),
+      ).rejects.toThrow();
     });
   });
 
