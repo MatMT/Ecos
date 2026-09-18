@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateTherapistAssignmentDto } from './dto/create-therapist-assignment.dto';
 import { EndTherapistAssignmentDto } from './dto/end-therapist-assignment.dto';
 
@@ -17,7 +18,10 @@ interface AssignPrimaryTherapistInput {
 
 @Injectable()
 export class TherapistAssignmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   /**
    * Core transactional operation, shaped to take an already-open tx so other services
@@ -79,6 +83,16 @@ export class TherapistAssignmentsService {
       where: { id: studentId },
       data: { assignedDoctorId: therapistId },
     });
+
+    if (assignedById) {
+      await this.auditService.log(tx, {
+        userId: assignedById,
+        institutionId: student.user.institutionId,
+        action: 'THERAPIST_ASSIGNED',
+        entity: 'TherapistAssignment',
+        entityId: String(assignment.id),
+      });
+    }
 
     return assignment;
   }

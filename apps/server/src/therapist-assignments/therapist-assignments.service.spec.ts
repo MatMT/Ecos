@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { TherapistAssignmentsService } from './therapist-assignments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 describe('TherapistAssignmentsService', () => {
   let service: TherapistAssignmentsService;
@@ -22,6 +23,7 @@ describe('TherapistAssignmentsService', () => {
     };
   };
   let prisma: { withRls: jest.Mock };
+  let auditService: { log: jest.Mock };
 
   beforeEach(async () => {
     tx = {
@@ -42,11 +44,13 @@ describe('TherapistAssignmentsService', () => {
     prisma = {
       withRls: jest.fn((fn: (tx: unknown) => unknown) => fn(tx)),
     };
+    auditService = { log: jest.fn() };
 
     const module = await Test.createTestingModule({
       providers: [
         TherapistAssignmentsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditService, useValue: auditService },
       ],
     }).compile();
 
@@ -135,7 +139,35 @@ describe('TherapistAssignmentsService', () => {
         where: { id: 1 },
         data: { assignedDoctorId: 'therapist-uuid' },
       });
+      expect(auditService.log).toHaveBeenCalledWith(tx, {
+        userId: 'admin-uuid',
+        institutionId: 5,
+        action: 'THERAPIST_ASSIGNED',
+        entity: 'TherapistAssignment',
+        entityId: '100',
+      });
       expect(result).toEqual({ id: 100, ...input });
+    });
+
+    it('does not log an audit event when there is no assignedById', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: 1,
+        user: { institutionId: 5 },
+      });
+      tx.user.findUnique.mockResolvedValue({
+        id: 'therapist-uuid',
+        role: Role.psychologist,
+        institutionId: 5,
+      });
+      tx.therapistAssignment.findFirst.mockResolvedValue(null);
+      tx.therapistAssignment.create.mockResolvedValue({ id: 100 });
+
+      await service.assignPrimaryTherapist(fakeTx(), {
+        ...input,
+        assignedById: undefined,
+      });
+
+      expect(auditService.log).not.toHaveBeenCalled();
     });
 
     it('skips ending a previous assignment when none exists', async () => {
