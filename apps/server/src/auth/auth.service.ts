@@ -30,23 +30,41 @@ export class AuthService {
   constructor(private readonly configService: ConfigService) {}
 
   async login(email: string, password: string): Promise<GoTrueSession> {
-    return this.request<GoTrueSession>(
+    const session = await this.request<GoTrueSession>(
       'POST',
       '/token?grant_type=password',
       { email, password },
       UnauthorizedException,
       'Correo electrónico o contraseña incorrectos.',
     );
+    return this.toSession(session);
   }
 
   async refresh(refreshToken: string): Promise<GoTrueSession> {
-    return this.request<GoTrueSession>(
+    const session = await this.request<GoTrueSession>(
       'POST',
       '/token?grant_type=refresh_token',
       { refresh_token: refreshToken },
       UnauthorizedException,
       'La sesión ha expirado. Por favor, inicie sesión nuevamente.',
     );
+    return this.toSession(session);
+  }
+
+  /**
+   * GoTrue's actual /token response embeds far more than GoTrueSession declares
+   * (app_metadata, user_metadata, identities, etc.) — narrow it to exactly the
+   * documented AuthResponseDto shape instead of passing the upstream body straight
+   * through to the client.
+   */
+  private toSession(raw: GoTrueSession): GoTrueSession {
+    return {
+      access_token: raw.access_token,
+      refresh_token: raw.refresh_token,
+      expires_in: raw.expires_in,
+      token_type: raw.token_type,
+      user: { id: raw.user.id, email: raw.user.email },
+    };
   }
 
   /**
