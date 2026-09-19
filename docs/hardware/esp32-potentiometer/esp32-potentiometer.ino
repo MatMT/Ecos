@@ -1,10 +1,10 @@
+#include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <BLE2902.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <Wire.h>
+#include <BLE2902.h>
 
 // ============================================================================
 // ECOS BAND SIMULATOR - ESP32 Hardware Firmware
@@ -18,25 +18,25 @@
 Adafruit_SSD1306 oled(ANCHO_PANTALLA, ALTO_PANTALLA, &Wire, -1);
 
 // --- Configuración BLE ---
-#define SERVICE_UUID "0000180d-0000-1000-8000-00805f9b34fb"
+#define SERVICE_UUID        "0000180d-0000-1000-8000-00805f9b34fb"
 #define CHARACTERISTIC_UUID "00002a37-0000-1000-8000-00805f9b34fb"
 
-BLEServer *pServer = NULL;
-BLECharacteristic *pCharacteristic = NULL;
+BLEServer* pServer = NULL;
+BLECharacteristic* pCharacteristic = NULL;
 bool dispositivoConectado = false;
 
 struct __attribute__((packed)) NexoTelemetryPacket {
-  uint8_t bpm;            // 45 - 190 BPM
-  uint8_t activity_level; // 0 - 100%
-  uint8_t spo2;           // 98% nominal
-  uint16_t step_delta;    // Pasos acumulados
-  uint8_t flags; // Bit 0: Hardware Alert (Desacople Autonómico / Pánico)
+  uint8_t  bpm;            // 45 - 190 BPM
+  uint8_t  activity_level; // 0 - 100%
+  uint8_t  spo2;           // 98% nominal
+  uint16_t step_delta;     // Pasos acumulados
+  uint8_t  flags;          // Bit 0: Hardware Alert (Desacople Autonómico / Pánico)
 };
 
 // --- Asignación de Pines ESP32 ---
-const int pinPotBpm = 34;   // Potenciómetro BPM (G34)
-const int pinPotAct = 35;   // Potenciómetro Actividad (G35)
-const int pinLedLatido = 4; // LED de latido fisiológico (G4)
+const int pinPotBpm    = 34; // Potenciómetro BPM (G34)
+const int pinPotAct    = 35; // Potenciómetro Actividad (G35)
+const int pinLedLatido = 4;  // LED de latido fisiológico (G4)
 
 unsigned long ultimoLatido = 0;
 unsigned long ultimoRefrescoOled = 0;
@@ -45,12 +45,15 @@ bool latidoActivo = false;
 
 // Bitmap de corazón 8x8 px
 static const unsigned char PROGMEM iconoCorazon[] = {
-    0b01100110, 0b11111111, 0b11111111, 0b11111111,
-    0b01111110, 0b00111100, 0b00011000, 0b00000000};
+  0b01100110, 0b11111111, 0b11111111, 0b11111111,
+  0b01111110, 0b00111100, 0b00011000, 0b00000000
+};
 
-class ServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer *pServer) override { dispositivoConectado = true; }
-  void onDisconnect(BLEServer *pServer) override {
+class ServerCallbacks: public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) override {
+    dispositivoConectado = true;
+  }
+  void onDisconnect(BLEServer* pServer) override {
     dispositivoConectado = false;
     BLEDevice::startAdvertising();
   }
@@ -85,28 +88,27 @@ void setup() {
 
   BLEService *pService = pServer->createService(SERVICE_UUID);
   pCharacteristic = pService->createCharacteristic(
-      CHARACTERISTIC_UUID,
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+                      CHARACTERISTIC_UUID,
+                      BLECharacteristic::PROPERTY_READ |
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
   pCharacteristic->addDescriptor(new BLE2902());
   pService->start();
 
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(
-      0x06); // Parámetros recomendados para compatibilidad iOS
+  pAdvertising->setMinPreferred(0x06); // Parámetros recomendados para compatibilidad iOS
   pAdvertising->setMinPreferred(0x12);
 
-  // Incluir nombre y servicio explícito en el paquete de anuncio primario para
-  // iOS
+  // Anuncio primario: Nombre del dispositivo (17 bytes <= 31 bytes)
   BLEAdvertisementData advData;
   advData.setName("Ecos-Band-ESP32");
-  advData.setCompleteServices(BLEUUID(SERVICE_UUID));
   pAdvertising->setAdvertisementData(advData);
 
-  // Paquete de respuesta de escaneo (Scan Response) con nombre completo
+  // Respuesta de escaneo (Scan Response): UUID del servicio (18 bytes <= 31 bytes)
   BLEAdvertisementData scanData;
-  scanData.setName("Ecos-Band-ESP32");
+  scanData.setCompleteServices(BLEUUID(SERVICE_UUID));
   pAdvertising->setScanResponseData(scanData);
 
   BLEDevice::startAdvertising();
@@ -157,11 +159,10 @@ void loop() {
       oled.print(dispositivoConectado ? "BLE: CONECTADO" : "BLE: ESPERANDO...");
     }
 
-    // Corazón gráfico
+    // Corazón gráfico animado
     oled.setTextColor(SSD1306_WHITE);
     if (millis() - ultimoLatido < 120) {
-      oled.drawBitmap(116, 2, iconoCorazon, 8, 8,
-                      alertaPanico ? SSD1306_BLACK : SSD1306_WHITE);
+      oled.drawBitmap(116, 2, iconoCorazon, 8, 8, alertaPanico ? SSD1306_BLACK : SSD1306_WHITE);
     }
 
     // Valores biométricos
@@ -201,7 +202,7 @@ void loop() {
     paquete.flags = alertaPanico ? 0x01 : 0x00;
 
     if (dispositivoConectado) {
-      pCharacteristic->setValue((uint8_t *)&paquete, sizeof(paquete));
+      pCharacteristic->setValue((uint8_t*)&paquete, sizeof(paquete));
       pCharacteristic->notify();
     }
 
