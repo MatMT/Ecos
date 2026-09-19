@@ -213,58 +213,59 @@ export class BleDeviceService {
 
       console.log(`[BLE FOUND] id=${device.id} name=${device.name} localName=${device.localName} uuids=${JSON.stringify(device.serviceUUIDs)} rssi=${device.rssi}`);
 
-      const rawName = device.name ?? device.localName;
+      const rawName = (device.name ?? device.localName)?.trim();
       const serviceUUIDs = device.serviceUUIDs ?? [];
 
+      // 1. Check for Heart Rate / Ecos Telemetry Service UUID (180D)
       const hasMatchingService = serviceUUIDs.some((uuid) => {
         const u = uuid.toLowerCase();
         return (
           u.includes('180d') ||
-          u.includes('4faf') ||
           u === BLE_CONFIG.serviceUuid.toLowerCase() ||
           u === BLE_CONFIG.legacyServiceUuid.toLowerCase()
         );
       });
 
-      const hasMatchingName =
+      // 2. Check for recognized ecosystem device name prefix
+      const hasEcosystemName =
         rawName != null &&
-        (rawName.toLowerCase().includes('ecos') ||
-          rawName.toLowerCase().includes('nexo') ||
-          rawName.toLowerCase().includes('esp32') ||
-          rawName.toLowerCase().includes('band') ||
-          rawName.toLowerCase().includes('potentiometer') ||
+        rawName.length > 0 &&
+        !rawName.startsWith('Dispositivo BLE') &&
+        (rawName.startsWith('Ecos-Band') ||
+          rawName.startsWith('Nexo-Band') ||
+          rawName.startsWith('ESP32') ||
           (options.deviceNames &&
-            options.deviceNames.some((n) =>
-              rawName.toLowerCase().includes(n.toLowerCase())
-            )));
+            options.deviceNames.some((n) => rawName.toLowerCase().includes(n.toLowerCase()))));
 
-      const isCompatible = Boolean(hasMatchingName || hasMatchingService);
+      // 3. STRICT FILTER: Discard nameless beacons, generic OS accessories, and non-ecosystem devices
+      if (!hasMatchingService && !hasEcosystemName) {
+        return;
+      }
 
-      // Register device in discovered devices map while preserving previous resolved metadata
-      const existing = this.discoveredDevicesMap.get(device.id);
-      const displayName = rawName ?? existing?.name ?? (hasMatchingService ? BLE_CONFIG.deviceName : null);
-      const finalIsCompatible = isCompatible || (existing?.isCompatible ?? false);
+      const displayName = rawName ?? (hasMatchingService ? BLE_CONFIG.deviceName : null);
+      if (!displayName || displayName.startsWith('Dispositivo BLE')) {
+        return;
+      }
 
       this.discoveredDevicesMap.set(device.id, {
         id: device.id,
         name: displayName,
-        rssi: device.rssi ?? existing?.rssi ?? null,
-        serviceUUIDs: device.serviceUUIDs ?? existing?.serviceUUIDs ?? null,
-        isCompatible: finalIsCompatible,
+        rssi: device.rssi ?? null,
+        serviceUUIDs: device.serviceUUIDs,
+        isCompatible: true,
       });
 
-      // Sort with compatible devices and strongest RSSI first
+      // Priority sort: Ecos-Band-ESP32 first, followed by strongest signal strength (RSSI)
       const sortedList = Array.from(this.discoveredDevicesMap.values()).sort((a, b) => {
-        if (a.isCompatible && !b.isCompatible) return -1;
-        if (!a.isCompatible && b.isCompatible) return 1;
+        const aIsTarget = a.name === BLE_CONFIG.deviceName || a.name?.startsWith('Ecos-Band');
+        const bIsTarget = b.name === BLE_CONFIG.deviceName || b.name?.startsWith('Ecos-Band');
+        if (aIsTarget && !bIsTarget) return -1;
+        if (!aIsTarget && bIsTarget) return 1;
         return (b.rssi ?? -100) - (a.rssi ?? -100);
       });
 
       this.updateState({ discoveredDevices: sortedList });
-
-      if (isCompatible) {
-        onDeviceFound(device);
-      }
+      onDeviceFound(device);
     });
   }
 
@@ -598,15 +599,34 @@ export class BleDeviceService {
       const services = await device.services();
       let targetCharacteristic = null;
 
+      // 1. Explicit search for Service 180D and Characteristic 2A37
       for (const service of services) {
-        const characteristics = await service.characteristics();
-        for (const char of characteristics) {
-          if (char.isNotifiable || char.isIndicatable) {
-            targetCharacteristic = char;
-            break;
+        const sUuid = service.uuid.toLowerCase();
+        if (sUuid.includes('180d') || sUuid === BLE_CONFIG.serviceUuid.toLowerCase()) {
+          const characteristics = await service.characteristics();
+          for (const char of characteristics) {
+            const cUuid = char.uuid.toLowerCase();
+            if (cUuid.includes('2a37') || cUuid === BLE_CONFIG.characteristicUuid.toLowerCase()) {
+              targetCharacteristic = char;
+              break;
+            }
           }
         }
         if (targetCharacteristic) break;
+      }
+
+      // 2. Fallback search for any notifiable/indicatable characteristic
+      if (!targetCharacteristic) {
+        for (const service of services) {
+          const characteristics = await service.characteristics();
+          for (const char of characteristics) {
+            if (char.isNotifiable || char.isIndicatable) {
+              targetCharacteristic = char;
+              break;
+            }
+          }
+          if (targetCharacteristic) break;
+        }
       }
 
       if (targetCharacteristic) {
