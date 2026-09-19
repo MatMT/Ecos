@@ -401,4 +401,47 @@ export function ShieldCheckIcon({ size = 18, color = '#10B981', strokeWidth = 2 
   );
 }
 
+// 18. Battery Status Icon (Replaces 🔋)
+export function BatteryIcon({ size = 15, color = '#15803D', strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="2" y="7" width="16" height="10" rx="2" stroke={color} strokeWidth={strokeWidth} />
+      <Line x1="20" y1="10" x2="20" y2="14" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Rect x="5" y="9.5" width="8" height="5" rx="1" fill={color} />
+    </Svg>
+  );
+}
+
+// 19. LogOut / Sign Out Icon
+export function LogOutIcon({ size = 18, color = '#DC2626', strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M16 17l5-5-5-5" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <Line x1="21" y1="12" x2="9" y2="12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+// 20. Chevron Right Icon (Replaces >)
+export function ChevronRightIcon({ size = 14, color = '#64748B', strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 18l6-6-6-6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+// 21. Calendar Icon
+export function CalendarIcon({ size = 15, color = '#0284C7', strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="3" y="4" width="18" height="18" rx="2" stroke={color} strokeWidth={strokeWidth} />
+      <Line x1="16" y1="2" x2="16" y2="6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Line x1="8" y1="2" x2="8" y2="6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Line x1="3" y1="10" x2="21" y2="10" stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+}
+
 
