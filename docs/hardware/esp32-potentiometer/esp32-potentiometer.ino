@@ -101,8 +101,9 @@ void setup() {
   pAdvertising->setMinPreferred(0x06); // Parámetros recomendados para compatibilidad iOS
   pAdvertising->setMinPreferred(0x12);
 
-  // Anuncio primario: Nombre del dispositivo (17 bytes <= 31 bytes)
+  // Anuncio primario: Flags de conectabilidad + Nombre (20 bytes <= 31 bytes)
   BLEAdvertisementData advData;
+  advData.setFlags(0x06); // Obligatorio: habilita modo conectable para iOS CoreBluetooth
   advData.setName("Ecos-Band-ESP32");
   pAdvertising->setAdvertisementData(advData);
 
