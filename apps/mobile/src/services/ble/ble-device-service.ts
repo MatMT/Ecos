@@ -1,18 +1,28 @@
 import { BleManager, Device, Subscription } from 'react-native-ble-plx';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import { Buffer } from 'buffer';
 
 export interface BleScanOptions {
   serviceUuid?: string;
+  serviceUuids?: string[];
   deviceName?: string;
+  deviceNames?: string[];
 }
 
 export class BleDeviceService {
   private static instance: BleDeviceService | null = null;
-  private manager: BleManager;
+  private manager: BleManager | null = null;
 
   private constructor() {
-    this.manager = new BleManager();
+    try {
+      if (Platform.OS === 'web' || (!NativeModules.BleClient && !NativeModules.BleClientManager)) {
+        this.manager = null;
+        return;
+      }
+      this.manager = new BleManager();
+    } catch {
+      this.manager = null;
+    }
   }
 
   public static getInstance(): BleDeviceService {
@@ -20,6 +30,10 @@ export class BleDeviceService {
       BleDeviceService.instance = new BleDeviceService();
     }
     return BleDeviceService.instance;
+  }
+
+  public isAvailable(): boolean {
+    return this.manager !== null;
   }
 
   public async requestPermissions(): Promise<boolean> {
@@ -53,7 +67,16 @@ export class BleDeviceService {
     onDeviceFound: (device: Device) => void,
     onError: (error: Error) => void
   ): void {
-    const serviceUuids = options.serviceUuid ? [options.serviceUuid] : null;
+    if (!this.manager) {
+      onError(new Error('El módulo Bluetooth no está disponible en este entorno de desarrollo.'));
+      return;
+    }
+
+    const serviceUuids = options.serviceUuids
+      ? options.serviceUuids
+      : options.serviceUuid
+      ? [options.serviceUuid]
+      : null;
 
     this.manager.startDeviceScan(serviceUuids, null, (error, device) => {
       if (error) {
@@ -65,7 +88,11 @@ export class BleDeviceService {
         return;
       }
 
-      if (options.deviceName && device.name !== options.deviceName) {
+      if (options.deviceNames && options.deviceNames.length > 0) {
+        if (!device.name || !options.deviceNames.includes(device.name)) {
+          return;
+        }
+      } else if (options.deviceName && device.name !== options.deviceName) {
         return;
       }
 
@@ -74,6 +101,9 @@ export class BleDeviceService {
   }
 
   public stopScan(): void {
+    if (!this.manager) {
+      return;
+    }
     this.manager.stopDeviceScan();
   }
 
@@ -115,6 +145,30 @@ export class BleDeviceService {
     );
   }
 
+  public monitorBinaryCharacteristic(
+    device: Device,
+    serviceUuid: string,
+    characteristicUuid: string,
+    onData: (buffer: Buffer) => void,
+    onError: (error: Error) => void
+  ): Subscription {
+    return device.monitorCharacteristicForService(
+      serviceUuid,
+      characteristicUuid,
+      (error, characteristic) => {
+        if (error) {
+          onError(error);
+          return;
+        }
+
+        if (characteristic?.value) {
+          const buffer = Buffer.from(characteristic.value, 'base64');
+          onData(buffer);
+        }
+      }
+    );
+  }
+
   public async disconnect(device: Device): Promise<void> {
     const isConnected = await device.isConnected();
     if (isConnected) {
@@ -123,7 +177,10 @@ export class BleDeviceService {
   }
 
   public destroy(): void {
-    this.manager.destroy();
+    if (this.manager) {
+      this.manager.destroy();
+      this.manager = null;
+    }
     BleDeviceService.instance = null;
   }
 }

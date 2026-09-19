@@ -1,4 +1,4 @@
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
@@ -43,6 +43,8 @@ export default function Esp32PrototypeScreen() {
   const router = useRouter();
   const {
     status,
+    bpm,
+    activityLevel,
     rawAdcValue,
     percentage,
     connectedDeviceName,
@@ -58,18 +60,18 @@ export default function Esp32PrototypeScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.backButton}
           onPress={() => router.back()}
+          style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Regresar">
-          <Text style={styles.backButtonText}>← Regresar</Text>
+          accessibilityLabel="Volver a la pantalla anterior"
+        >
+          <Text style={styles.backButtonText}>← Volver</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Prototipo de Hardware</Text>
+        <Text style={styles.headerTitle}>Prototipo ESP32 BLE</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
-          <Text style={styles.cardSubtitle}>ESTADO DE CONEXIÓN BLE</Text>
           <View style={styles.statusRow}>
             <View
               style={[
@@ -78,15 +80,7 @@ export default function Esp32PrototypeScreen() {
               ]}
             />
             <Text style={styles.statusText}>{getStatusLabel(status)}</Text>
-            {isScanningOrConnecting && (
-              <ActivityIndicator
-                size="small"
-                color={Colors.brand}
-                style={styles.statusLoader}
-              />
-            )}
           </View>
-
           {connectedDeviceName && (
             <Text style={styles.deviceLabel}>
               Dispositivo: {connectedDeviceName}
@@ -101,19 +95,19 @@ export default function Esp32PrototypeScreen() {
         )}
 
         <View style={styles.card}>
-          <Text style={styles.cardSubtitle}>LECTURA ANALÓGICA DEL POTENCIÓMETRO</Text>
+          <Text style={styles.cardSubtitle}>TELEMETRÍA BINARIA (ECOS BAND / ESP32)</Text>
           <View style={styles.metricContainer}>
-            <Text style={styles.metricValue}>{rawAdcValue}</Text>
-            <Text style={styles.metricUnit}>/ 4095 (12 bits)</Text>
+            <Text style={styles.metricValue}>{bpm > 0 ? bpm : rawAdcValue}</Text>
+            <Text style={styles.metricUnit}>{bpm > 0 ? 'BPM' : '/ 4095 (12 bits)'}</Text>
           </View>
 
           <View style={styles.progressTrack}>
-            <View style={[styles.progressBar, { width: `${percentage}%` }]} />
+            <View style={[styles.progressBar, { width: `${activityLevel > 0 ? activityLevel : percentage}%` }]} />
           </View>
 
           <View style={styles.percentageRow}>
-            <Text style={styles.percentageLabel}>Nivel de apertura</Text>
-            <Text style={styles.percentageValue}>{percentage}%</Text>
+            <Text style={styles.percentageLabel}>Nivel de Actividad (Potenciómetro 2)</Text>
+            <Text style={styles.percentageValue}>{activityLevel > 0 ? activityLevel : percentage}%</Text>
           </View>
         </View>
 
