@@ -34,10 +34,10 @@ export function useBiometricMonitor(): BiometricMonitorResult {
   const rollingBufferRef = useRef<RollingBuffer>(new RollingBuffer(10));
   const lastSampleTimeRef = useRef<number>(0);
 
-  const isBleConnected = ble.status === 'connected' && ble.bpm > 0;
+  const isBleConnected = ble.status === 'connected';
 
   // Active data source selection
-  const rawBpm = isBleConnected ? ble.bpm : (simulator.currentData?.bpm ?? 72);
+  const rawBpm = isBleConnected && ble.bpm > 0 ? ble.bpm : (simulator.currentData?.bpm ?? 72);
   const rawActivity = isBleConnected ? ble.activityLevel : (simulator.currentData?.steps != null ? Math.min(100, simulator.currentData.steps) : 0);
   const rawSpo2 = isBleConnected ? ble.spo2 : 98;
 
@@ -63,7 +63,9 @@ export function useBiometricMonitor(): BiometricMonitorResult {
     void aiEngine.analyzeTensor(tensor, rawBpm, rawActivity, calculatedStress).then((result) => {
       if (isCancelled) return;
       setAnalysis(result);
-      setTrafficState(result.evaluation.state);
+      const effectiveState: ClinicalTrafficState =
+        isBleConnected && ble.hardwareAlert ? 'RED' : result.evaluation.state;
+      setTrafficState(effectiveState);
 
       // Periodically persist sample to local SQLite (throttled to every 3 seconds)
       const now = Date.now();
@@ -85,7 +87,7 @@ export function useBiometricMonitor(): BiometricMonitorResult {
     return () => {
       isCancelled = true;
     };
-  }, [rawBpm, rawActivity, calculatedStress, rawSpo2]);
+  }, [rawBpm, rawActivity, calculatedStress, rawSpo2, isBleConnected, ble.hardwareAlert]);
 
   return {
     bpm: rawBpm,

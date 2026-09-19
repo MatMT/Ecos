@@ -124,11 +124,15 @@ export default function Home() {
               <Text style={styles.title}>Tu bienestar hoy</Text>
               <Text style={styles.subtitle}>{todayLabel}</Text>
             </View>
-            <View
+            <TouchableOpacity
+              onPress={() => router.push('/esp32-prototype' as Href)}
+              activeOpacity={0.7}
               style={[
                 styles.blePill,
                 { backgroundColor: isBleConnected ? '#DCFCE7' : '#F1F5F9' },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Ver estado y diagnóstico de la pulsera ECOS BAND"
             >
               <View
                 style={[
@@ -144,7 +148,7 @@ export default function Home() {
               >
                 {isBleConnected ? 'ECOS BAND' : 'Modo Demo'}
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -204,7 +208,13 @@ export default function Home() {
                 ECOS BAND · {trafficState === 'RED' ? 'Ritmo acelerado' : trafficState === 'YELLOW' ? 'Atención preventiva' : 'Fisiología en balance'}
               </Text>
               <Text style={styles.accordionSubtitle}>
-                {showMetrics ? '4 lecturas sincronizadas' : 'Pulso y actividad sincronizados'}
+                {isBleConnected
+                  ? showMetrics
+                    ? 'Telemetría en vivo desde ESP32'
+                    : 'Pulso y actividad en tiempo real'
+                  : showMetrics
+                  ? '4 lecturas sincronizadas'
+                  : 'Pulso y actividad sincronizados'}
               </Text>
             </View>
           </View>
