@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { RequestUser } from '../common/decorators/current-user.decorator';
+import { CreateBiometricSummaryDto } from './dto/create-biometric-summary.dto';
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_TRENDS_RANGE_DAYS = 30;
@@ -12,6 +18,57 @@ interface DateRange {
 @Injectable()
 export class BiometricsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async saveSummary(dto: CreateBiometricSummaryDto, currentUser?: RequestUser) {
+    return this.prisma.withRls(async (tx) => {
+      let resolvedStudentId = dto.studentId;
+
+      if (!resolvedStudentId && currentUser) {
+        const student = await tx.studentProfile.findFirst({
+          where: { userId: currentUser.id },
+        });
+        if (student) {
+          resolvedStudentId = student.id;
+        }
+      }
+
+      if (!resolvedStudentId) {
+        throw new BadRequestException(
+          'No se ha podido asociar la telemetría a un paciente válido.',
+        );
+      }
+
+      let device = await tx.bandDevice.findFirst({
+        where: { studentId: resolvedStudentId },
+      });
+
+      if (!device) {
+        device = await tx.bandDevice.create({
+          data: {
+            studentId: resolvedStudentId,
+            deviceCode: 'NEXO-BAND-DEFAULT',
+            bindingStatus: true,
+            lastSync: new Date(),
+          },
+        });
+      } else {
+        await tx.bandDevice.update({
+          where: { id: device.id },
+          data: { lastSync: new Date() },
+        });
+      }
+
+      return tx.biometricRecord.create({
+        data: {
+          deviceId: device.id,
+          avgHeartRate: dto.averageHeartRate,
+          stressLevel: dto.averageStress,
+          bloodOxygen: dto.averageOxygen ?? 98,
+          timestamp: new Date(dto.windowEnd),
+        },
+      });
+    });
+  }
 
   findBands(studentId: number) {
     return this.prisma.withRls((tx) =>

@@ -1,4 +1,12 @@
-import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -10,8 +18,11 @@ import { BiometricsService } from './biometrics.service';
 import { BandDeviceResponseDto } from './dto/band-device-response.dto';
 import { BiometricRecordResponseDto } from './dto/biometric-record-response.dto';
 import { BiometricTrendPointDto } from './dto/biometric-trend-point.dto';
+import { CreateBiometricSummaryDto } from './dto/create-biometric-summary.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { RequestUser } from '../common/decorators/current-user.decorator';
 
-// No @Roles guard anywhere here: every route is a read scoped by the existing
+// No @Roles guard anywhere here: every route is scoped by the existing
 // can_access_student_profile-based RLS on remote_band_devices/remote_biometric_records
 // (self/assigned-doctor/admin), unchanged by this phase.
 @ApiTags('biometrics')
@@ -19,6 +30,24 @@ import { BiometricTrendPointDto } from './dto/biometric-trend-point.dto';
 @Controller()
 export class BiometricsController {
   constructor(private readonly biometricsService: BiometricsService) {}
+
+  @Post('biometrics/summary')
+  @ApiOperation({
+    summary: 'Ingest an aggregated biometric window from on-device Edge AI',
+    description:
+      'Saves aggregate average BPM, stress, and oxygen for the patient.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Biometric record created.',
+    type: BiometricRecordResponseDto,
+  })
+  saveSummary(
+    @Body() dto: CreateBiometricSummaryDto,
+    @CurrentUser() currentUser?: RequestUser,
+  ) {
+    return this.biometricsService.saveSummary(dto, currentUser);
+  }
 
   @Get('students/:studentId/bands')
   @ApiOperation({ summary: "List a patient's band devices" })

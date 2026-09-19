@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
+import { CreateSharedContentDto } from './dto/create-shared-content.dto';
 
 const MAX_PAGE_SIZE = 100;
 
@@ -11,6 +12,31 @@ export class SharedContentService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
   ) {}
+
+  create(studentId: number, dto: CreateSharedContentDto) {
+    return this.prisma.withRls(async (tx) => {
+      let therapistId = dto.therapistId;
+
+      if (!therapistId) {
+        const assignment = await tx.therapistAssignment.findFirst({
+          where: { studentId, endsAt: null, isPrimary: true },
+        });
+        if (assignment) {
+          therapistId = assignment.therapistId;
+        }
+      }
+
+      return tx.sharedPatientContent.create({
+        data: {
+          studentId,
+          therapistId: therapistId ?? null,
+          contentType: dto.contentType,
+          content: dto.content,
+          sourceLocalId: dto.sourceLocalId,
+        },
+      });
+    });
+  }
 
   findByStudent(studentId: number, skip = 0, take = 20) {
     return this.prisma.withRls((tx) =>
