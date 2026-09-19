@@ -39,6 +39,7 @@ const int pinPotAct    = 35; // Potenciómetro Actividad (G35)
 const int pinLedLatido = 4;  // LED de latido fisiológico (G4)
 
 unsigned long ultimoLatido = 0;
+unsigned long ultimoRefrescoOled = 0;
 unsigned long ultimaTelemetria = 0;
 bool latidoActivo = false;
 
@@ -54,7 +55,7 @@ class ServerCallbacks: public BLEServerCallbacks {
   }
   void onDisconnect(BLEServer* pServer) override {
     dispositivoConectado = false;
-    pServer->getAdvertising()->start();
+    BLEDevice::startAdvertising();
   }
 };
 
@@ -97,7 +98,8 @@ void setup() {
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);
+  pAdvertising->setMinPreferred(0x06); // Parámetros recomendados para compatibilidad iOS
+  pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
 
   Serial.println("BLE publicando como 'Ecos-Band-ESP32' (ECOS BAND SIMULATOR)");
@@ -128,8 +130,9 @@ void loop() {
   // 4. Detección de desacople autonómico (Estrés agudo / Pánico en reposo)
   bool alertaPanico = (bpm > 115 && actividad < 20);
 
-  // 5. Refresco de pantalla OLED y emisión BLE
-  if (millis() - ultimaTelemetria >= 100) {
+  // 5. Refresco de pantalla OLED (10 Hz - cada 100 ms)
+  if (millis() - ultimoRefrescoOled >= 100) {
+    ultimoRefrescoOled = millis();
     oled.clearDisplay();
 
     // Encabezado dinámico
@@ -174,29 +177,32 @@ void loop() {
       oled.fillRoundRect(2, 58, anchoBarra, 3, 1, SSD1306_WHITE);
     }
     oled.display();
-
-    // Enviar paquete BLE cada segundo (1 Hz)
-    if (millis() - ultimaTelemetria >= 1000) {
-      ultimaTelemetria = millis();
-
-      NexoTelemetryPacket paquete;
-      paquete.bpm = bpm;
-      paquete.activity_level = actividad;
-      paquete.spo2 = 98;
-      paquete.step_delta = actividad > 20 ? (uint16_t)(actividad / 10) : 0;
-      paquete.flags = alertaPanico ? 0x01 : 0x00;
-
-      if (dispositivoConectado) {
-        pCharacteristic->setValue((uint8_t*)&paquete, sizeof(paquete));
-        pCharacteristic->notify();
-      }
-
-      Serial.print("[ESP32] BPM: ");
-      Serial.print(bpm);
-      Serial.print(" | Actividad: ");
-      Serial.print(actividad);
-      Serial.print("% | Flags: 0x");
-      Serial.println(paquete.flags, HEX);
-    }
   }
+
+  // 6. Emisión de paquete BLE cada segundo (1 Hz)
+  if (millis() - ultimaTelemetria >= 1000) {
+    ultimaTelemetria = millis();
+
+    NexoTelemetryPacket paquete;
+    paquete.bpm = bpm;
+    paquete.activity_level = actividad;
+    paquete.spo2 = 98;
+    paquete.step_delta = actividad > 20 ? (uint16_t)(actividad / 10) : 0;
+    paquete.flags = alertaPanico ? 0x01 : 0x00;
+
+    if (dispositivoConectado) {
+      pCharacteristic->setValue((uint8_t*)&paquete, sizeof(paquete));
+      pCharacteristic->notify();
+    }
+
+    Serial.print("[ESP32] BPM: ");
+    Serial.print(bpm);
+    Serial.print(" | Actividad: ");
+    Serial.print(actividad);
+    Serial.print("% | Flags: 0x");
+    Serial.println(paquete.flags, HEX);
+  }
+
+  // Ceder brevemente tiempo de CPU al planificador FreeRTOS para el stack BLE
+  delay(10);
 }

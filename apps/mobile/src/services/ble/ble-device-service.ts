@@ -182,7 +182,7 @@ export class BleDeviceService {
       return;
     }
 
-    this.manager.startDeviceScan(null, null, (error, device) => {
+    this.manager.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
       if (error) {
         onError(error);
         return;
@@ -193,16 +193,33 @@ export class BleDeviceService {
       }
 
       const rawName = device.name ?? device.localName;
-      if (!rawName) return;
+      const serviceUUIDs = device.serviceUUIDs ?? [];
 
-      const lowerName = rawName.toLowerCase();
-      const isTargetDevice =
-        lowerName.includes('ecos') ||
-        lowerName.includes('nexo') ||
-        lowerName.includes('esp32') ||
-        (options.deviceNames && options.deviceNames.some((n) => lowerName.includes(n.toLowerCase())));
+      const hasMatchingService = serviceUUIDs.some((uuid) => {
+        const u = uuid.toLowerCase();
+        return (
+          u.includes('180d') ||
+          u.includes('4faf') ||
+          u === BLE_CONFIG.serviceUuid.toLowerCase() ||
+          u === BLE_CONFIG.legacyServiceUuid.toLowerCase()
+        );
+      });
 
-      if (!isTargetDevice) return;
+      const hasMatchingName =
+        rawName != null &&
+        (rawName.toLowerCase().includes('ecos') ||
+          rawName.toLowerCase().includes('nexo') ||
+          rawName.toLowerCase().includes('esp32') ||
+          rawName.toLowerCase().includes('band') ||
+          rawName.toLowerCase().includes('potentiometer') ||
+          (options.deviceNames &&
+            options.deviceNames.some((n) =>
+              rawName.toLowerCase().includes(n.toLowerCase())
+            )));
+
+      if (!hasMatchingService && !hasMatchingName) {
+        return;
+      }
 
       onDeviceFound(device);
     });
