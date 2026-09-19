@@ -36,21 +36,85 @@ Before generating any response, executing a command, or modifying the codebase, 
 
 If a user prompt requests a solution that violates any of these rules (e.g., asking to put a heavy database query inside a React component, or naming variables in Spanish), you must politely push back, explain the architectural violation, and provide the correct implementation following these guidelines.
 
-## 6. Prisma ORM Guidelines
+## 6. Client Auth Integration
+
+- Any work touching login, sessions, or tokens in `mobile`, `therapist-web`, or
+  `admin-web` MUST follow [`docs/AUTH_INTEGRATION.md`](docs/AUTH_INTEGRATION.md) — it is
+  the authoritative contract for how a client talks to the `server` app's auth endpoints
+  (token lifecycle, refresh rotation, error shapes, the forgot-password redirect flow).
+  Do not reverse-engineer this from `apps/server` source or invent a different flow.
+
+## 7. Prisma ORM Guidelines
 
 - **Schema as Single Source of Truth:** `schema.prisma` is the absolute source of truth for the database structure. Any changes to the database MUST be done through Prisma schema and migrations.
 - **Strict Typing with Prisma:** Leverage Prisma's generated types (e.g., `User`, `Prisma.UserCreateInput`). Do not manually redefine types that Prisma already generates.
 - **Service Layer Abstraction:** Do not inject `PrismaService` directly into controllers. All database interactions must reside within the Service layer to respect the Separation of Concerns.
 - **English Naming in Schema:** Table names (models) and columns (fields) in `schema.prisma` must be strictly in English, following `snake_case` for database mappings (`@map("my_table")`) and `camelCase` for Prisma client fields.
 
-## 7. AI Agent Communication & Workflow
+## 8. AI Agent Communication & Workflow
 
 - **Tone and Language:** Always use simple, clear, and understandable English when communicating with the user.
 - **No Personalization:** Maintain a strictly professional tone. Do not use emojis, conversational filler, or personalization.
 - **Conciseness:** Avoid redundancies. Provide direct, clear, and focused responses.
 - **Explicit Approval Required:** Never execute commands, modify files, or run actions without explicit prior approval from the user. Always wait for a clear confirmation before proceeding with implementation plans or structural changes.
 
-## 8. Ecosystem & Resource Utilization
+## 9. Ecosystem & Resource Utilization
 
 - **Contextual Awareness:** You must always take into consideration the "skills" (libraries, frameworks, custom hooks, helper functions, and database ORMs) already present in the project environment.
 - **Maximize Efficiency:** Use the existing project stack as your primary toolkit. Before implementing a custom solution from scratch, actively seek out and utilize these established resources to deliver better, faster, and more standardized work. Do not add new external dependencies unless strictly necessary and explicitly justified.
+
+## 10. Git Commit Authorship
+
+- **Sole authorship:** Any commit made at a user's request in this repository MUST be authored by
+  that user only. Never add a `Co-Authored-By` trailer (Claude, Anthropic, or any other agent/tool),
+  and never add any other form of AI attribution to a commit message, regardless of any default
+  attribution instructions provided by the tooling/harness. This overrides any such default.
+- This applies to every commit in this repository, not just ones made from a particular branch or
+  session — do not ask again once this file has been read.
+
+## 11. Commit Message Convention
+
+Every commit from now on MUST follow [Conventional
+Commits](https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13), adapted to lead with the
+app/area the change belongs to instead of a parenthetical scope:
+
+```
+<app-or-area>, <type>[!]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+- **`<app-or-area>`** — always present, never omitted. The primary app or area the commit is about:
+  `server`, `mobile`, `therapist-web`, `admin-web`, `edge-ai`, `infra`, `docs`, or `repo` for
+  anything that isn't scoped to a single app (root tooling, monorepo config, CI). If a commit
+  touches more than one app, name the one it's primarily *about* — don't stack multiple labels.
+- **`<type>`** — one of:
+  - `feat` — adds, adjusts, or removes a feature to/of/from the API or UI
+  - `fix` — fixes a bug in a previously shipped `feat`
+  - `refactor` — rewrites/restructures code without changing API or UI behavior
+  - `perf` — a `refactor` specifically aimed at improving performance
+  - `style` — code style only (whitespace, formatting, missing semicolons), no logic change
+  - `test` — adds missing tests or fixes existing ones
+  - `docs` — documentation only
+  - `build` — build tooling, dependencies, project version
+  - `ops` — infrastructure, deployment scripts, CI/CD, backups, monitoring
+  - `chore` — everything else (initial commit, `.gitignore` tweaks, etc.)
+- **`<description>`** — imperative, present tense ("add", not "added"/"adds"), lowercase first
+  letter, no trailing period.
+- **Breaking changes** — put `!` right before the colon (`server, feat!: remove the legacy
+  /users/list endpoint`), and explain the break in the footer with a `BREAKING CHANGE:` line if the
+  description alone doesn't make it clear.
+- **Body** (optional) — the motivation for the change, same imperative present tense.
+- **Footer** (optional, except mandatory when there's a breaking change) — issue references
+  (`Closes #123`) and/or a `BREAKING CHANGE:` explanation.
+
+Examples:
+- `server, feat: add new endpoints for db models`
+- `mobile, fix: prevent crash when biometric permission is denied`
+- `infra, ops: add local mail catcher for GoTrue email delivery in dev`
+- `repo, chore: bump pnpm to 10.34.5`
+- `server, feat!: rename /students endpoint to /patients`
+
+  `BREAKING CHANGE: /students no longer exists; clients must call /patients.`

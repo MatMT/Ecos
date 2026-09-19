@@ -1,78 +1,89 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import * as bcrypt from 'bcrypt';
-import { Prisma } from '@prisma/client';
+
+const MAX_PAGE_SIZE = 100;
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authService: AuthService,
+  ) {}
 
-  async create(createUserDto: CreateUserDto) {
-    // hash the passwd
-    const passwordHash = await bcrypt.hash(createUserDto.password, 10);
-    return this.prisma.user.create({
+  /**
+   * Provisioning is admin-only (enforced by RolesGuard + the remote_users_insert RLS
+   * policy). The new user always lands in the creating admin's own institution — the
+   * client cannot choose one, since the RLS policy would reject any other value anyway.
+   */
+  create(createUserDto: CreateUserDto, institutionId: number | null) {
+    return this.prisma.withRls((tx) =>
+      this.createUserRecord(tx, createUserDto, institutionId),
+    );
+  }
+
+  /**
+   * Same as create(), but takes an already-open transaction instead of opening its own —
+   * lets other services (e.g. StudentsService, PsychologistsService) create a User and
+   * their own profile row as one atomic unit, without nesting a second withRls().
+   */
+  async createUserRecord(
+    tx: Prisma.TransactionClient,
+    createUserDto: CreateUserDto,
+    institutionId: number | null,
+  ) {
+    const goTrueUser = await this.authService.adminCreateUser(
+      createUserDto.email,
+      createUserDto.password,
+    );
+
+    return tx.user.create({
       data: {
-        institutionId:  null,
+        id: goTrueUser.id,
+        institutionId,
         fullName: createUserDto.full_name,
         email: createUserDto.email,
-        passwordHash,
         role: createUserDto.role,
       },
-      omit: {
-        passwordHash: true,
-      }
     });
   }
 
-  async findAll() {
-    return this.prisma.user.findMany({
-        omit: {
-             passwordHash: true,
-        }
-    });
+  async findAll(skip = 0, take = 20) {
+    return this.prisma.withRls((tx) =>
+      tx.user.findMany({ skip, take: Math.min(take, MAX_PAGE_SIZE) }),
+    );
   }
 
-  async findOne(id: number) {
-    return this.prisma.user.findUnique({
-      where: {
-        id,
-      },
-       omit: {
-             passwordHash: true,
-        },
-    });
+  async findOne(id: string) {
+    const user = await this.prisma.withRls((tx) =>
+      tx.user.findUnique({ where: { id } }),
+    );
+
+    if (!user) {
+      throw new NotFoundException('No se ha encontrado el usuario solicitado.');
+    }
+
+    return user;
   }
 
-  async update(id: number, updateUserDto: UpdateUserDto) {
-  const data: Prisma.UserUpdateInput = {
-    fullName: updateUserDto.full_name,
-    email: updateUserDto.email,
-    role: updateUserDto.role,
-    
-  };
+  async update(id: string, updateUserDto: UpdateUserDto) {
+    const data: Prisma.UserUpdateInput = {
+      fullName: updateUserDto.full_name,
+      email: updateUserDto.email,
+      role: updateUserDto.role,
+    };
 
-  if (updateUserDto.password) {
-    data.passwordHash = await bcrypt.hash(updateUserDto.password, 10);
+    if (updateUserDto.password) {
+      await this.authService.adminUpdatePassword(id, updateUserDto.password);
+    }
+
+    return this.prisma.withRls((tx) => tx.user.update({ where: { id }, data }));
   }
 
-  return this.prisma.user.update({
-    where: {
-      id,
-    },
-    data,
-    omit: {
-      passwordHash: true,
-    },
-  });
-}
-
-  async remove(id: number) {
-    return this.prisma.user.delete({
-      where: {
-        id,
-      },
-    });
+  async remove(id: string) {
+    return this.prisma.withRls((tx) => tx.user.delete({ where: { id } }));
   }
 }
