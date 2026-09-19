@@ -18,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { AlertStatus, Role } from '@prisma/client';
 import { AlertsService } from './alerts.service';
+import { CreateAlertDto } from './dto/create-alert.dto';
 import { ReviewAlertDto } from './dto/review-alert.dto';
 import { CreateAlertActionDto } from './dto/create-alert-action.dto';
 import { CloseAlertDto } from './dto/close-alert.dto';
@@ -37,6 +38,24 @@ import type { RequestUser } from '../common/decorators/current-user.decorator';
 @Controller()
 export class AlertsController {
   constructor(private readonly alertsService: AlertsService) {}
+
+  @Post('alerts')
+  @ApiOperation({
+    summary: 'Trigger a new panic or anomaly alert',
+    description:
+      'Can be invoked by a student (panic button / edge anomaly) or clinical staff.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Alert created.',
+    type: AlertResponseDto,
+  })
+  create(
+    @Body() dto: CreateAlertDto,
+    @CurrentUser() currentUser?: RequestUser,
+  ) {
+    return this.alertsService.create(dto, currentUser);
+  }
 
   @Get('alerts')
   @ApiOperation({ summary: 'List alerts' })

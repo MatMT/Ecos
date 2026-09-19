@@ -1,13 +1,15 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AlertStatus } from '@prisma/client';
+import { AlertPriority, AlertStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
+import { CreateAlertDto } from './dto/create-alert.dto';
 import { ReviewAlertDto } from './dto/review-alert.dto';
 import { CreateAlertActionDto } from './dto/create-alert-action.dto';
 import { CloseAlertDto } from './dto/close-alert.dto';
@@ -25,6 +27,43 @@ export class AlertsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
   ) {}
+
+  create(dto: CreateAlertDto, currentUser?: RequestUser) {
+    return this.prisma.withRls(async (tx) => {
+      let resolvedStudentId = dto.studentId;
+
+      if (!resolvedStudentId && currentUser) {
+        const student = await tx.studentProfile.findFirst({
+          where: { userId: currentUser.id },
+        });
+        if (student) {
+          resolvedStudentId = student.id;
+        }
+      }
+
+      if (!resolvedStudentId) {
+        throw new BadRequestException(
+          'No se ha podido asociar la alerta a un paciente válido.',
+        );
+      }
+
+      const alert = await tx.alert.create({
+        data: {
+          studentId: resolvedStudentId,
+          alertType: dto.alertType,
+          priority: dto.priority ?? AlertPriority.critical,
+          status: AlertStatus.new,
+          description: dto.contextSummary
+            ? dto.contextSummary.slice(0, 255)
+            : 'Pulsación del botón de pánico SOS.',
+          contextSummary: dto.contextSummary,
+          biometricRecordId: dto.biometricRecordId,
+        },
+      });
+
+      return alert;
+    });
+  }
 
   findAll(filters: AlertFilters, skip = 0, take = 20) {
     return this.prisma.withRls((tx) =>

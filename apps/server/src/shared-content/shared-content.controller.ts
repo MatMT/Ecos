@@ -1,4 +1,12 @@
-import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -7,18 +15,35 @@ import {
 } from '@nestjs/swagger';
 import { SharedContentService } from './shared-content.service';
 import { SharedPatientContentResponseDto } from './dto/shared-patient-content-response.dto';
+import { CreateSharedContentDto } from './dto/create-shared-content.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
 
 // No @Roles guard: RLS already scopes correctly (self / the named therapist / the current
-// assigned therapist). No write endpoints here — creating and revoking shared content is
-// mobile's responsibility (technical-guide.en.md §7.11); the RLS write policies exist so the
-// table is correct for whenever that ships, without this app exposing that surface.
+// assigned therapist). Creating shared content is gated by is_students_own_profile RLS policy.
 @ApiTags('shared-content')
 @ApiBearerAuth()
 @Controller()
 export class SharedContentController {
   constructor(private readonly sharedContentService: SharedContentService) {}
+
+  @Post('students/:studentId/shared-content')
+  @ApiOperation({
+    summary: 'Share a patient content snapshot with their therapist',
+    description:
+      'Patient-only via RLS (is_students_own_profile). Generates an immutable snapshot.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Snapshot created.',
+    type: SharedPatientContentResponseDto,
+  })
+  create(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Body() dto: CreateSharedContentDto,
+  ) {
+    return this.sharedContentService.create(studentId, dto);
+  }
 
   @Get('students/:studentId/shared-content')
   @ApiOperation({

@@ -1,5 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, type Href } from 'expo-router';
 
 import BellIcon from '@/assets/bell.svg';
 import { Colors } from '@/constants/theme';
@@ -10,7 +11,10 @@ export interface CustomTopBarProps {
 }
 
 export default function CustomTopBar({ name, onNotificationsPress }: CustomTopBarProps) {
+  const router = useRouter();
   const initial = name.trim().charAt(0).toUpperCase() || '?';
+
+  const handlePress = onNotificationsPress ?? (() => router.push('/modals/alerts-history' as Href));
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -21,11 +25,11 @@ export default function CustomTopBar({ name, onNotificationsPress }: CustomTopBa
           </View>
           <View>
             <Text style={styles.greeting}>Hola, {name}</Text>
-            <Text style={styles.brandName}>NeuroSync</Text>
+            <Text style={styles.brandName}>Ecos</Text>
           </View>
         </View>
 
-        <TouchableOpacity onPress={onNotificationsPress} accessibilityRole="button" accessibilityLabel="Notificaciones">
+        <TouchableOpacity onPress={handlePress} accessibilityRole="button" accessibilityLabel="Notificaciones">
           <BellIcon />
         </TouchableOpacity>
       </View>

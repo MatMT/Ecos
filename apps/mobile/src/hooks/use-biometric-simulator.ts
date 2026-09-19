@@ -30,12 +30,19 @@ export interface BiometricSimulationResult {
   modelInput: number[] | null;
 }
 
-export function useBiometricSimulator(intervalMs: number = 1000): BiometricSimulationResult {
+export function useBiometricSimulator(
+  intervalMs: number = 1000,
+  enabled: boolean = true
+): BiometricSimulationResult {
   const [currentData, setCurrentData] = useState<BiometricData | null>(null);
   const [history, setHistory] = useState<BiometricData[]>([]);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const timer = setInterval(() => {
       if (index < DUMMY_DATA.length) {
         const newData = {
@@ -60,7 +67,7 @@ export function useBiometricSimulator(intervalMs: number = 1000): BiometricSimul
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [index, intervalMs]);
+  }, [enabled, index, intervalMs]);
 
   // Compute normalized model input when we have exactly 10 readings
   let modelInput: number[] | null = null;
