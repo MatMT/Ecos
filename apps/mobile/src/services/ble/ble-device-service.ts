@@ -319,6 +319,34 @@ export class BleDeviceService {
       clearTimeout(this.scanTimeoutTimer);
     }
 
+    // Retrieve peripherals that iOS has already connected to in the background
+    try {
+      const alreadyConnected = await this.manager!.connectedDevices([
+        BLE_CONFIG.serviceUuid,
+        '180d',
+        '180D',
+        '0000180d-0000-1000-8000-00805f9b34fb',
+        BLE_CONFIG.legacyServiceUuid,
+      ]);
+      if (alreadyConnected.length > 0) {
+        console.log('[BLE CONNECTED PERIPHERAL FOUND IN SYSTEM]', alreadyConnected.length);
+        for (const dev of alreadyConnected) {
+          this.discoveredDevicesMap.set(dev.id, {
+            id: dev.id,
+            name: dev.name ?? BLE_CONFIG.deviceName,
+            rssi: -45,
+            serviceUUIDs: dev.serviceUUIDs,
+            isCompatible: true,
+          });
+        }
+        this.updateState({
+          discoveredDevices: Array.from(this.discoveredDevicesMap.values()),
+        });
+      }
+    } catch {
+      // Ignored
+    }
+
     this.scanTimeoutTimer = setTimeout(() => {
       this.stopScan();
     }, 20000);
