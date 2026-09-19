@@ -304,68 +304,72 @@ export default function Home() {
             En los últimos 7 días, tu promedio de descanso ha sido de 7 h 42 min.
           </Text>
 
-          {/* Chart & stats area with continuous horizontal reference line */}
-          <View style={styles.sleepChartFullWrapper}>
-            <Svg width="100%" height={120} viewBox="0 0 320 120">
-              {/* Bars on the right half */}
-              {WEEKLY_SLEEP_DATA.map((item, index) => {
-                const barWidth = 14;
-                const startX = 148;
-                const spacing = (172 - barWidth * 7) / 6;
-                const x = startX + index * (barWidth + spacing);
-                const maxH = 65;
-                const height = (item.hours / 10) * maxH;
-                const y = 88 - height;
-                const isToday = index === WEEKLY_SLEEP_DATA.length - 1;
-
-                return (
-                  <React.Fragment key={item.day + index}>
-                    <Rect
-                      x={x}
-                      y={y}
-                      width={barWidth}
-                      height={height}
-                      rx={5}
-                      fill={isToday ? '#0D9488' : '#CBD5E1'}
-                    />
-                    <SvgText
-                      x={x + barWidth / 2}
-                      y="108"
-                      fill={isToday ? '#0D9488' : '#64748B'}
-                      fontSize="11"
-                      fontWeight={isToday ? '700' : '600'}
-                      textAnchor="middle"
-                    >
-                      {item.day}
-                    </SvgText>
-                  </React.Fragment>
-                );
-              })}
-
-              {/* Continuous horizontal reference line cutting across the entire card */}
-              <Line
-                x1="0"
-                y1="40"
-                x2="320"
-                y2="40"
-                stroke="#0D9488"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-            </Svg>
-
-            {/* Left Overlay for Text & Readout */}
-            <View style={styles.sleepLeftOverlay} pointerEvents="none">
-              <View style={styles.sleepLabelArea}>
-                <Text style={styles.sleepAverageSubLabel}>PROMEDIO</Text>
-                <Text style={styles.sleepAverageLabel}>Tiempo Dormido</Text>
-              </View>
+          {/* Chart & stats area: Clean 2-column flexbox layout without overlapping lines */}
+          <View style={styles.sleepContentRow}>
+            {/* Left Column: Average Stat Readout */}
+            <View style={styles.sleepLeftCol}>
+              <Text style={styles.sleepAverageSubLabel}>PROMEDIO</Text>
+              <Text style={styles.sleepAverageLabel}>Tiempo Dormido</Text>
               <View style={styles.sleepTimeRow}>
                 <Text style={styles.sleepBigNumber}>7</Text>
                 <Text style={styles.sleepBigUnit}>hr </Text>
                 <Text style={styles.sleepBigNumber}>42</Text>
                 <Text style={styles.sleepBigUnit}>min</Text>
               </View>
+              <View style={styles.sleepGoalPill}>
+                <Text style={styles.sleepGoalPillText}>Meta: 8h diarias</Text>
+              </View>
+            </View>
+
+            {/* Right Column: 7-Day Bar Chart */}
+            <View style={styles.sleepChartCol}>
+              <Svg width="100%" height={105} viewBox="0 0 165 105">
+                {/* Subtle reference guideline for 8h target (only inside chart area) */}
+                <Line
+                  x1="0"
+                  y1="30"
+                  x2="165"
+                  y2="30"
+                  stroke="#0D9488"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 3"
+                  strokeOpacity="0.35"
+                />
+
+                {WEEKLY_SLEEP_DATA.map((item, index) => {
+                  const barWidth = 12;
+                  const totalW = 165;
+                  const spacing = (totalW - barWidth * 7) / 6;
+                  const x = index * (barWidth + spacing);
+                  const maxH = 55;
+                  const height = Math.min(maxH, (item.hours / 10) * maxH);
+                  const y = 80 - height;
+                  const isToday = index === WEEKLY_SLEEP_DATA.length - 1;
+
+                  return (
+                    <React.Fragment key={item.day + index}>
+                      <Rect
+                        x={x}
+                        y={y}
+                        width={barWidth}
+                        height={height}
+                        rx={5}
+                        fill={isToday ? '#0D9488' : '#CBD5E1'}
+                      />
+                      <SvgText
+                        x={x + barWidth / 2}
+                        y="98"
+                        fill={isToday ? '#0D9488' : '#64748B'}
+                        fontSize="11"
+                        fontWeight={isToday ? '700' : '600'}
+                        textAnchor="middle"
+                      >
+                        {item.day}
+                      </SvgText>
+                    </React.Fragment>
+                  );
+                })}
+              </Svg>
             </View>
           </View>
         </View>
@@ -653,29 +657,22 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginBottom: 16,
   },
-  sleepChartFullWrapper: {
-    position: 'relative',
-    height: 120,
-    width: '100%',
+  sleepContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
   },
-  sleepLeftOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: 145,
-    justifyContent: 'flex-start',
-  },
-  sleepLabelArea: {
-    height: 38,
-    justifyContent: 'flex-end',
-    paddingBottom: 2,
+  sleepLeftCol: {
+    width: '42%',
+    justifyContent: 'center',
   },
   sleepAverageSubLabel: {
     fontSize: 10,
     fontWeight: '800',
     color: '#94A3B8',
     letterSpacing: 0.8,
+    marginBottom: 2,
   },
   sleepAverageLabel: {
     fontSize: 13,
@@ -686,17 +683,35 @@ const styles = StyleSheet.create({
   sleepTimeRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginTop: 8,
+    marginTop: 6,
+    marginBottom: 8,
   },
   sleepBigNumber: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
     color: Colors.text,
   },
   sleepBigUnit: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: Colors.textSecondary,
     marginRight: 4,
+  },
+  sleepGoalPill: {
+    backgroundColor: '#F1F5F9',
+    alignSelf: 'flex-start',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: Radius.pill,
+  },
+  sleepGoalPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  sleepChartCol: {
+    width: '54%',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
 });
