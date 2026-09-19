@@ -67,7 +67,6 @@ export default function PanicAlertModal() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          triggerEmergencyDispatch();
           return 0;
         }
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
@@ -76,7 +75,13 @@ export default function PanicAlertModal() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isCancelled, isDispatched, triggerEmergencyDispatch]);
+  }, [isCancelled, isDispatched]);
+
+  useEffect(() => {
+    if (countdown === 0 && !isCancelled && !isDispatched) {
+      triggerEmergencyDispatch();
+    }
+  }, [countdown, isCancelled, isDispatched, triggerEmergencyDispatch]);
 
   const handleCancel = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});

@@ -32,6 +32,8 @@ export default function BreathingGuideModal() {
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
   const [autoCloseSeconds, setAutoCloseSeconds] = useState<number>(10);
 
+  const phaseRef = useRef<BreathPhase>('IN');
+  const cycleCountRef = useRef<number>(0);
   const initialBpmRef = useRef<number | null>(null);
 
   const scale = useSharedValue(1);
@@ -69,28 +71,29 @@ export default function BreathingGuideModal() {
     );
 
     const interval = setInterval(() => {
-      setPhase((prev) => {
-        if (prev === 'IN') {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-          return 'HOLD';
-        }
-        if (prev === 'HOLD') {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-          return 'OUT';
-        }
-
-        // Out completed -> cycle finishes
+      if (phaseRef.current === 'IN') {
+        phaseRef.current = 'HOLD';
+        setPhase('HOLD');
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      } else if (phaseRef.current === 'HOLD') {
+        phaseRef.current = 'OUT';
+        setPhase('OUT');
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      } else {
+        // Phase was OUT -> cycle completes
+        phaseRef.current = 'IN';
+        setPhase('IN');
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
-        setCycleCount((c) => {
-          const nextCount = c + 1;
-          if (nextCount >= targetCycles) {
-            setIsCompleted(true);
-            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-          }
-          return nextCount;
-        });
-        return 'IN';
-      });
+
+        cycleCountRef.current += 1;
+        const nextCycle = cycleCountRef.current;
+        setCycleCount(nextCycle);
+
+        if (nextCycle >= targetCycles) {
+          setIsCompleted(true);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        }
+      }
     }, PHASE_DURATION_MS);
 
     return () => clearInterval(interval);
@@ -101,18 +104,18 @@ export default function BreathingGuideModal() {
     if (!isCompleted) return;
 
     const timer = setInterval(() => {
-      setAutoCloseSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          router.back();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setAutoCloseSeconds((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isCompleted, router]);
+  }, [isCompleted]);
+
+  // Safe navigation back when auto-close reaches zero
+  useEffect(() => {
+    if (isCompleted && autoCloseSeconds === 0) {
+      router.back();
+    }
+  }, [isCompleted, autoCloseSeconds, router]);
 
   const animatedOuterRingStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -139,6 +142,8 @@ export default function BreathingGuideModal() {
     setTargetCycles((prev) => prev + 4);
     setIsCompleted(false);
     setAutoCloseSeconds(10);
+    phaseRef.current = 'IN';
+    setPhase('IN');
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   };
 
