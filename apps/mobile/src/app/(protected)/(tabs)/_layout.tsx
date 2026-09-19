@@ -10,7 +10,7 @@ export default function TabLayout() {
     <Tabs screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="home" options={{ tabBarIcon: () => <HomeIcon width="90%" height="100%" /> }} />
       <Tabs.Screen name="stats" options={{ tabBarIcon: () => <StatIcon width="90%" height="100%" /> }} />
-      <Tabs.Screen name="chat" options={{ tabBarIcon: () => <MessageIcon width="90%" height="100%" /> }} />
+      <Tabs.Screen name="chat" options={{ title: 'Diario', tabBarIcon: () => <MessageIcon width="90%" height="100%" /> }} />
       <Tabs.Screen name="profile" options={{ tabBarIcon: () => <UserIcon width="90%" height="100%" /> }} />
     </Tabs>
   );
