@@ -12,6 +12,14 @@ export type BleConnectionStatus =
   | 'error'
   | 'disconnected';
 
+export interface ScannedDevice {
+  id: string;
+  name: string | null;
+  rssi: number | null;
+  serviceUUIDs: string[] | null;
+  isCompatible: boolean;
+}
+
 export interface BleTelemetryState {
   status: BleConnectionStatus;
   bpm: number;
@@ -26,6 +34,7 @@ export interface BleTelemetryState {
   percentage: number;
   connectedDeviceName: string | null;
   errorMessage: string | null;
+  discoveredDevices: ScannedDevice[];
 }
 
 export interface BleScanOptions {
@@ -53,12 +62,14 @@ export class BleDeviceService {
     percentage: 0,
     connectedDeviceName: null,
     errorMessage: null,
+    discoveredDevices: [],
   };
 
   private listeners = new Set<(state: BleTelemetryState) => void>();
   private activeDevice: Device | null = null;
   private activeSubscription: Subscription | null = null;
   private scanTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private discoveredDevicesMap = new Map<string, ScannedDevice>();
 
   private constructor() {
     try {
@@ -133,9 +144,13 @@ export class BleDeviceService {
       throw new Error('El módulo Bluetooth no está disponible en este entorno de ejecución.');
     }
 
-    const currentState = await this.manager.state();
-    if (currentState === 'PoweredOn') {
-      return;
+    try {
+      const currentState = await this.manager.state();
+      if (currentState === 'PoweredOn') {
+        return;
+      }
+    } catch {
+      // Ignored and proceed to state change listener
     }
 
     return new Promise<void>((resolve, reject) => {
@@ -151,7 +166,7 @@ export class BleDeviceService {
           if (!resolved) {
             resolved = true;
             subscription.remove();
-            reject(new Error('Permiso de Bluetooth denegado en la configuración del dispositivo.'));
+            reject(new Error('Permiso de Bluetooth no otorgado. Por favor, habilite el acceso a Bluetooth en los Ajustes de su dispositivo.'));
           }
         } else if (state === 'Unsupported') {
           if (!resolved) {
@@ -168,7 +183,7 @@ export class BleDeviceService {
           subscription.remove();
           resolve();
         }
-      }, 3000);
+      }, 1500);
     });
   }
 
@@ -181,6 +196,9 @@ export class BleDeviceService {
       onError(new Error('El módulo Bluetooth no está disponible en este entorno de ejecución.'));
       return;
     }
+
+    this.discoveredDevicesMap.clear();
+    this.updateState({ discoveredDevices: [] });
 
     this.manager.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
       if (error) {
@@ -217,21 +235,147 @@ export class BleDeviceService {
               rawName.toLowerCase().includes(n.toLowerCase())
             )));
 
-      if (!hasMatchingService && !hasMatchingName) {
-        return;
-      }
+      const isCompatible = Boolean(hasMatchingName || hasMatchingService);
 
-      onDeviceFound(device);
+      // Register device in discovered devices map
+      const displayName = rawName ?? (hasMatchingService ? BLE_CONFIG.deviceName : null);
+      this.discoveredDevicesMap.set(device.id, {
+        id: device.id,
+        name: displayName,
+        rssi: device.rssi,
+        serviceUUIDs: device.serviceUUIDs,
+        isCompatible,
+      });
+
+      // Sort with compatible devices and strongest RSSI first
+      const sortedList = Array.from(this.discoveredDevicesMap.values()).sort((a, b) => {
+        if (a.isCompatible && !b.isCompatible) return -1;
+        if (!a.isCompatible && b.isCompatible) return 1;
+        return (b.rssi ?? -100) - (a.rssi ?? -100);
+      });
+
+      this.updateState({ discoveredDevices: sortedList });
+
+      if (isCompatible) {
+        onDeviceFound(device);
+      }
     });
   }
 
   public stopScan(): void {
+    if (this.scanTimeoutTimer) {
+      clearTimeout(this.scanTimeoutTimer);
+      this.scanTimeoutTimer = null;
+    }
     if (this.manager) {
       try {
         this.manager.stopDeviceScan();
       } catch {
         // Handled
       }
+    }
+    if (this.state.status === 'scanning') {
+      this.updateState({ status: 'idle' });
+    }
+  }
+
+  public async startScanOnly(): Promise<void> {
+    if (this.state.status === 'connected') {
+      await this.disconnectCurrent();
+    }
+    this.updateState({ status: 'scanning', errorMessage: null });
+
+    if (!this.isAvailable()) {
+      this.updateState({
+        status: 'error',
+        errorMessage: 'El módulo Bluetooth no está disponible en este entorno de ejecución.',
+      });
+      return;
+    }
+
+    const hasPermission = await this.requestPermissions();
+    if (!hasPermission) {
+      this.updateState({
+        status: 'error',
+        errorMessage: 'Permisos de Bluetooth no otorgados en los Ajustes del sistema.',
+      });
+      return;
+    }
+
+    try {
+      await this.waitForAdapterReady();
+    } catch (err) {
+      this.updateState({
+        status: 'error',
+        errorMessage: err instanceof Error ? err.message : 'Error al verificar el estado de Bluetooth.',
+      });
+      return;
+    }
+
+    if (this.scanTimeoutTimer) {
+      clearTimeout(this.scanTimeoutTimer);
+    }
+
+    this.scanTimeoutTimer = setTimeout(() => {
+      this.stopScan();
+    }, 20000);
+
+    this.startScan(
+      {
+        deviceNames: [BLE_CONFIG.deviceName, ...BLE_CONFIG.fallbackDeviceNames, BLE_CONFIG.legacyDeviceName],
+      },
+      () => {
+        // Discovered devices are updated into state in real time
+      },
+      (err) => {
+        this.updateState({
+          status: 'error',
+          errorMessage: err.message,
+        });
+      }
+    );
+  }
+
+  public async connectToDeviceId(deviceId: string): Promise<void> {
+    this.stopScan();
+    this.updateState({ status: 'connecting', errorMessage: null });
+
+    try {
+      if (!this.manager) {
+        throw new Error('El módulo Bluetooth no está disponible en este entorno de ejecución.');
+      }
+
+      const connected = await this.manager.connectToDevice(deviceId);
+      await connected.discoverAllServicesAndCharacteristics();
+
+      connected.onDisconnected(() => {
+        this.cleanupSubscription();
+        this.activeDevice = null;
+        this.updateState({
+          status: 'disconnected',
+          connectedDeviceName: null,
+          errorMessage: 'Se ha interrumpido la conexión con el dispositivo ESP32.',
+        });
+      });
+
+      this.activeDevice = connected;
+      const targetName =
+        connected.name ??
+        this.discoveredDevicesMap.get(deviceId)?.name ??
+        BLE_CONFIG.deviceName;
+
+      this.updateState({
+        status: 'connected',
+        connectedDeviceName: targetName,
+        errorMessage: null,
+      });
+
+      await this.setupTelemetrySubscription(connected);
+    } catch (err) {
+      this.updateState({
+        status: 'error',
+        errorMessage: err instanceof Error ? err.message : 'No fue posible establecer la conexión con el dispositivo.',
+      });
     }
   }
 
