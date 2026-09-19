@@ -24,6 +24,7 @@ Adafruit_SSD1306 oled(ANCHO_PANTALLA, ALTO_PANTALLA, &Wire, -1);
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool dispositivoConectado = false;
+bool dispositivoConectadoAnterior = false;
 
 struct __attribute__((packed)) NexoTelemetryPacket {
   uint8_t  bpm;            // 45 - 190 BPM
@@ -52,10 +53,11 @@ static const unsigned char PROGMEM iconoCorazon[] = {
 class ServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) override {
     dispositivoConectado = true;
+    Serial.println("[BLE] Enlace establecido con dispositivo central.");
   }
   void onDisconnect(BLEServer* pServer) override {
     dispositivoConectado = false;
-    BLEDevice::startAdvertising();
+    Serial.println("[BLE] Enlace desconectado. Preparando reinicio de anuncio...");
   }
 };
 
@@ -68,8 +70,9 @@ void setup() {
   pinMode(pinLedLatido, OUTPUT);
   digitalWrite(pinLedLatido, LOW);
 
-  // Inicializar I2C (SDA = G21, SCL = G22)
+  // Inicializar I2C (SDA = G21, SCL = G22) con 400 kHz Fast Mode
   Wire.begin(21, 22);
+  Wire.setClock(400000);
   if (!oled.begin(SSD1306_SWITCHCAPVCC, DIRECCION_OLED)) {
     Serial.println("Error al detectar pantalla OLED");
   }
@@ -98,27 +101,46 @@ void setup() {
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06); // Parámetros recomendados para compatibilidad iOS
-  pAdvertising->setMinPreferred(0x12);
+  pAdvertising->setMinPreferred(0x06); // 7.5 ms (especificación Apple iOS BLE)
+  pAdvertising->setMaxPreferred(0x12); // 22.5 ms
 
-  // Anuncio primario: Flags de conectabilidad + Nombre (20 bytes <= 31 bytes)
+  // Anuncio primario (23 bytes <= 31 bytes): Flags (3B) + UUID 180D (4B) + Nombre (16B)
   BLEAdvertisementData advData;
-  advData.setFlags(0x06); // Obligatorio: habilita modo conectable para iOS CoreBluetooth
+  advData.setFlags(0x06); // General Discoverable Mode + BR/EDR Not Supported
+  advData.setCompleteServices(BLEUUID((uint16_t)0x180D));
   advData.setName("Ecos-Band-ESP32");
   pAdvertising->setAdvertisementData(advData);
 
-  // Respuesta de escaneo (Scan Response): UUID del servicio (18 bytes <= 31 bytes)
+  // Respuesta de escaneo (Scan Response): UUID del servicio completo de 128 bits
   BLEAdvertisementData scanData;
   scanData.setCompleteServices(BLEUUID(SERVICE_UUID));
   pAdvertising->setScanResponseData(scanData);
 
-  BLEDevice::startAdvertising();
+  pServer->getAdvertising()->start();
 
   Serial.println("BLE publicando como 'Ecos-Band-ESP32' (ECOS BAND SIMULATOR)");
-  delay(1000);
+  delay(500);
 }
 
 void loop() {
+  // 0. Gestión de reconexión y publicidad continua BLE
+  if (!dispositivoConectado && dispositivoConectadoAnterior) {
+    delay(500); // Margen al stack BLE de FreeRTOS para liberar el canal HCI
+    pServer->startAdvertising();
+    Serial.println("[BLE] Publicidad BLE reanudada tras desconexión.");
+    dispositivoConectadoAnterior = dispositivoConectado;
+  }
+  if (dispositivoConectado && !dispositivoConectadoAnterior) {
+    dispositivoConectadoAnterior = dispositivoConectado;
+  }
+
+  // Keep-alive de publicidad: si no hay enlace, asegurar que el radio siga transmitiendo
+  static unsigned long ultimaVerificacionAdv = 0;
+  if (!dispositivoConectado && (millis() - ultimaVerificacionAdv >= 2500)) {
+    ultimaVerificacionAdv = millis();
+    pServer->getAdvertising()->start();
+  }
+
   // 1. Lecturas analógicas de 12 bits
   int rawBpm = analogRead(pinPotBpm);
   int rawAct = analogRead(pinPotAct);
@@ -142,8 +164,8 @@ void loop() {
   // 4. Detección de desacople autonómico (Estrés agudo / Pánico en reposo)
   bool alertaPanico = (bpm > 115 && actividad < 20);
 
-  // 5. Refresco de pantalla OLED (10 Hz - cada 100 ms)
-  if (millis() - ultimoRefrescoOled >= 100) {
+  // 5. Refresco de pantalla OLED (cada 150 ms)
+  if (millis() - ultimoRefrescoOled >= 150) {
     ultimoRefrescoOled = millis();
     oled.clearDisplay();
 

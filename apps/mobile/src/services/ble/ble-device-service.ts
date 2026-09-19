@@ -197,8 +197,39 @@ export class BleDeviceService {
       return;
     }
 
+    // Reset map and immediately pull any peripherals already paired/connected in iOS CoreBluetooth
     this.discoveredDevicesMap.clear();
-    this.updateState({ discoveredDevices: [] });
+
+    void this.manager
+      .connectedDevices([
+        BLE_CONFIG.serviceUuid,
+        '180d',
+        '180D',
+        '0000180d-0000-1000-8000-00805f9b34fb',
+        BLE_CONFIG.legacyServiceUuid,
+      ])
+      .then((alreadyConnected) => {
+        if (alreadyConnected && alreadyConnected.length > 0) {
+          for (const dev of alreadyConnected) {
+            const resolvedName = (dev.localName?.trim() || dev.name?.trim()) || BLE_CONFIG.deviceName;
+            this.discoveredDevicesMap.set(dev.id, {
+              id: dev.id,
+              name: resolvedName,
+              rssi: -45,
+              serviceUUIDs: dev.serviceUUIDs,
+              isCompatible: true,
+            });
+          }
+          this.updateState({
+            discoveredDevices: Array.from(this.discoveredDevicesMap.values()),
+          });
+        }
+      })
+      .catch(() => {
+        // Handled
+      });
+
+    this.updateState({ discoveredDevices: Array.from(this.discoveredDevicesMap.values()) });
 
     this.manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
@@ -211,9 +242,12 @@ export class BleDeviceService {
         return;
       }
 
-      console.log(`[BLE FOUND] id=${device.id} name=${device.name} localName=${device.localName} uuids=${JSON.stringify(device.serviceUUIDs)} rssi=${device.rssi}`);
+      console.log(
+        `[BLE FOUND] id=${device.id} name=${device.name} localName=${device.localName} uuids=${JSON.stringify(device.serviceUUIDs)} rssi=${device.rssi}`
+      );
 
-      const rawName = (device.name ?? device.localName)?.trim();
+      // Prioritize live advertisement localName over system cached name
+      const rawName = (device.localName?.trim() || device.name?.trim() || '');
       const serviceUUIDs = device.serviceUUIDs ?? [];
 
       // 1. Check for Heart Rate / Ecos Telemetry Service UUID (180D)
@@ -228,7 +262,6 @@ export class BleDeviceService {
 
       // 2. Check for recognized ecosystem device name prefix
       const hasEcosystemName =
-        rawName != null &&
         rawName.length > 0 &&
         !rawName.startsWith('Dispositivo BLE') &&
         (rawName.startsWith('Ecos-Band') ||
@@ -242,7 +275,7 @@ export class BleDeviceService {
         return;
       }
 
-      const displayName = rawName ?? (hasMatchingService ? BLE_CONFIG.deviceName : null);
+      const displayName = rawName.length > 0 ? rawName : (hasMatchingService ? BLE_CONFIG.deviceName : null);
       if (!displayName || displayName.startsWith('Dispositivo BLE')) {
         return;
       }
@@ -321,34 +354,6 @@ export class BleDeviceService {
 
     if (this.scanTimeoutTimer) {
       clearTimeout(this.scanTimeoutTimer);
-    }
-
-    // Retrieve peripherals that iOS has already connected to in the background
-    try {
-      const alreadyConnected = await this.manager!.connectedDevices([
-        BLE_CONFIG.serviceUuid,
-        '180d',
-        '180D',
-        '0000180d-0000-1000-8000-00805f9b34fb',
-        BLE_CONFIG.legacyServiceUuid,
-      ]);
-      if (alreadyConnected.length > 0) {
-        console.log('[BLE CONNECTED PERIPHERAL FOUND IN SYSTEM]', alreadyConnected.length);
-        for (const dev of alreadyConnected) {
-          this.discoveredDevicesMap.set(dev.id, {
-            id: dev.id,
-            name: dev.name ?? BLE_CONFIG.deviceName,
-            rssi: -45,
-            serviceUUIDs: dev.serviceUUIDs,
-            isCompatible: true,
-          });
-        }
-        this.updateState({
-          discoveredDevices: Array.from(this.discoveredDevicesMap.values()),
-        });
-      }
-    } catch {
-      // Ignored
     }
 
     this.scanTimeoutTimer = setTimeout(() => {
