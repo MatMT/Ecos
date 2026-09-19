@@ -270,18 +270,28 @@ export default function Home() {
           </View>
         )}
 
-        {/* Monitoreo de Sueño y Descanso (Estilo Apple Health / Whoop) */}
+        {/* Monitoreo de Sueño y Descanso (Diseño armonizado con Ecos) */}
         <Text style={styles.sectionHeaderLabel}>MONITOREO DE SUEÑO Y DESCANSO</Text>
         <View style={styles.sleepCard}>
-          {/* Header row with Bed Icon and Title */}
+          {/* Header row with Bed Icon Circle, Title and Quality Badge */}
           <View style={styles.sleepHeader}>
-            <BedIcon size={20} color="#2DD4BF" />
-            <Text style={styles.sleepBadgeText}>Sueño</Text>
+            <View style={styles.sleepTitleGroup}>
+              <View style={styles.sleepIconCircle}>
+                <BedIcon size={18} color="#0F766E" />
+              </View>
+              <View>
+                <Text style={styles.sleepTitle}>Sueño y Descanso</Text>
+                <Text style={styles.sleepSubLabel}>Últimos 7 días</Text>
+              </View>
+            </View>
+            <View style={styles.sleepQualityBadge}>
+              <Text style={styles.sleepQualityBadgeText}>7.7h · Reparador</Text>
+            </View>
           </View>
 
           {/* Headline */}
           <Text style={styles.sleepHeadline}>
-            En los últimos 7 días, su promedio de descanso ha sido de 7 h 42 min.
+            En los últimos 7 días, tu promedio de descanso ha sido de 7 h 42 min.
           </Text>
 
           {/* Chart & stats area with continuous horizontal reference line */}
@@ -289,9 +299,9 @@ export default function Home() {
             <Svg width="100%" height={120} viewBox="0 0 320 120">
               {/* Bars on the right half */}
               {WEEKLY_SLEEP_DATA.map((item, index) => {
-                const barWidth = 13;
-                const startX = 150;
-                const spacing = (170 - barWidth * 7) / 6;
+                const barWidth = 14;
+                const startX = 148;
+                const spacing = (172 - barWidth * 7) / 6;
                 const x = startX + index * (barWidth + spacing);
                 const maxH = 65;
                 const height = (item.hours / 10) * maxH;
@@ -305,13 +315,13 @@ export default function Home() {
                       y={y}
                       width={barWidth}
                       height={height}
-                      rx={4}
-                      fill={isToday ? '#2DD4BF' : '#3E4146'}
+                      rx={5}
+                      fill={isToday ? '#0D9488' : '#CBD5E1'}
                     />
                     <SvgText
                       x={x + barWidth / 2}
                       y="108"
-                      fill={isToday ? '#2DD4BF' : '#71767C'}
+                      fill={isToday ? '#0D9488' : '#64748B'}
                       fontSize="11"
                       fontWeight={isToday ? '700' : '600'}
                       textAnchor="middle"
@@ -328,7 +338,7 @@ export default function Home() {
                 y1="40"
                 x2="320"
                 y2="40"
-                stroke="#2DD4BF"
+                stroke="#0D9488"
                 strokeWidth="2.5"
                 strokeLinecap="round"
               />
@@ -337,7 +347,7 @@ export default function Home() {
             {/* Left Overlay for Text & Readout */}
             <View style={styles.sleepLeftOverlay} pointerEvents="none">
               <View style={styles.sleepLabelArea}>
-                <Text style={styles.sleepAverageLabel}>Promedio</Text>
+                <Text style={styles.sleepAverageSubLabel}>PROMEDIO</Text>
                 <Text style={styles.sleepAverageLabel}>Tiempo Dormido</Text>
               </View>
               <View style={styles.sleepTimeRow}>
@@ -572,34 +582,65 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sleepCard: {
-    backgroundColor: '#181A1D',
+    backgroundColor: Colors.surface,
     borderRadius: Radius.large,
     padding: 18,
     marginBottom: 25,
     borderWidth: 1,
-    borderColor: 'rgba(45, 212, 191, 0.2)',
-    elevation: 3,
+    borderColor: Colors.border,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
   },
   sleepHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  sleepBadgeText: {
-    fontSize: 17,
+  sleepTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sleepIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sleepTitle: {
+    fontSize: 16,
     fontWeight: '700',
-    color: '#2DD4BF',
+    color: Colors.text,
+  },
+  sleepSubLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  sleepQualityBadge: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: Radius.pill,
+  },
+  sleepQualityBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803D',
   },
   sleepHeadline: {
-    fontSize: 15,
-    color: '#F8FAFC',
-    fontWeight: '600',
-    lineHeight: 22,
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '500',
+    lineHeight: 21,
     marginBottom: 16,
   },
   sleepChartFullWrapper: {
@@ -618,12 +659,18 @@ const styles = StyleSheet.create({
   sleepLabelArea: {
     height: 38,
     justifyContent: 'flex-end',
-    paddingBottom: 4,
+    paddingBottom: 2,
+  },
+  sleepAverageSubLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 0.8,
   },
   sleepAverageLabel: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#94A3B8',
+    fontWeight: '600',
+    color: '#475569',
     lineHeight: 16,
   },
   sleepTimeRow: {
@@ -634,12 +681,12 @@ const styles = StyleSheet.create({
   sleepBigNumber: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: Colors.text,
   },
   sleepBigUnit: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: Colors.textSecondary,
     marginRight: 4,
   },
 });
