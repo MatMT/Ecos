@@ -30,6 +30,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import { useTodayLabel } from '@/hooks/use-today-label';
+import { triageMessageManager } from '@/services/ai/ai-triage-messages';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -77,15 +78,7 @@ export default function Home() {
 
   // Dynamic AI Triage messaging
   const getAiMessage = () => {
-    switch (trafficState) {
-      case 'RED':
-        return 'Tu pulso se encuentra significativamente elevado en reposo. Te recomendamos pausar tus actividades y buscar apoyo.';
-      case 'YELLOW':
-        return 'Detectamos una leve aceleración en tu pulso sin movimiento activo. ¿Quieres respirar un momento?';
-      case 'GREEN':
-      default:
-        return 'Tu ritmo se mantiene sereno y estable. Excelente momento para concentrarte en tus actividades.';
-    }
+    return triageMessageManager.getMessage(trafficState);
   };
 
   const getAiBannerColor = () => {

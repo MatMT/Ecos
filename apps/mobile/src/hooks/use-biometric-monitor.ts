@@ -54,6 +54,16 @@ export function useBiometricMonitor(): BiometricMonitorResult {
   useEffect(() => {
     let isCancelled = false;
 
+    // If vitals normalize to calm resting levels, purge stale historical panic samples
+    if (rawBpm <= 85 && calculatedStress < 30) {
+      const historicalSamples = rollingBufferRef.current.getSamples();
+      const hasStalePanicSamples = historicalSamples.some((s) => s.bpm > 115);
+      if (hasStalePanicSamples) {
+        rollingBufferRef.current.clear();
+        aiEngine.resetConsecutiveAlerts();
+      }
+    }
+
     // Push into rolling buffer
     rollingBufferRef.current.addSample({
       bpm: rawBpm,
@@ -70,12 +80,14 @@ export function useBiometricMonitor(): BiometricMonitorResult {
       // Clinical Semaphore evaluation:
       // 1. RED: Hardware panic alert flag (flags & 0x01) OR severe resting tachycardia (BPM > 115 & Act < 20%)
       // 2. YELLOW: Mild resting elevation (BPM > 95 & Act < 30%)
-      // 3. GREEN: Baseline physiological balance or activity-explained heart rate
+      // 3. GREEN: Baseline physiological balance or normalized calm resting zone (BPM <= 90)
       const effectiveState: ClinicalTrafficState =
         (isBleConnected && ble.hardwareAlert) || (rawBpm > 115 && rawActivity < 20)
           ? 'RED'
           : rawBpm > 95 && rawActivity < 30
           ? 'YELLOW'
+          : rawBpm <= 90
+          ? 'GREEN'
           : result.evaluation.state;
 
       setTrafficState(effectiveState);
