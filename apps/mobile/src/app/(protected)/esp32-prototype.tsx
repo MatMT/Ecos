@@ -143,7 +143,6 @@ export default function Esp32PrototypeScreen() {
                   }
                 }}
                 disabled={isConnecting}
-                loading={isScanning}
                 variant={isScanning ? 'danger' : 'primary'}
               />
             ) : (

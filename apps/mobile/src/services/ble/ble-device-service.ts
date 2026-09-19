@@ -200,8 +200,9 @@ export class BleDeviceService {
     this.discoveredDevicesMap.clear();
     this.updateState({ discoveredDevices: [] });
 
-    this.manager.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
+    this.manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
+        console.warn('[BLE SCAN ERROR]', error.message);
         onError(error);
         return;
       }
@@ -209,6 +210,8 @@ export class BleDeviceService {
       if (!device) {
         return;
       }
+
+      console.log(`[BLE FOUND] id=${device.id} name=${device.name} localName=${device.localName} uuids=${JSON.stringify(device.serviceUUIDs)} rssi=${device.rssi}`);
 
       const rawName = device.name ?? device.localName;
       const serviceUUIDs = device.serviceUUIDs ?? [];
