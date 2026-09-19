@@ -240,14 +240,17 @@ export class BleDeviceService {
 
       const isCompatible = Boolean(hasMatchingName || hasMatchingService);
 
-      // Register device in discovered devices map
-      const displayName = rawName ?? (hasMatchingService ? BLE_CONFIG.deviceName : null);
+      // Register device in discovered devices map while preserving previous resolved metadata
+      const existing = this.discoveredDevicesMap.get(device.id);
+      const displayName = rawName ?? existing?.name ?? (hasMatchingService ? BLE_CONFIG.deviceName : null);
+      const finalIsCompatible = isCompatible || (existing?.isCompatible ?? false);
+
       this.discoveredDevicesMap.set(device.id, {
         id: device.id,
         name: displayName,
-        rssi: device.rssi,
-        serviceUUIDs: device.serviceUUIDs,
-        isCompatible,
+        rssi: device.rssi ?? existing?.rssi ?? null,
+        serviceUUIDs: device.serviceUUIDs ?? existing?.serviceUUIDs ?? null,
+        isCompatible: finalIsCompatible,
       });
 
       // Sort with compatible devices and strongest RSSI first
