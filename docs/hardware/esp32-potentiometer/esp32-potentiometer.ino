@@ -100,6 +100,18 @@ void setup() {
   pAdvertising->setScanResponse(true);
   pAdvertising->setMinPreferred(0x06); // Parámetros recomendados para compatibilidad iOS
   pAdvertising->setMinPreferred(0x12);
+
+  // Incluir nombre y servicio explícito en el paquete de anuncio primario para iOS
+  BLEAdvertisementData advData;
+  advData.setName("Ecos-Band-ESP32");
+  advData.setCompleteServices(BLEUUID(SERVICE_UUID));
+  pAdvertising->setAdvertisementData(advData);
+
+  // Paquete de respuesta de escaneo (Scan Response) con nombre completo
+  BLEAdvertisementData scanData;
+  scanData.setName("Ecos-Band-ESP32");
+  pAdvertising->setScanResponseData(scanData);
+
   BLEDevice::startAdvertising();
 
   Serial.println("BLE publicando como 'Ecos-Band-ESP32' (ECOS BAND SIMULATOR)");
