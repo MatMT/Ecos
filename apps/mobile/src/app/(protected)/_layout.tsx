@@ -34,6 +34,14 @@ export default function ProtectedLayout() {
           options={{ presentation: 'fullScreenModal', animation: 'fade' }}
         />
         <Stack.Screen
+          name="settings"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="sleep-detail"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="modals/alerts-history"
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
