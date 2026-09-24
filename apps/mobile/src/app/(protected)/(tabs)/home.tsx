@@ -23,6 +23,7 @@ import {
   AlertShieldIcon,
   BedIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ChevronUpIcon,
   LeafIcon,
   WatchIcon,
@@ -54,7 +55,7 @@ const WEEKLY_SLEEP_DATA: DailySleepData[] = [
 
 export default function Home() {
   const router = useRouter();
-  const { student, displayName } = useStudent();
+  const { student, displayName, preferences } = useStudent();
   const todayLabel = useTodayLabel();
   const {
     bpm,
@@ -300,7 +301,13 @@ export default function Home() {
 
         {/* Monitoreo de Sueño y Descanso (Diseño armonizado con Ecos) */}
         <Text style={styles.sectionHeaderLabel}>MONITOREO DE SUEÑO Y DESCANSO</Text>
-        <View style={styles.sleepCard}>
+        <TouchableOpacity
+          style={styles.sleepCard}
+          onPress={() => router.push('/sleep-detail')}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel="Ver detalle completo de descanso y sueño"
+        >
           {/* Header row with Bed Icon Circle, Title and Quality Badge */}
           <View style={styles.sleepHeader}>
             <View style={styles.sleepTitleGroup}>
@@ -309,13 +316,16 @@ export default function Home() {
               </View>
               <View>
                 <Text style={styles.sleepTitle}>Sueño y Descanso</Text>
-                <Text style={styles.sleepSubLabel}>Últimos 7 días</Text>
+                <Text style={styles.sleepSubLabel}>Últimos 7 días · Toca para ver detalle</Text>
               </View>
             </View>
-            <View style={styles.sleepQualityBadge}>
-              <Text style={styles.sleepQualityBadgeText}>
-                {avgSleepHours}h · {avgSleepHours >= 7 ? 'Reparador' : 'Ligero'}
-              </Text>
+            <View style={styles.sleepQualityBadgeRow}>
+              <View style={styles.sleepQualityBadge}>
+                <Text style={styles.sleepQualityBadgeText}>
+                  {avgSleepHours}h · {avgSleepHours >= (preferences.sleepGoalHours || 8) ? 'Reparador' : 'Ligero'}
+                </Text>
+              </View>
+              <ChevronRightIcon size={14} color="#0D9488" strokeWidth={2.5} />
             </View>
           </View>
 
@@ -337,16 +347,19 @@ export default function Home() {
                 <Text style={styles.sleepBigUnit}>min</Text>
               </View>
               <View style={styles.sleepGoalPill}>
-                <Text style={styles.sleepGoalPillText}>Meta: 8h diarias</Text>
+                <Text style={styles.sleepGoalPillText}>
+                  Meta: {preferences.sleepGoalHours || 8}h diarias
+                </Text>
               </View>
             </View>
 
             {/* Right Column: 7-Day Bar Chart */}
             <View style={styles.sleepChartCol}>
               {(() => {
+                const sleepGoal = preferences.sleepGoalHours || 8;
                 const baseY = 86;
                 const maxBarH = 60;
-                const targetY = 38; // 8h on a 10h scale (86 - 48)
+                const targetY = Math.round(baseY - (Math.min(10, sleepGoal) / 10) * maxBarH);
                 const clampedAvg = Math.max(2, Math.min(10, avgSleepHours));
                 const avgY = Math.round(baseY - (clampedAvg / 10) * maxBarH);
                 const avgLabelY = Math.abs(avgY - targetY) < 11
@@ -368,14 +381,14 @@ export default function Home() {
                       rx={3}
                     />
 
-                    {/* Dotted guideline for 8h Target with explicit label */}
+                    {/* Dotted guideline for Target with explicit label */}
                     <Line
                       x1="0"
                       y1={targetY}
                       x2="128"
                       y2={targetY}
                       stroke="#0D9488"
-                      strokeWidth="1.2"
+                      strokeWidth={1.2}
                       strokeDasharray="3 3"
                       strokeOpacity="0.55"
                     />
@@ -386,7 +399,7 @@ export default function Home() {
                       fontSize="8"
                       fontWeight="700"
                     >
-                      8h (Meta)
+                      {sleepGoal}h (Meta)
                     </SvgText>
 
                     {/* Subtle dashed line for real weekly average with explicit label */}
@@ -459,7 +472,7 @@ export default function Home() {
               })()}
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -731,6 +744,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: Radius.pill,
+  },
+  sleepQualityBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sleepQualityBadgeText: {
     fontSize: 11,

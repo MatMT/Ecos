@@ -25,6 +25,7 @@ export interface StudentPreferences {
   preferredName?: string;
   visualTheme: VisualTheme;
   checkInFrequency: CheckInFrequency;
+  sleepGoalHours: number;
 }
 
 const PREFERENCES_KEY = 'ecos_student_preferences';
@@ -33,6 +34,7 @@ const DEFAULT_PREFERENCES: StudentPreferences = {
   preferredName: undefined,
   visualTheme: 'salvia',
   checkInFrequency: 'moderate',
+  sleepGoalHours: 8,
 };
 
 function fallbackGreetingName(email: string | undefined): string {
@@ -51,6 +53,7 @@ interface StudentContextValue {
   displayName: string;
   visualTheme: VisualTheme;
   checkInFrequency: CheckInFrequency;
+  sleepGoalHours: number;
   updatePreferences: (newPrefs: Partial<StudentPreferences>) => Promise<void>;
 }
 
@@ -172,6 +175,7 @@ export function StudentProvider({ children }: PropsWithChildren) {
       displayName,
       visualTheme: preferences.visualTheme,
       checkInFrequency: preferences.checkInFrequency,
+      sleepGoalHours: preferences.sleepGoalHours || 8,
       updatePreferences,
     }),
     [currentStudent, currentIsLoading, currentError, refreshStudent, preferences, displayName, updatePreferences],
