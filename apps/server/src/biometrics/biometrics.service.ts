@@ -120,7 +120,12 @@ export class BiometricsService {
           device: { studentId },
           timestamp: { gte: from, lte: to },
         },
-        select: { timestamp: true, avgHeartRate: true, stressLevel: true },
+        select: {
+          timestamp: true,
+          avgHeartRate: true,
+          stressLevel: true,
+          sleepQualityHours: true,
+        },
         orderBy: { timestamp: 'asc' },
       }),
     );
@@ -133,6 +138,8 @@ export class BiometricsService {
         heartRateCount: number;
         stressSum: number;
         stressCount: number;
+        sleepSum: number;
+        sleepCount: number;
       }
     >();
 
@@ -145,6 +152,8 @@ export class BiometricsService {
         heartRateCount: 0,
         stressSum: 0,
         stressCount: 0,
+        sleepSum: 0,
+        sleepCount: 0,
       };
       bucket.count += 1;
       if (record.avgHeartRate !== null) {
@@ -154,6 +163,10 @@ export class BiometricsService {
       if (record.stressLevel !== null) {
         bucket.stressSum += record.stressLevel;
         bucket.stressCount += 1;
+      }
+      if (record.sleepQualityHours !== null) {
+        bucket.sleepSum += record.sleepQualityHours;
+        bucket.sleepCount += 1;
       }
       buckets.set(day, bucket);
     }
@@ -167,6 +180,9 @@ export class BiometricsService {
           : null,
         avgStressLevel: bucket.stressCount
           ? round2(bucket.stressSum / bucket.stressCount)
+          : null,
+        avgSleepQualityHours: bucket.sleepCount
+          ? round2(bucket.sleepSum / bucket.sleepCount)
           : null,
         sampleCount: bucket.count,
       }));

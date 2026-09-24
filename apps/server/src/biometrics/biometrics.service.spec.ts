@@ -53,16 +53,19 @@ describe('BiometricsService', () => {
           timestamp: new Date('2026-01-01T08:00:00.000Z'),
           avgHeartRate: 70,
           stressLevel: 0.2,
+          sleepQualityHours: 7,
         },
         {
           timestamp: new Date('2026-01-01T20:00:00.000Z'),
           avgHeartRate: 80,
           stressLevel: 0.4,
+          sleepQualityHours: 8,
         },
         {
           timestamp: new Date('2026-01-02T08:00:00.000Z'),
           avgHeartRate: 90,
           stressLevel: null,
+          sleepQualityHours: null,
         },
       ]);
 
@@ -76,12 +79,14 @@ describe('BiometricsService', () => {
           date: '2026-01-01',
           avgHeartRate: 75,
           avgStressLevel: 0.3,
+          avgSleepQualityHours: 7.5,
           sampleCount: 2,
         },
         {
           date: '2026-01-02',
           avgHeartRate: 90,
           avgStressLevel: null,
+          avgSleepQualityHours: null,
           sampleCount: 1,
         },
       ]);
