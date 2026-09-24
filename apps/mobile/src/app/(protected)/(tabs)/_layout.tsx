@@ -4,14 +4,21 @@ import HomeIcon from '@/assets/icon-navbar/Home.svg';
 import MessageIcon from '@/assets/icon-navbar/Message.svg';
 import StatIcon from '@/assets/icon-navbar/Stat.svg';
 import UserIcon from '@/assets/icon-navbar/User.svg';
+import { useTheme } from '@/context/theme-context';
 
 export default function TabLayout() {
+  const { colors } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#0F766E',
-        tabBarInactiveTintColor: '#64748B',
+        tabBarActiveTintColor: colors.brand,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',

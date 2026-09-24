@@ -3,6 +3,7 @@ import { Redirect, Stack } from 'expo-router';
 
 import { useAuth } from '@/hooks/use-auth';
 import { StudentProvider } from '@/hooks/use-student';
+import { ThemeProvider } from '@/context/theme-context';
 import { syncDispatcher } from '@/services/sync/sync-dispatcher';
 
 export default function ProtectedLayout() {
@@ -22,7 +23,8 @@ export default function ProtectedLayout() {
 
   return (
     <StudentProvider>
-      <Stack screenOptions={{ headerShown: false }}>
+      <ThemeProvider>
+        <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="esp32-prototype" />
         <Stack.Screen
@@ -46,6 +48,7 @@ export default function ProtectedLayout() {
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
       </Stack>
+      </ThemeProvider>
     </StudentProvider>
   );
 }

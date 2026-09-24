@@ -21,15 +21,22 @@ import {
   ShieldCheckIcon,
 } from '@/components/ui/app-icons';
 import { useStudent, type CheckInFrequency, type VisualTheme } from '@/hooks/use-student';
+import { useTheme } from '@/context/theme-context';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { preferences, updatePreferences } = useStudent();
+  const { colors, setTheme } = useTheme();
 
   const [preferredName, setPreferredName] = useState<string>(preferences.preferredName || '');
   const [selectedTheme, setSelectedTheme] = useState<VisualTheme>(preferences.visualTheme);
   const [selectedFrequency, setSelectedFrequency] = useState<CheckInFrequency>(preferences.checkInFrequency);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  const handleSelectTheme = (theme: VisualTheme) => {
+    setSelectedTheme(theme);
+    void setTheme(theme);
+  };
 
   const handleSave = async () => {
     try {
@@ -52,13 +59,13 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Header con botón de volver */}
-        <View style={styles.topHeader}>
+        <View style={[styles.topHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
@@ -66,9 +73,9 @@ export default function SettingsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Volver al perfil"
           >
-            <ArrowLeftIcon size={20} color={Colors.text} />
+            <ArrowLeftIcon size={20} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Ajustes y Preferencias</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Ajustes y Preferencias</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -109,10 +116,10 @@ export default function SettingsScreen() {
                   styles.themeItem,
                   selectedTheme === 'salvia' && styles.themeItemActiveSalvia,
                 ]}
-                onPress={() => setSelectedTheme('salvia')}
+                onPress={() => handleSelectTheme('salvia')}
                 activeOpacity={0.85}
               >
-                <View style={[styles.themeColorCircle, { backgroundColor: '#86A789' }]} />
+                <View style={[styles.themeColorCircle, { backgroundColor: '#4E8777' }]} />
                 <View style={styles.themeInfoWrap}>
                   <Text style={styles.themeTitle}>Modo Salvia</Text>
                   <Text style={styles.themeSubtitle}>
@@ -120,7 +127,7 @@ export default function SettingsScreen() {
                   </Text>
                 </View>
                 {selectedTheme === 'salvia' && (
-                  <View style={[styles.checkCircle, { backgroundColor: '#86A789' }]}>
+                  <View style={[styles.checkCircle, { backgroundColor: '#4E8777' }]}>
                     <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
                   </View>
                 )}
@@ -132,10 +139,10 @@ export default function SettingsScreen() {
                   styles.themeItem,
                   selectedTheme === 'niebla' && styles.themeItemActiveNiebla,
                 ]}
-                onPress={() => setSelectedTheme('niebla')}
+                onPress={() => handleSelectTheme('niebla')}
                 activeOpacity={0.85}
               >
-                <View style={[styles.themeColorCircle, { backgroundColor: '#60A5FA' }]} />
+                <View style={[styles.themeColorCircle, { backgroundColor: '#5A7B9D' }]} />
                 <View style={styles.themeInfoWrap}>
                   <Text style={styles.themeTitle}>Modo Niebla</Text>
                   <Text style={styles.themeSubtitle}>
@@ -143,7 +150,7 @@ export default function SettingsScreen() {
                   </Text>
                 </View>
                 {selectedTheme === 'niebla' && (
-                  <View style={[styles.checkCircle, { backgroundColor: '#2563EB' }]}>
+                  <View style={[styles.checkCircle, { backgroundColor: '#5A7B9D' }]}>
                     <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
                   </View>
                 )}
@@ -155,10 +162,10 @@ export default function SettingsScreen() {
                   styles.themeItem,
                   selectedTheme === 'arena' && styles.themeItemActiveArena,
                 ]}
-                onPress={() => setSelectedTheme('arena')}
+                onPress={() => handleSelectTheme('arena')}
                 activeOpacity={0.85}
               >
-                <View style={[styles.themeColorCircle, { backgroundColor: '#E0A96D' }]} />
+                <View style={[styles.themeColorCircle, { backgroundColor: '#8C6D58' }]} />
                 <View style={styles.themeInfoWrap}>
                   <Text style={styles.themeTitle}>Modo Arena</Text>
                   <Text style={styles.themeSubtitle}>
@@ -166,7 +173,7 @@ export default function SettingsScreen() {
                   </Text>
                 </View>
                 {selectedTheme === 'arena' && (
-                  <View style={[styles.checkCircle, { backgroundColor: '#D97706' }]}>
+                  <View style={[styles.checkCircle, { backgroundColor: '#8C6D58' }]}>
                     <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
                   </View>
                 )}
@@ -255,7 +262,7 @@ export default function SettingsScreen() {
 
           {/* Botón Guardar Preferencias */}
           <TouchableOpacity
-            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+            style={[styles.saveButton, { backgroundColor: colors.brand }, isSaving && styles.saveButtonDisabled]}
             onPress={() => void handleSave()}
             disabled={isSaving}
             activeOpacity={0.85}
