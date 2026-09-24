@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,10 +15,11 @@ import { useRouter } from 'expo-router';
 import CustomTopBar from '@/components/custom-top-bar';
 import { Colors, Radius } from '@/constants/theme';
 import {
+  ActivityIcon,
   ArrowDownIcon,
+  CalendarCheckIcon,
   CheckIcon,
   GearIcon,
-  LeafIcon,
   MoonIcon,
   StarIcon,
 } from '@/components/ui/app-icons';
@@ -60,6 +64,7 @@ export default function Stats() {
   const [activeTab, setActiveTab] = useState<StatsTab>('biometrics');
   const [weeklyData, setWeeklyData] = useState<WeeklyDataPoint[]>(DEFAULT_WEEKLY_DATA);
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
+  const [activeInsightIndex, setActiveInsightIndex] = useState<number>(0);
 
   useEffect(() => {
     if (!student?.id) return;
@@ -95,18 +100,30 @@ export default function Stats() {
   }, [student?.id]);
 
   const maxBarValue = 80;
-  const barChartHeight = 110;
+  const barChartHeight = 100;
 
-  // Mental Health UX: Paleta moderna, calmante y no punitiva
-  const CALM_COLOR = '#86A789'; // Verde Salvia Claro
+  // Mental Health UX: Paleta suave y calmante
+  const CALM_COLOR = '#86A789'; // Verde Salvia
   const MODERATE_COLOR = '#DFB15B'; // Ámbar Arena Suave
-  const TENSION_COLOR = '#E07A5F'; // Coral Suave / Rosa Ceniza
+  const TENSION_COLOR = '#E07A5F'; // Coral Suave
+
+  const handleCarouselScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const width = e.nativeEvent.layoutMeasurement.width;
+    if (width > 0) {
+      const index = Math.round(offsetX / width);
+      setActiveInsightIndex(index);
+    }
+  };
+
+  const screenWidth = Dimensions.get('window').width;
+  const carouselCardWidth = Math.max(280, screenWidth - 76);
 
   return (
     <View style={styles.mainContainer}>
       <CustomTopBar name={displayName} />
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        {/* Header con enlace discreto a terapeuta */}
+        {/* Header con enlace amigable a terapeuta */}
         <View style={styles.header}>
           <View style={styles.headerTitleRow}>
             <Text style={styles.title}>Tu Evolución</Text>
@@ -122,12 +139,12 @@ export default function Stats() {
           </View>
           <Text style={styles.subtitle}>
             {activeTab === 'biometrics'
-              ? 'Análisis longitudinal de tu respuesta fisiológica, patrones de descanso y equilibrio autonómico.'
-              : 'Historial de sesiones clínicas, compromisos terapéuticos y metas acordadas con tu terapeuta.'}
+              ? 'Descubre cómo tus hábitos y tus horas de sueño influyen en tu tranquilidad diaria.'
+              : 'Historial de sesiones clínicas, acuerdos terapéuticos y metas acordadas con tu equipo.'}
           </Text>
         </View>
 
-        {/* Selector Segmentado (Píldoras) */}
+        {/* Selector Segmentado con iconos vectoriales limpios */}
         <View style={styles.segmentContainer}>
           <TouchableOpacity
             style={[styles.segmentButton, activeTab === 'biometrics' && styles.segmentButtonActive]}
@@ -136,7 +153,11 @@ export default function Stats() {
             accessibilityRole="tab"
             accessibilityState={{ selected: activeTab === 'biometrics' }}
           >
-            <LeafIcon size={15} color={activeTab === 'biometrics' ? '#FFFFFF' : '#64748B'} />
+            <ActivityIcon
+              size={15}
+              color={activeTab === 'biometrics' ? '#FFFFFF' : '#64748B'}
+              strokeWidth={2.2}
+            />
             <Text style={[styles.segmentButtonText, activeTab === 'biometrics' && styles.segmentButtonTextActive]}>
               Biometría y Hábitos
             </Text>
@@ -149,7 +170,11 @@ export default function Stats() {
             accessibilityRole="tab"
             accessibilityState={{ selected: activeTab === 'sessions' }}
           >
-            <StarIcon size={15} color={activeTab === 'sessions' ? '#FFFFFF' : '#64748B'} />
+            <CalendarCheckIcon
+              size={15}
+              color={activeTab === 'sessions' ? '#FFFFFF' : '#64748B'}
+              strokeWidth={2}
+            />
             <Text style={[styles.segmentButtonText, activeTab === 'sessions' && styles.segmentButtonTextActive]}>
               Sesiones y Metas
             </Text>
@@ -159,69 +184,72 @@ export default function Stats() {
         {/* VISTA 1: BIOMETRÍA Y HÁBITOS */}
         {activeTab === 'biometrics' && (
           <>
-            {/* Weekly Histogram Card */}
+            {/* Weekly Stress Card */}
             <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>FRECUENCIA SEMANAL DE ESTRÉS</Text>
-                <View style={styles.trendBadge}>
-                  <Text style={styles.trendText}>Tendencia: Favorable</Text>
-                  <ArrowDownIcon size={12} color="#15803D" />
+              <View style={styles.cardHeaderStack}>
+                <View style={styles.cardHeaderTopRow}>
+                  <Text style={styles.cardTitle}>FRECUENCIA SEMANAL DE ESTRÉS</Text>
+                  <View style={styles.trendBadge}>
+                    <ArrowDownIcon size={12} color="#15803D" />
+                    <Text style={styles.trendText}>Tendencia Favorable</Text>
+                  </View>
                 </View>
+                <Text style={styles.chartCaption}>
+                  Nivel promedio de tensión diaria con franja de equilibrio adaptativo
+                </Text>
               </View>
-              <Text style={styles.chartCaption}>
-                Nivel promedio de tensión diaria con franja de equilibrio adaptativo
-              </Text>
 
               <View style={styles.histogramWrapper}>
-                <Svg height="145" width="100%" viewBox="0 0 320 145">
-                  {/* Franja horizontal de equilibrio */}
+                <Svg height="140" width="100%" viewBox="0 0 320 140">
+                  {/* Zona de equilibrio translúcida sin texto invasivo */}
                   <Rect
-                    x="4"
-                    y="48"
-                    width="312"
-                    height="40"
+                    x="2"
+                    y="45"
+                    width="316"
+                    height="42"
                     rx={6}
                     fill={CALM_COLOR}
-                    fillOpacity={0.12}
+                    fillOpacity={0.09}
                   />
+                  {/* Línea superior e inferior de equilibrio */}
                   <Line
-                    x1="4"
-                    y1="68"
-                    x2="316"
-                    y2="68"
+                    x1="2"
+                    y1="45"
+                    x2="318"
+                    y2="45"
                     stroke={CALM_COLOR}
                     strokeWidth={1}
                     strokeDasharray="4 4"
                     strokeOpacity={0.4}
                   />
-                  <SvgText
-                    x="312"
-                    y="44"
-                    fill={CALM_COLOR}
-                    fontSize="9"
-                    fontWeight="700"
-                    textAnchor="end"
-                  >
-                    Rango de equilibrio
-                  </SvgText>
+                  <Line
+                    x1="2"
+                    y1="87"
+                    x2="318"
+                    y2="87"
+                    stroke={CALM_COLOR}
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.4}
+                  />
 
                   {weeklyData.map((item, index) => {
-                    const barWidth = 26;
+                    const barWidth = 24;
                     const spacing = (320 - barWidth * 7) / 8;
                     const x = spacing + index * (barWidth + spacing);
                     const height = Math.min(
                       barChartHeight,
                       (item.minutesHighStress / maxBarValue) * barChartHeight,
                     );
-                    const y = 114 - height;
+                    const y = 112 - height;
 
-                    // Mental Health UX: Tonos orgánicos y no punitivos
+                    // Tonos orgánicos y no punitivos
                     const barColor =
                       item.minutesHighStress <= 35
-                        ? CALM_COLOR // Verde salvia claro
+                        ? CALM_COLOR // Verde salvia
                         : item.minutesHighStress <= 55
-                        ? MODERATE_COLOR // Ámbar arena suave
-                        : TENSION_COLOR; // Coral suave / rosa ceniza
+                        ? MODERATE_COLOR // Ámbar suave
+                        : TENSION_COLOR; // Coral suave
 
                     return (
                       <React.Fragment key={item.day + index}>
@@ -230,15 +258,15 @@ export default function Stats() {
                           y={y}
                           width={barWidth}
                           height={height}
-                          rx={6}
+                          rx={12}
                           fill={barColor}
                         />
                         <SvgText
                           x={x + barWidth / 2}
-                          y="134"
+                          y="130"
                           fill="#64748B"
-                          fontSize="12"
-                          fontWeight="bold"
+                          fontSize="11"
+                          fontWeight="700"
                           textAnchor="middle"
                         >
                           {item.day}
@@ -248,73 +276,96 @@ export default function Stats() {
                   })}
                 </Svg>
 
-                {/* Organic Legend */}
+                {/* Leyenda limpia incluyendo muestra de rango óptimo */}
                 <View style={styles.chartLegend}>
                   <View style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: CALM_COLOR }]} />
-                    <Text style={styles.legendText}>Calma (≤35%)</Text>
+                    <Text style={styles.legendText}>Calma</Text>
                   </View>
                   <View style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: MODERATE_COLOR }]} />
-                    <Text style={styles.legendText}>Moderado (36-55%)</Text>
+                    <Text style={styles.legendText}>Moderado</Text>
                   </View>
                   <View style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: TENSION_COLOR }]} />
-                    <Text style={styles.legendText}>Tensión (&gt;55%)</Text>
+                    <Text style={styles.legendText}>Tensión</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={styles.legendOptimalDash} />
+                    <Text style={styles.legendText}>Rango óptimo</Text>
                   </View>
                 </View>
               </View>
             </View>
 
-            {/* Clinical Correlation Insights (Causa y Efecto) */}
+            {/* Carrusel Swipeable de Patrones y Correlaciones */}
             <View style={styles.card}>
-              <Text style={styles.sectionHeader}>PATRONES Y CORRELACIONES CLÍNICAS</Text>
-              <Text style={styles.correlationIntro}>
-                Relaciones contextuales observadas entre tus hábitos diarios y tu respuesta autonómica.
-              </Text>
-
-              {/* Correlation 1: Sleep vs Stress */}
-              <View style={styles.correlationItem}>
-                <View style={[styles.correlationIconBox, { backgroundColor: '#F0FDF4' }]}>
-                  <MoonIcon size={20} color="#0D9488" />
-                </View>
-                <View style={styles.correlationTextWrap}>
-                  <View style={styles.correlationHeaderRow}>
-                    <Text style={styles.correlationTitle}>Impacto del Sueño en tu Estrés</Text>
-                    <View style={styles.insightBadge}>
-                      <Text style={styles.insightBadgeText}>Sueño vs. Tensión</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.correlationBody}>
-                    Los días con menos de 6.5 horas de descanso registraron un 32% más de picos de tensión durante la tarde.
-                  </Text>
-                  <Text style={styles.correlationTakeaway}>
-                    💡 Mantener tu descanso en ≥ 7 horas estabiliza tu umbral de reactividad emocional.
-                  </Text>
-                </View>
+              <View style={styles.carouselHeaderRow}>
+                <Text style={styles.sectionHeader}>LO QUE TU CUERPO NOS CUENTA</Text>
+                <Text style={styles.correlationIntro}>
+                  Conexiones observadas entre tu descanso y tu nivel de calma.
+                </Text>
               </View>
 
-              <View style={styles.sessionDivider} />
-
-              {/* Correlation 2: Autonomic Recovery */}
-              <View style={styles.correlationItem}>
-                <View style={[styles.correlationIconBox, { backgroundColor: '#F0F9FF' }]}>
-                  <LeafIcon size={20} color="#0284C7" />
-                </View>
-                <View style={styles.correlationTextWrap}>
-                  <View style={styles.correlationHeaderRow}>
-                    <Text style={styles.correlationTitle}>Recuperación Autonómica</Text>
-                    <View style={[styles.insightBadge, { backgroundColor: '#E0F2FE' }]}>
-                      <Text style={[styles.insightBadgeText, { color: '#0369A1' }]}>Biofeedback</Text>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={handleCarouselScroll}
+                scrollEventThrottle={16}
+                contentContainerStyle={styles.carouselScrollContent}
+              >
+                {/* Tarjeta 1: Sueño y Tensión */}
+                <View style={[styles.insightCard, { width: carouselCardWidth }]}>
+                  <View style={styles.insightTopRow}>
+                    <View style={[styles.insightIconBox, { backgroundColor: '#F0FDF4' }]}>
+                      <MoonIcon size={18} color="#0D9488" />
+                    </View>
+                    <View style={styles.insightHeaderWrap}>
+                      <Text style={styles.insightTitle}>Sueño y Tensión</Text>
+                      <View style={styles.insightBadge}>
+                        <Text style={styles.insightBadgeText}>Impacto directo</Text>
+                      </View>
                     </View>
                   </View>
-                  <Text style={styles.correlationBody}>
-                    Tu pulso basal promedio descendió 4 lpm en los días que realizaste al menos una sesión de respiración guiada.
+                  <Text style={styles.insightBody}>
+                    Los días con descanso menor a 7h registraron un 32% más de picos vespertinos.
                   </Text>
-                  <Text style={styles.correlationTakeaway}>
-                    💡 Tu sistema parasimpático responde favorablemente a las pausas conscientes.
-                  </Text>
+                  <View style={styles.insightTakeawayBox}>
+                    <Text style={styles.insightTakeaway}>
+                      💡 Mantener tu descanso en ≥ 7h estabiliza tu reactividad emocional.
+                    </Text>
+                  </View>
                 </View>
+
+                {/* Tarjeta 2: Efecto Biofeedback */}
+                <View style={[styles.insightCard, { width: carouselCardWidth }]}>
+                  <View style={styles.insightTopRow}>
+                    <View style={[styles.insightIconBox, { backgroundColor: '#F0F9FF' }]}>
+                      <ActivityIcon size={18} color="#0284C7" strokeWidth={2.2} />
+                    </View>
+                    <View style={styles.insightHeaderWrap}>
+                      <Text style={styles.insightTitle}>Efecto Biofeedback</Text>
+                      <View style={[styles.insightBadge, { backgroundColor: '#E0F2FE' }]}>
+                        <Text style={[styles.insightBadgeText, { color: '#0369A1' }]}>Recuperación</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <Text style={styles.insightBody}>
+                    Tu respiración consciente redujo tu pulso basal en 4 lpm de promedio.
+                  </Text>
+                  <View style={styles.insightTakeawayBox}>
+                    <Text style={styles.insightTakeaway}>
+                      💡 Tu sistema parasimpático responde favorablemente a las pausas conscientes.
+                    </Text>
+                  </View>
+                </View>
+              </ScrollView>
+
+              {/* Indicador de Páginas (Dots) */}
+              <View style={styles.dotsRow}>
+                <View style={[styles.dot, activeInsightIndex === 0 && styles.dotActive]} />
+                <View style={[styles.dot, activeInsightIndex === 1 && styles.dotActive]} />
               </View>
             </View>
           </>
@@ -325,7 +376,7 @@ export default function Stats() {
           <>
             {/* Recent Sessions */}
             <View style={styles.card}>
-              <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderTopRow}>
                 <Text style={styles.cardTitle}>SESIONES CLÍNICAS RECIENTES</Text>
                 <View style={[styles.trendBadge, { backgroundColor: '#E0F2FE' }]}>
                   <Text style={[styles.trendText, { color: '#0369A1' }]}>
@@ -394,7 +445,7 @@ export default function Stats() {
 
             {/* Treatment Goals Card */}
             <View style={styles.card}>
-              <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderTopRow}>
                 <Text style={styles.cardTitle}>OBJETIVOS TERAPÉUTICOS ACTIVOS</Text>
                 <View style={styles.goalsCountBadge}>
                   <Text style={styles.goalsCountBadgeText}>
@@ -410,7 +461,7 @@ export default function Stats() {
               {/* Goal 1 */}
               <View style={styles.goalRow}>
                 <View style={styles.goalStatusIconActive}>
-                  <CheckIcon size={13} color="#FFFFFF" />
+                  <CheckIcon size={13} color="#FFFFFF" strokeWidth={3} />
                 </View>
                 <View style={styles.goalContent}>
                   <Text style={styles.goalTitle}>
@@ -426,7 +477,7 @@ export default function Stats() {
               {/* Goal 2 */}
               <View style={styles.goalRow}>
                 <View style={styles.goalStatusIconCompleted}>
-                  <CheckIcon size={13} color="#FFFFFF" />
+                  <CheckIcon size={13} color="#FFFFFF" strokeWidth={3} />
                 </View>
                 <View style={styles.goalContent}>
                   <Text style={styles.goalTitle}>
@@ -442,11 +493,11 @@ export default function Stats() {
               {/* Goal 3 */}
               <View style={styles.goalRow}>
                 <View style={styles.goalStatusIconActive}>
-                  <CheckIcon size={13} color="#FFFFFF" />
+                  <CheckIcon size={13} color="#FFFFFF" strokeWidth={3} />
                 </View>
                 <View style={styles.goalContent}>
                   <Text style={styles.goalTitle}>
-                    Higiene del sueño: mantener descanso ≥ 7 horas diarias
+                    Higiene del sueño: mantener descanso regular
                   </Text>
                   <Text style={styles.goalProgressText}>Progreso estimado: 65% · En curso</Text>
                   <View style={styles.progressBarTrack}>
@@ -543,7 +594,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: Colors.surface,
-    borderRadius: Radius.medium,
+    borderRadius: Radius.large,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
@@ -554,10 +605,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 6,
   },
-  cardHeader: {
+  cardHeaderStack: {
+    marginBottom: 10,
+  },
+  cardHeaderTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 4,
   },
   cardTitle: {
@@ -583,7 +639,7 @@ const styles = StyleSheet.create({
   chartCaption: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 14,
+    lineHeight: 16,
   },
   histogramWrapper: {
     alignItems: 'center',
@@ -593,68 +649,83 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
     marginTop: 10,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
     width: '100%',
+    flexWrap: 'wrap',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   legendDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
+  legendOptimalDash: {
+    width: 14,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#86A789',
+    opacity: 0.7,
+  },
   legendText: {
     fontSize: 11,
     color: '#64748B',
     fontWeight: '500',
+  },
+  carouselHeaderRow: {
+    marginBottom: 10,
   },
   sectionHeader: {
     fontSize: 12,
     fontWeight: 'bold',
     color: Colors.textSecondary,
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: 2,
   },
   correlationIntro: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginBottom: 14,
     lineHeight: 18,
   },
-  correlationItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  carouselScrollContent: {
     paddingVertical: 6,
+    gap: 12,
   },
-  correlationIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  insightCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.medium,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  insightTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  insightIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    marginTop: 2,
   },
-  correlationTextWrap: {
+  insightHeaderWrap: {
     flex: 1,
-  },
-  correlationHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-    flexWrap: 'wrap',
-    gap: 6,
   },
-  correlationTitle: {
-    fontSize: 15,
+  insightTitle: {
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.text,
   },
@@ -669,21 +740,39 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#15803D',
   },
-  correlationBody: {
+  insightBody: {
     fontSize: 13,
     color: '#475569',
-    lineHeight: 19,
+    lineHeight: 18,
+    marginBottom: 8,
   },
-  correlationTakeaway: {
-    fontSize: 12,
-    color: '#0F766E',
-    fontWeight: '600',
-    marginTop: 6,
+  insightTakeawayBox: {
     backgroundColor: '#F0FDFA',
-    paddingVertical: 4,
+    paddingVertical: 5,
     paddingHorizontal: 8,
     borderRadius: 6,
-    overflow: 'hidden',
+  },
+  insightTakeaway: {
+    fontSize: 11.5,
+    color: '#0F766E',
+    fontWeight: '600',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#CBD5E1',
+  },
+  dotActive: {
+    width: 18,
+    backgroundColor: '#0D9488',
   },
   sessionItem: {
     flexDirection: 'row',
