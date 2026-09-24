@@ -1,37 +1,35 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import {
   BatteryIcon,
   CalendarIcon,
+  CheckIcon,
   ChevronRightIcon,
+  CloseIcon,
   LockIcon,
   LogOutIcon,
+  MessageSquareIcon,
+  PhoneIcon,
   ShieldCheckIcon,
   UserCheckIcon,
   WatchIcon,
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
-import { useStudent } from '@/hooks/use-student';
+import { useStudent, type CheckInFrequency, type VisualTheme } from '@/hooks/use-student';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
-
-function formatDisplayName(email: string | undefined): string {
-  if (!email) return 'Estudiante Ecos';
-  const localPart = email.split('@')[0];
-  const parts = localPart.split('.');
-  return parts
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join(' ');
-}
 
 function formatAppointmentDate(isoString: string | null | undefined): string {
   if (!isoString) return 'Sin sesiones programadas';
@@ -46,17 +44,61 @@ function formatAppointmentDate(isoString: string | null | undefined): string {
   }
 }
 
+function formatTherapistLicense(license: string | null | undefined): string {
+  if (!license || license.includes('SEED')) {
+    return 'Colegiado institucional activo';
+  }
+  return `Colegiado No. ${license}`;
+}
+
+function formatDiagnosis(diag: string | null | undefined): string {
+  if (!diag || diag.trim().toLowerCase() === 'ninguno reportado' || diag.includes('SEED')) {
+    return 'Enfoque preventivo y bienestar general';
+  }
+  return diag;
+}
+
 export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
-  const { student } = useStudent();
+  const { student, displayName, preferences, updatePreferences } = useStudent();
   const { isBleConnected } = useBiometricMonitor();
 
-  const displayName = student?.fullName || formatDisplayName(user?.email);
+  const [isNameModalVisible, setIsNameModalVisible] = useState<boolean>(false);
+  const [tempPreferredName, setTempPreferredName] = useState<string>(preferences.preferredName || '');
+
   const userInitial = displayName.charAt(0).toUpperCase();
   const institutionName = student?.institution?.name || 'Universidad Don Bosco';
-  const carnetLabel = student?.studentCode ? `Carnet: ${student.studentCode}` : 'Carnet: UDB-2024-0491';
+  const carnetLabel = student?.studentCode && !student.studentCode.includes('SEED')
+    ? `Carnet: ${student.studentCode}`
+    : 'Carnet: UDB-2024-0491';
   const therapist = student?.assignedTherapist;
+
+  const handleWhatsApp = () => {
+    const rawPhone = therapist?.phone || '50370000000';
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+    const therapistName = therapist?.fullName || 'Doctor';
+    const encoded = encodeURIComponent(`Hola ${therapistName}, le contacto desde la plataforma Ecos.`);
+    void Linking.openURL(`https://wa.me/${cleanPhone}?text=${encoded}`);
+  };
+
+  const handleCall = () => {
+    const rawPhone = therapist?.phone || '+50322744444';
+    void Linking.openURL(`tel:${rawPhone}`);
+  };
+
+  const handleSavePreferredName = async () => {
+    await updatePreferences({ preferredName: tempPreferredName.trim() || undefined });
+    setIsNameModalVisible(false);
+  };
+
+  const handleSelectTheme = async (theme: VisualTheme) => {
+    await updatePreferences({ visualTheme: theme });
+  };
+
+  const handleSelectFrequency = async (freq: CheckInFrequency) => {
+    await updatePreferences({ checkInFrequency: freq });
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -73,7 +115,14 @@ export default function Profile() {
               <Text style={styles.avatarText}>{userInitial}</Text>
             </View>
             <View style={styles.identityDetails}>
-              <Text style={styles.userName}>{displayName}</Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.userName}>{displayName}</Text>
+                {preferences.preferredName && (
+                  <View style={styles.preferredBadge}>
+                    <Text style={styles.preferredBadgeText}>Personalizado</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.userInstitution}>{institutionName}</Text>
               <Text style={styles.userEmail}>{user?.email ?? 'usuario@ecos.local'}</Text>
               <View style={styles.badgeRow}>
@@ -89,7 +138,168 @@ export default function Profile() {
           </View>
         </View>
 
-        {/* Clinical Care Team Card */}
+        {/* Preferencias y Personalización (Empoderamiento y Agencia del Usuario) */}
+        <Text style={styles.sectionLabel}>PREFERENCIAS Y PERSONALIZACIÓN</Text>
+        <View style={styles.infoCard}>
+          {/* Nombre de Preferencia */}
+          <View style={styles.preferenceRow}>
+            <View style={styles.preferenceTextCol}>
+              <Text style={styles.preferenceTitle}>Nombre de preferencia</Text>
+              <Text style={styles.preferenceDesc}>
+                {preferences.preferredName
+                  ? `Se te llama afectivamente «${preferences.preferredName}»`
+                  : 'Usando nombre administrativo institucional'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.preferenceEditBtn}
+              onPress={() => {
+                setTempPreferredName(preferences.preferredName || '');
+                setIsNameModalVisible(true);
+              }}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Editar nombre de preferencia"
+            >
+              <Text style={styles.preferenceEditBtnText}>
+                {preferences.preferredName ? 'Cambiar' : 'Definir'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.cardDivider} />
+
+          {/* Ambiente Visual (Temas con base científica para salud mental) */}
+          <Text style={styles.preferenceSubHeader}>Ambiente visual relajante</Text>
+          <Text style={styles.preferenceSubDesc}>
+            Paletas cromáticas con base científica adaptadas a tu comodidad sensorial.
+          </Text>
+
+          <View style={styles.themeSelectorRow}>
+            {/* Salvia / Bosque */}
+            <TouchableOpacity
+              style={[
+                styles.themeOptionCard,
+                preferences.visualTheme === 'salvia' && styles.themeOptionCardActiveSalvia,
+              ]}
+              onPress={() => void handleSelectTheme('salvia')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.themeColorDot, { backgroundColor: '#86A789' }]} />
+              <Text style={styles.themeOptionTitle}>Salvia</Text>
+              <Text style={styles.themeOptionSub}>Armonía y calma</Text>
+              {preferences.visualTheme === 'salvia' && (
+                <View style={styles.themeActiveBadge}>
+                  <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Niebla / Océano */}
+            <TouchableOpacity
+              style={[
+                styles.themeOptionCard,
+                preferences.visualTheme === 'niebla' && styles.themeOptionCardActiveNiebla,
+              ]}
+              onPress={() => void handleSelectTheme('niebla')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.themeColorDot, { backgroundColor: '#60A5FA' }]} />
+              <Text style={styles.themeOptionTitle}>Niebla</Text>
+              <Text style={styles.themeOptionSub}>Claridad mental</Text>
+              {preferences.visualTheme === 'niebla' && (
+                <View style={[styles.themeActiveBadge, { backgroundColor: '#2563EB' }]}>
+                  <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Arena / Crema */}
+            <TouchableOpacity
+              style={[
+                styles.themeOptionCard,
+                preferences.visualTheme === 'arena' && styles.themeOptionCardActiveArena,
+              ]}
+              onPress={() => void handleSelectTheme('arena')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.themeColorDot, { backgroundColor: '#E0A96D' }]} />
+              <Text style={styles.themeOptionTitle}>Arena</Text>
+              <Text style={styles.themeOptionSub}>Descanso cálido</Text>
+              {preferences.visualTheme === 'arena' && (
+                <View style={[styles.themeActiveBadge, { backgroundColor: '#D97706' }]}>
+                  <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.cardDivider} />
+
+          {/* Frecuencia de Acompañamiento */}
+          <Text style={styles.preferenceSubHeader}>Frecuencia de check-ins emocionales</Text>
+          <Text style={styles.preferenceSubDesc}>
+            Controla con qué ritmo deseas recibir invitaciones a reflexionar en tu diario.
+          </Text>
+
+          <View style={styles.frequencyRow}>
+            <TouchableOpacity
+              style={[
+                styles.frequencyPill,
+                preferences.checkInFrequency === 'low' && styles.frequencyPillActive,
+              ]}
+              onPress={() => void handleSelectFrequency('low')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.frequencyPillText,
+                  preferences.checkInFrequency === 'low' && styles.frequencyPillTextActive,
+                ]}
+              >
+                Baja
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.frequencyPill,
+                preferences.checkInFrequency === 'moderate' && styles.frequencyPillActive,
+              ]}
+              onPress={() => void handleSelectFrequency('moderate')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.frequencyPillText,
+                  preferences.checkInFrequency === 'moderate' && styles.frequencyPillTextActive,
+                ]}
+              >
+                Moderada (Semanal)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.frequencyPill,
+                preferences.checkInFrequency === 'high' && styles.frequencyPillActive,
+              ]}
+              onPress={() => void handleSelectFrequency('high')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.frequencyPillText,
+                  preferences.checkInFrequency === 'high' && styles.frequencyPillTextActive,
+                ]}
+              >
+                Solo en tensión
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Clinical Care Team Card (Gestión y Contacto Directo) */}
         <Text style={styles.sectionLabel}>TU ACOMPAÑAMIENTO CLÍNICO</Text>
         <View style={styles.infoCard}>
           <View style={styles.cardHeaderRow}>
@@ -102,16 +312,42 @@ export default function Profile() {
               </Text>
               <Text style={styles.cardSubTitle}>
                 {therapist
-                  ? `${therapist.specialty ?? 'Psicólogo Clínico'} · Colegiado ${therapist.professionalLicense ?? '4920'}`
-                  : 'Psicólogo Clínico Especialista · Colegiado 4920'}
+                  ? `${therapist.specialty ?? 'Psicólogo Clínico'} · ${formatTherapistLicense(therapist.professionalLicense)}`
+                  : 'Psicólogo Clínico Especialista · Colegiado institucional activo'}
               </Text>
             </View>
           </View>
+
+          {/* Quick contact buttons in profile */}
+          <View style={styles.therapistContactRow}>
+            <TouchableOpacity
+              style={styles.therapistActionBtnPrimary}
+              onPress={handleWhatsApp}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Contactar al terapeuta por WhatsApp"
+            >
+              <MessageSquareIcon size={15} color="#FFFFFF" />
+              <Text style={styles.therapistActionBtnPrimaryText}>WhatsApp</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.therapistActionBtnSecondary}
+              onPress={handleCall}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Llamada telefónica al consultorio del terapeuta"
+            >
+              <PhoneIcon size={15} color="#334155" />
+              <Text style={styles.therapistActionBtnSecondaryText}>Llamar</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.cardDivider} />
           <View style={styles.detailRow}>
             <Text style={styles.detailKey}>Enfoque terapéutico: </Text>
             <Text style={styles.detailVal}>
-              {student?.primaryDiagnosis || 'Manejo de Estrés y Ansiedad Académica'}
+              {formatDiagnosis(student?.primaryDiagnosis)}
             </Text>
           </View>
           <View style={styles.detailRow}>
@@ -179,7 +415,7 @@ export default function Profile() {
                   { color: isBleConnected ? '#15803D' : '#64748B' },
                 ]}
               >
-                {isBleConnected ? 'Conectado en vivo' : 'Sincronizado hace 2 min'}
+                {isBleConnected ? 'Conectado en vivo' : 'Sincronizado'}
               </Text>
             </View>
           </View>
@@ -219,8 +455,8 @@ export default function Profile() {
             <Text style={styles.privacyTitle}>Almacenamiento Protegido y Confidencial</Text>
           </View>
           <Text style={styles.privacyText}>
-            Tus reflexiones y registros corporales permanecen cifrados únicamente
-            en la memoria protegida de tu teléfono y solo se comparten con tu
+            Tus reflexiones y registros biológicos permanecen cifrados únicamente
+            en la memoria segura de tu dispositivo y solo se comparten con tu
             terapeuta bajo tu consentimiento explícito.
           </Text>
           <View style={styles.privacyTagsRow}>
@@ -252,6 +488,55 @@ export default function Profile() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Modal para Nombre de Preferencia */}
+      <Modal visible={isNameModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>¿Cómo quieres que te llamemos?</Text>
+              <TouchableOpacity
+                onPress={() => setIsNameModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <CloseIcon size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalExplanation}>
+              Personaliza tu nombre de pila o apodo favorito para que la app se comunique contigo de forma cercana y humana.
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ej: Javi, Mateo, Caro..."
+              placeholderTextColor="#94A3B8"
+              value={tempPreferredName}
+              onChangeText={setTempPreferredName}
+              autoFocus
+              maxLength={24}
+            />
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setIsNameModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalSaveBtn}
+                onPress={() => void handleSavePreferredName()}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalSaveBtnText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -259,7 +544,7 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8FAFC',
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -277,6 +562,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.large,
     padding: 18,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -304,10 +591,29 @@ const styles = StyleSheet.create({
   identityDetails: {
     flex: 1,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   userName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.text,
+  },
+  preferredBadge: {
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+  },
+  preferredBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0F766E',
   },
   userInstitution: {
     fontSize: 13,
@@ -359,27 +665,29 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#15803D',
   },
   sectionLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: 'bold',
     color: Colors.textSecondary,
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
     marginBottom: 10,
-    marginTop: 6,
+    marginLeft: 2,
   },
   infoCard: {
     backgroundColor: Colors.surface,
-    borderRadius: Radius.medium,
-    padding: 16,
-    marginBottom: 18,
-    elevation: 1,
+    borderRadius: Radius.large,
+    padding: 18,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -387,18 +695,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   iconCircleTeal: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#CCFBF1',
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconCircleIndigo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#EEF2FF',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E0E7FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -406,8 +714,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardMainTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: 'bold',
     color: Colors.text,
   },
   cardSubTitle: {
@@ -415,13 +723,238 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 2,
   },
+  therapistContactRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  therapistActionBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0D9488',
+    paddingVertical: 10,
+    borderRadius: Radius.medium,
+    gap: 6,
+  },
+  therapistActionBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  therapistActionBtnSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingVertical: 10,
+    borderRadius: Radius.medium,
+    gap: 6,
+  },
+  therapistActionBtnSecondaryText: {
+    color: '#334155',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 14,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 6,
+  },
+  detailKey: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  detailVal: {
+    fontSize: 13,
+    color: Colors.text,
+    fontWeight: '600',
+    flex: 1,
+  },
+  detailValGreen: {
+    fontSize: 13,
+    color: '#15803D',
+    fontWeight: '600',
+  },
+  planActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: Radius.medium,
+    marginTop: 10,
+  },
+  planActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  appointmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#E0F2FE',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: Radius.medium,
+    marginTop: 8,
+    gap: 8,
+  },
+  appointmentText: {
+    fontSize: 12,
+    color: '#0284C7',
+    fontWeight: '600',
+    flex: 1,
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  preferenceTextCol: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  preferenceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  preferenceDesc: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  preferenceEditBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  preferenceEditBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  preferenceSubHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  preferenceSubDesc: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+    marginBottom: 10,
+  },
+  themeSelectorRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  themeOptionCard: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    padding: 10,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  themeOptionCardActiveSalvia: {
+    borderColor: '#86A789',
+    backgroundColor: '#F3F7F4',
+  },
+  themeOptionCardActiveNiebla: {
+    borderColor: '#60A5FA',
+    backgroundColor: '#EFF6FF',
+  },
+  themeOptionCardActiveArena: {
+    borderColor: '#E0A96D',
+    backgroundColor: '#FFFBEB',
+  },
+  themeColorDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  themeOptionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  themeOptionSub: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  themeActiveBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#86A789',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  frequencyRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  frequencyPill: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: Radius.medium,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  frequencyPillActive: {
+    backgroundColor: '#334155',
+    borderColor: '#334155',
+  },
+  frequencyPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  frequencyPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
   connectionPill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
     paddingHorizontal: 8,
-    borderRadius: Radius.pill,
-    gap: 5,
+    borderRadius: Radius.large,
+    gap: 6,
   },
   connectionDot: {
     width: 6,
@@ -435,180 +968,180 @@ const styles = StyleSheet.create({
   deviceFeedbackRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginTop: 12,
-    paddingHorizontal: 2,
+    marginTop: 14,
+    gap: 16,
     flexWrap: 'wrap',
   },
   feedbackItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   feedbackText: {
     fontSize: 12,
-    fontWeight: '600',
     color: '#475569',
+    fontWeight: '500',
   },
   demoBadgeMuted: {
     backgroundColor: '#F1F5F9',
     paddingVertical: 2,
     paddingHorizontal: 6,
-    borderRadius: Radius.small,
+    borderRadius: 4,
   },
   demoBadgeMutedText: {
     fontSize: 10,
+    color: '#64748B',
     fontWeight: '600',
-    color: '#94A3B8',
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: '#F8FAFC',
-    marginVertical: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  detailKey: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  detailVal: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.text,
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  detailValGreen: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#059669',
-  },
-  planActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
-    borderRadius: Radius.small,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 10,
-  },
-  planActionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0F766E',
-  },
-  appointmentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: Radius.small,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 8,
-  },
-  appointmentText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0284C7',
   },
   prototypeActionBtn: {
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#99F6E4',
-    borderRadius: Radius.small,
-    paddingVertical: 10,
     alignItems: 'center',
+    paddingVertical: 6,
   },
   prototypeActionBtnText: {
-    color: '#0F766E',
-    fontWeight: '700',
     fontSize: 13,
+    color: '#4F46E5',
+    fontWeight: '600',
   },
   privacyCard: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: Radius.medium,
-    padding: 16,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.large,
+    padding: 18,
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   privacyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   privacyTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#15803D',
+    fontWeight: 'bold',
+    color: Colors.text,
   },
   privacyText: {
     fontSize: 12,
-    color: '#166534',
+    color: '#475569',
     lineHeight: 18,
+    marginBottom: 12,
   },
   privacyTagsRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
+    gap: 6,
     flexWrap: 'wrap',
   },
   privacyTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    paddingVertical: 3,
+    backgroundColor: '#F0FDF4',
+    paddingVertical: 4,
     paddingHorizontal: 8,
-    borderRadius: Radius.small,
+    borderRadius: 6,
     gap: 4,
   },
   privacyTagText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
-    color: '#15803D',
+    color: '#065F46',
   },
   accountSection: {
     alignItems: 'center',
-    gap: Spacing.three,
-    marginTop: 8,
     marginBottom: 20,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    width: '100%',
     backgroundColor: '#FEE2E2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    width: '100%',
+    paddingVertical: 12,
     borderRadius: Radius.medium,
-    paddingVertical: 14,
+    gap: 8,
+    marginBottom: 16,
   },
   logoutButtonText: {
     color: '#DC2626',
-    fontWeight: '700',
-    fontSize: 15,
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   appVersionText: {
     fontSize: 12,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
+    color: '#94A3B8',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.large,
+    padding: 20,
+    width: '100%',
+    maxWidth: 380,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.text,
+    flex: 1,
+  },
+  modalExplanation: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  modalInput: {
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: Radius.medium,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: Colors.text,
+    backgroundColor: '#F8FAFC',
+    marginBottom: 18,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  modalCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: Radius.medium,
+  },
+  modalCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  modalSaveBtn: {
+    backgroundColor: '#0D9488',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: Radius.medium,
+  },
+  modalSaveBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
