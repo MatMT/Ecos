@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import CustomTopBar from '@/components/custom-top-bar';
 import { Colors, Radius } from '@/constants/theme';
@@ -63,10 +63,23 @@ function formatSessionDate(isoString: string): string {
 
 export default function Stats() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const { student, preferences, displayName } = useStudent();
   const { colors } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<StatsTab>('biometrics');
+  const [userSelectedTab, setUserSelectedTab] = useState<StatsTab | null>(null);
+  const [prevParamTab, setPrevParamTab] = useState(params.tab);
+
+  if (params.tab !== prevParamTab) {
+    setPrevParamTab(params.tab);
+    setUserSelectedTab(null);
+  }
+
+  const activeTab: StatsTab =
+    userSelectedTab ??
+    (params.tab === 'sessions' || params.tab === 'clinical' ? 'sessions' : 'biometrics');
+  const setActiveTab = setUserSelectedTab;
+
   const [weeklyData, setWeeklyData] = useState<WeeklyDataPoint[]>(DEFAULT_WEEKLY_DATA);
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [activeInsightIndex, setActiveInsightIndex] = useState<number>(0);

@@ -8,18 +8,16 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 
 import { Colors, Radius } from '@/constants/theme';
 import {
   BatteryIcon,
   CalendarIcon,
   ChevronRightIcon,
-  LockIcon,
   LogOutIcon,
   MessageSquareIcon,
   PhoneIcon,
-  ShieldCheckIcon,
   SlidersIcon,
   UserCheckIcon,
   WatchIcon,
@@ -143,7 +141,17 @@ export default function Profile() {
         </TouchableOpacity>
 
         {/* Clinical Care Team Card (Gestión y Contacto Directo) */}
-        <Text style={styles.sectionLabel}>TU ACOMPAÑAMIENTO CLÍNICO</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionLabel}>TU ACOMPAÑAMIENTO CLÍNICO</Text>
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/stats', params: { tab: 'sessions' } } as Href)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Ir a sesiones y metas en evolución"
+          >
+            <Text style={[styles.sectionActionLink, { color: colors.brand }]}>Sesiones y metas →</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.infoCard}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.iconCircleTeal}>
@@ -205,7 +213,7 @@ export default function Profile() {
           {/* Interactive microinteraction actions */}
           <TouchableOpacity
             style={styles.planActionButton}
-            onPress={() => router.push('/stats')}
+            onPress={() => router.push({ pathname: '/stats', params: { tab: 'sessions' } } as Href)}
             activeOpacity={0.7}
           >
             <Text style={styles.planActionText}>
@@ -216,7 +224,7 @@ export default function Profile() {
 
           <TouchableOpacity
             style={styles.appointmentRow}
-            onPress={() => router.push('/stats')}
+            onPress={() => router.push({ pathname: '/stats', params: { tab: 'sessions' } } as Href)}
             activeOpacity={0.7}
           >
             <CalendarIcon size={14} color="#0284C7" />
@@ -288,32 +296,6 @@ export default function Profile() {
           >
             <Text style={styles.prototypeActionBtnText}>Ver Diagnóstico de Sensores</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Privacy & Data Control Card */}
-        <Text style={styles.sectionLabel}>PRIVACIDAD Y CONTROL DE DATOS</Text>
-        <View style={styles.privacyCard}>
-          <View style={styles.privacyHeader}>
-            <ShieldCheckIcon size={18} color="#10B981" />
-            <Text style={styles.privacyTitle}>Almacenamiento Protegido y Confidencial</Text>
-          </View>
-          <Text style={styles.privacyText}>
-            Tus reflexiones y registros biológicos permanecen cifrados únicamente
-            en la memoria segura de tu dispositivo y solo se comparten con tu
-            terapeuta bajo tu consentimiento explícito.
-          </Text>
-          <View style={styles.privacyTagsRow}>
-            <View style={styles.privacyTag}>
-              <LockIcon size={12} color="#047857" />
-              <Text style={styles.privacyTagText}>Cifrado en Dispositivo</Text>
-            </View>
-            <View style={styles.privacyTag}>
-              <Text style={styles.privacyTagText}>Control de Consentimiento</Text>
-            </View>
-            <View style={styles.privacyTag}>
-              <Text style={styles.privacyTagText}>Retención Segura 48h</Text>
-            </View>
-          </View>
         </View>
 
         {/* Account Actions */}
@@ -706,49 +688,15 @@ const styles = StyleSheet.create({
     color: '#4F46E5',
     fontWeight: '600',
   },
-  privacyCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.large,
-    padding: 18,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  privacyHeader: {
+  sectionHeaderRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 8,
   },
-  privacyTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.text,
-  },
-  privacyText: {
+  sectionActionLink: {
     fontSize: 12,
-    color: '#475569',
-    lineHeight: 18,
-    marginBottom: 12,
-  },
-  privacyTagsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  privacyTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    gap: 4,
-  },
-  privacyTagText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#065F46',
+    fontWeight: '700',
   },
   accountSection: {
     alignItems: 'center',

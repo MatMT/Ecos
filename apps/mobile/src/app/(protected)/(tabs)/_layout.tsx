@@ -29,28 +29,28 @@ export default function TabLayout() {
         name="home"
         options={{
           title: 'Inicio',
-          tabBarIcon: () => <HomeIcon width="90%" height="100%" />,
+          tabBarIcon: ({ color }) => <HomeIcon width={23} height={23} color={color} stroke={color} />,
         }}
       />
       <Tabs.Screen
         name="stats"
         options={{
           title: 'Evolución',
-          tabBarIcon: () => <StatIcon width="90%" height="100%" />,
+          tabBarIcon: ({ color }) => <StatIcon width={23} height={23} color={color} stroke={color} />,
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
           title: 'Diario',
-          tabBarIcon: () => <MessageIcon width="90%" height="100%" />,
+          tabBarIcon: ({ color }) => <MessageIcon width={23} height={23} color={color} stroke={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Perfil',
-          tabBarIcon: () => <UserIcon width="90%" height="100%" />,
+          tabBarIcon: ({ color }) => <UserIcon width={23} height={23} color={color} stroke={color} />,
         }}
       />
       <Tabs.Screen
