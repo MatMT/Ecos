@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
 import { useStudent } from '@/hooks/use-student';
+import { useTheme } from '@/context/theme-context';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 
 function formatAppointmentDate(isoString: string | null | undefined): string {
@@ -59,6 +60,7 @@ export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { student, displayName, preferences } = useStudent();
+  const { colors } = useTheme();
   const { isBleConnected } = useBiometricMonitor();
 
   const userInitial = displayName.charAt(0).toUpperCase();
@@ -82,7 +84,7 @@ export default function Profile() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -92,7 +94,7 @@ export default function Profile() {
         {/* Identity & Institution Card */}
         <View style={styles.identityCard}>
           <View style={styles.avatarRow}>
-            <View style={styles.avatar}>
+            <View style={[styles.avatar, { backgroundColor: colors.brand }]}>
               <Text style={styles.avatarText}>{userInitial}</Text>
             </View>
             <View style={styles.identityDetails}>
@@ -122,19 +124,19 @@ export default function Profile() {
         {/* Acceso Rápido a Preferencias y Personalización (Ajustes desacoplados) */}
         <Text style={styles.sectionLabel}>PREFERENCIAS Y PERSONALIZACIÓN</Text>
         <TouchableOpacity
-          style={styles.settingsNavigationCard}
+          style={[styles.settingsNavigationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={() => router.push('/settings')}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel="Ir a Ajustes y Preferencias"
         >
-          <View style={styles.settingsNavIconBox}>
-            <SlidersIcon size={20} color="#0F766E" strokeWidth={2} />
+          <View style={[styles.settingsNavIconBox, { backgroundColor: colors.brandLight }]}>
+            <SlidersIcon size={20} color={colors.brand} strokeWidth={2} />
           </View>
           <View style={styles.settingsNavTextWrap}>
             <Text style={styles.settingsNavTitle}>Ajustes y Personalización</Text>
             <Text style={styles.settingsNavSub}>
-              Nombre de preferencia, tema ({preferences.visualTheme}) y recordatorios
+              Nombre de preferencia, ambiente visual ({preferences.visualTheme.charAt(0).toUpperCase() + preferences.visualTheme.slice(1)}) y recordatorios
             </Text>
           </View>
           <ChevronRightIcon size={16} color="#64748B" />

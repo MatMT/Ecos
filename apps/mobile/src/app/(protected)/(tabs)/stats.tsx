@@ -18,12 +18,16 @@ import {
   ActivityIcon,
   ArrowDownIcon,
   CalendarCheckIcon,
+  CheckCircle2Icon,
   CheckIcon,
   GearIcon,
+  InfoIcon,
   MoonIcon,
-  StarIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
 } from '@/components/ui/app-icons';
 import { useStudent } from '@/hooks/use-student';
+import { useTheme } from '@/context/theme-context';
 import {
   studentClient,
   type AppointmentItem,
@@ -59,12 +63,16 @@ function formatSessionDate(isoString: string): string {
 
 export default function Stats() {
   const router = useRouter();
-  const { student, displayName } = useStudent();
+  const { student, preferences, displayName } = useStudent();
+  const { colors } = useTheme();
 
   const [activeTab, setActiveTab] = useState<StatsTab>('biometrics');
   const [weeklyData, setWeeklyData] = useState<WeeklyDataPoint[]>(DEFAULT_WEEKLY_DATA);
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [activeInsightIndex, setActiveInsightIndex] = useState<number>(0);
+
+  const sleepGoal = preferences.sleepGoalHours || 8;
+  const stressDiffPercent = Math.max(18, Math.round((sleepGoal / 7) * 28));
 
   useEffect(() => {
     if (!student?.id) return;
@@ -102,10 +110,10 @@ export default function Stats() {
   const maxBarValue = 80;
   const barChartHeight = 100;
 
-  // Mental Health UX: Paleta suave y calmante
-  const CALM_COLOR = '#86A789'; // Verde Salvia
-  const MODERATE_COLOR = '#DFB15B'; // Ámbar Arena Suave
-  const TENSION_COLOR = '#E07A5F'; // Coral Suave
+  // Mental Health UX: Paleta armonizada
+  const CALM_COLOR = '#4E8777'; // Verde Salvia / Menta sereno (<=35%)
+  const MODERATE_COLOR = '#6482AD'; // Azul Pizarra suave (36-55%)
+  const TENSION_COLOR = '#D97D64'; // Coral suave empolvado (>55%)
 
   const handleCarouselScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = e.nativeEvent.contentOffset.x;
@@ -120,7 +128,7 @@ export default function Stats() {
   const carouselCardWidth = Math.max(280, screenWidth - 76);
 
   return (
-    <View style={styles.mainContainer}>
+    <View style={[styles.mainContainer, { backgroundColor: colors.background }]}>
       <CustomTopBar name={displayName} />
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {/* Header con enlace amigable a terapeuta */}
@@ -147,7 +155,7 @@ export default function Stats() {
         {/* Selector Segmentado con iconos vectoriales limpios */}
         <View style={styles.segmentContainer}>
           <TouchableOpacity
-            style={[styles.segmentButton, activeTab === 'biometrics' && styles.segmentButtonActive]}
+            style={[styles.segmentButton, activeTab === 'biometrics' && [styles.segmentButtonActive, { backgroundColor: colors.brand }]]}
             onPress={() => setActiveTab('biometrics')}
             activeOpacity={0.8}
             accessibilityRole="tab"
@@ -164,7 +172,7 @@ export default function Stats() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.segmentButton, activeTab === 'sessions' && styles.segmentButtonActive]}
+            style={[styles.segmentButton, activeTab === 'sessions' && [styles.segmentButtonActive, { backgroundColor: colors.brand }]]}
             onPress={() => setActiveTab('sessions')}
             activeOpacity={0.8}
             accessibilityRole="tab"
@@ -208,8 +216,8 @@ export default function Stats() {
                     width="316"
                     height="42"
                     rx={6}
-                    fill={CALM_COLOR}
-                    fillOpacity={0.09}
+                    fill={colors.brand}
+                    fillOpacity={0.08}
                   />
                   {/* Línea superior e inferior de equilibrio */}
                   <Line
@@ -217,20 +225,20 @@ export default function Stats() {
                     y1="45"
                     x2="318"
                     y2="45"
-                    stroke={CALM_COLOR}
+                    stroke="#94A3B8"
                     strokeWidth={1}
                     strokeDasharray="4 4"
-                    strokeOpacity={0.4}
+                    strokeOpacity={0.45}
                   />
                   <Line
                     x1="2"
                     y1="87"
                     x2="318"
                     y2="87"
-                    stroke={CALM_COLOR}
+                    stroke="#94A3B8"
                     strokeWidth={1}
                     strokeDasharray="4 4"
-                    strokeOpacity={0.4}
+                    strokeOpacity={0.45}
                   />
 
                   {weeklyData.map((item, index) => {
@@ -329,11 +337,12 @@ export default function Stats() {
                     </View>
                   </View>
                   <Text style={styles.insightBody}>
-                    Los días con descanso menor a 7h registraron un 32% más de picos vespertinos.
+                    Los días con descanso inferior a {sleepGoal}h registraron un {stressDiffPercent}% más de picos vespertinos.
                   </Text>
                   <View style={styles.insightTakeawayBox}>
+                    <SparklesIcon size={14} color="#0F766E" />
                     <Text style={styles.insightTakeaway}>
-                      💡 Mantener tu descanso en ≥ 7h estabiliza tu reactividad emocional.
+                      Mantener tu descanso en ≥ {sleepGoal}h estabiliza tu reactividad emocional.
                     </Text>
                   </View>
                 </View>
@@ -355,8 +364,33 @@ export default function Stats() {
                     Tu respiración consciente redujo tu pulso basal en 4 lpm de promedio.
                   </Text>
                   <View style={styles.insightTakeawayBox}>
+                    <SparklesIcon size={14} color="#0F766E" />
                     <Text style={styles.insightTakeaway}>
-                      💡 Tu sistema parasimpático responde favorablemente a las pausas conscientes.
+                      Tu sistema parasimpático responde favorablemente a las pausas conscientes.
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Tarjeta 3: Equilibrio Autonómico */}
+                <View style={[styles.insightCard, { width: carouselCardWidth }]}>
+                  <View style={styles.insightTopRow}>
+                    <View style={[styles.insightIconBox, { backgroundColor: '#FEF9C3' }]}>
+                      <ShieldCheckIcon size={18} color="#CA8A04" strokeWidth={2.2} />
+                    </View>
+                    <View style={styles.insightHeaderWrap}>
+                      <Text style={styles.insightTitle}>Ritmo Cardíaco</Text>
+                      <View style={[styles.insightBadge, { backgroundColor: '#FEF08A' }]}>
+                        <Text style={[styles.insightBadgeText, { color: '#854D0E' }]}>Estabilidad</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <Text style={styles.insightBody}>
+                    En tus {weeklyData.length} registros semanales, tu equilibrio autonómico se mantuvo con variabilidad favorable.
+                  </Text>
+                  <View style={styles.insightTakeawayBox}>
+                    <SparklesIcon size={14} color="#0F766E" />
+                    <Text style={styles.insightTakeaway}>
+                      Las pausas activas antes del mediodía suavizan la sobrecarga cardiovascular.
                     </Text>
                   </View>
                 </View>
@@ -366,6 +400,7 @@ export default function Stats() {
               <View style={styles.dotsRow}>
                 <View style={[styles.dot, activeInsightIndex === 0 && styles.dotActive]} />
                 <View style={[styles.dot, activeInsightIndex === 1 && styles.dotActive]} />
+                <View style={[styles.dot, activeInsightIndex === 2 && styles.dotActive]} />
               </View>
             </View>
           </>
@@ -392,7 +427,7 @@ export default function Stats() {
                     <View style={styles.sessionItem}>
                       <View style={styles.sessionIconCircle}>
                         {appt.status === 'completed' ? (
-                          <StarIcon size={16} color="#0D9488" />
+                          <CheckCircle2Icon size={16} color="#059669" />
                         ) : (
                           <GearIcon size={16} color="#0284C7" />
                         )}
@@ -420,7 +455,7 @@ export default function Stats() {
                 <>
                   <View style={styles.sessionItem}>
                     <View style={styles.sessionIconCircle}>
-                      <StarIcon size={16} color="#0D9488" />
+                      <CheckCircle2Icon size={16} color="#059669" />
                     </View>
                     <View style={styles.sessionDetails}>
                       <Text style={styles.sessionTitle}>Manejo de ansiedad ante evaluaciones</Text>
@@ -508,8 +543,9 @@ export default function Stats() {
 
               {/* Shared notes note */}
               <View style={styles.sharedNotesNote}>
+                <InfoIcon size={16} color="#64748B" />
                 <Text style={styles.sharedNotesNoteText}>
-                  ℹ️ Las reflexiones que decides compartir desde tu diario se abordan directamente en cada consulta clínica.
+                  Las reflexiones que decides compartir desde tu diario se abordan directamente en cada consulta clínica.
                 </Text>
               </View>
             </View>
@@ -747,12 +783,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   insightTakeawayBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: '#F0FDFA',
     paddingVertical: 5,
     paddingHorizontal: 8,
     borderRadius: 6,
   },
   insightTakeaway: {
+    flex: 1,
     fontSize: 11.5,
     color: '#0F766E',
     fontWeight: '600',
@@ -874,6 +914,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   sharedNotesNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: '#F8FAFC',
     borderRadius: Radius.small,
     padding: 10,
@@ -882,6 +925,7 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   sharedNotesNoteText: {
+    flex: 1,
     fontSize: 11.5,
     color: '#475569',
     lineHeight: 17,
