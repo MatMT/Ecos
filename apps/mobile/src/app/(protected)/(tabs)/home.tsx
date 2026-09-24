@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutAnimation,
   Platform,
@@ -28,6 +28,8 @@ import {
   WatchIcon,
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
+import { useStudent } from '@/hooks/use-student';
+import { studentClient } from '@/services/api/student-client';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import { useTodayLabel } from '@/hooks/use-today-label';
 import { triageMessageManager } from '@/services/ai/ai-triage-messages';
@@ -60,6 +62,7 @@ function greetingNameFrom(email: string | undefined): string {
 export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
+  const { student } = useStudent();
   const todayLabel = useTodayLabel();
   const {
     bpm,
@@ -70,6 +73,36 @@ export default function Home() {
   } = useBiometricMonitor();
 
   const [showMetrics, setShowMetrics] = useState<boolean>(false);
+  const [weeklySleep, setWeeklySleep] = useState<DailySleepData[]>(WEEKLY_SLEEP_DATA);
+  const [avgSleepHours, setAvgSleepHours] = useState<number>(7.7);
+
+  useEffect(() => {
+    if (!student?.id) return;
+    studentClient
+      .getBiometricTrends(student.id)
+      .then((trends) => {
+        if (trends && trends.length > 0) {
+          const dayLabels = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+          const mapped: DailySleepData[] = trends.slice(-7).map((t) => {
+            const d = new Date(t.date);
+            return {
+              day: dayLabels[d.getDay()],
+              hours: t.avgSleepQualityHours
+                ? Number(t.avgSleepQualityHours.toFixed(1))
+                : 7.0,
+            };
+          });
+          if (mapped.length > 0) {
+            setWeeklySleep(mapped);
+            const sum = mapped.reduce((acc, cur) => acc + cur.hours, 0);
+            setAvgSleepHours(Number((sum / mapped.length).toFixed(1)));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [student?.id]);
+
+  const displayName = student?.fullName || greetingNameFrom(user?.email);
 
   const toggleMetrics = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -106,10 +139,12 @@ export default function Home() {
   };
 
   const banner = getAiBannerColor();
+  const avgHoursPart = Math.floor(avgSleepHours);
+  const avgMinsPart = Math.round((avgSleepHours - avgHoursPart) * 60);
 
   return (
     <View style={styles.mainContainer}>
-      <CustomTopBar name={greetingNameFrom(user?.email)} />
+      <CustomTopBar name={displayName} />
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
@@ -251,7 +286,7 @@ export default function Home() {
             <View style={styles.gridRow}>
               <MetricCard
                 label="Calidad de Sueño"
-                value="7.8"
+                value={avgSleepHours.toFixed(1)}
                 unit="h"
                 status="normal"
               />
@@ -288,13 +323,15 @@ export default function Home() {
               </View>
             </View>
             <View style={styles.sleepQualityBadge}>
-              <Text style={styles.sleepQualityBadgeText}>7.7h · Reparador</Text>
+              <Text style={styles.sleepQualityBadgeText}>
+                {avgSleepHours}h · {avgSleepHours >= 7 ? 'Reparador' : 'Ligero'}
+              </Text>
             </View>
           </View>
 
           {/* Headline */}
           <Text style={styles.sleepHeadline}>
-            En los últimos 7 días, tu promedio de descanso ha sido de 7 h 42 min.
+            En los últimos 7 días, tu promedio de descanso ha sido de {avgHoursPart} h {avgMinsPart} min.
           </Text>
 
           {/* Chart & stats area: Clean 2-column flexbox layout without overlapping lines */}
@@ -304,9 +341,9 @@ export default function Home() {
               <Text style={styles.sleepAverageSubLabel}>PROMEDIO</Text>
               <Text style={styles.sleepAverageLabel}>Tiempo Dormido</Text>
               <View style={styles.sleepTimeRow}>
-                <Text style={styles.sleepBigNumber}>7</Text>
+                <Text style={styles.sleepBigNumber}>{avgHoursPart}</Text>
                 <Text style={styles.sleepBigUnit}>hr </Text>
-                <Text style={styles.sleepBigNumber}>42</Text>
+                <Text style={styles.sleepBigNumber}>{avgMinsPart}</Text>
                 <Text style={styles.sleepBigUnit}>min</Text>
               </View>
               <View style={styles.sleepGoalPill}>
@@ -329,7 +366,7 @@ export default function Home() {
                   strokeOpacity="0.35"
                 />
 
-                {WEEKLY_SLEEP_DATA.map((item, index) => {
+                {weeklySleep.map((item, index) => {
                   const barWidth = 12;
                   const totalW = 165;
                   const spacing = (totalW - barWidth * 7) / 6;
@@ -337,7 +374,7 @@ export default function Home() {
                   const maxH = 55;
                   const height = Math.min(maxH, (item.hours / 10) * maxH);
                   const y = 80 - height;
-                  const isToday = index === WEEKLY_SLEEP_DATA.length - 1;
+                  const isToday = index === weeklySleep.length - 1;
 
                   return (
                     <React.Fragment key={item.day + index}>

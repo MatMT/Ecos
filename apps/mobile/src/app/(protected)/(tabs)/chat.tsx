@@ -33,6 +33,7 @@ import {
   ZapIcon,
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
+import { useStudent } from '@/hooks/use-student';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import {
   listJournalEntries,
@@ -209,6 +210,7 @@ function renderEmotionIcon(key: string, size = 16, isSelected = false) {
 
 export default function ChatScreen() {
   const { user } = useAuth();
+  const { student } = useStudent();
   const { bpm, stress, isBleConnected, trafficState } = useBiometricMonitor();
 
   // Journal Entries State
@@ -275,33 +277,44 @@ export default function ChatScreen() {
   };
 
   const handleShareWithTherapist = (entry: LocalJournalEntry) => {
+    const therapistName = student?.assignedTherapist?.fullName || 'su terapeuta asignado';
     Alert.alert(
       'Compartir con su terapeuta',
-      '¿Desea compartir esta reflexión con el Dr. Carlos Méndez? Esta acción creará una copia inmutable visible para su psicólogo en su expediente clínico.',
+      `¿Desea compartir esta reflexión con ${therapistName}? Esta acción creará una copia inmutable visible para su psicólogo en su expediente clínico.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Compartir',
           onPress: async () => {
+            if (!student?.id) {
+              Alert.alert(
+                'Atención',
+                'No se ha podido identificar su expediente de estudiante. Por favor, verifique su conexión e intente nuevamente.'
+              );
+              return;
+            }
+
             const snapshotId = `snap_${Date.now()}`;
             try {
               await markJournalEntryShared(entry.id, snapshotId);
 
               const payload = {
-                therapistId: 1,
+                therapistId: student.assignedTherapist?.id,
                 contentType: 'journal_entry',
                 sourceLocalId: entry.id,
                 content: `[Emoción: ${entry.primary_emotion}, Ánimo: ${entry.mood_score}/5, FC: ${entry.associated_bpm ?? '--'} bpm]\n${entry.narrative_text}`,
               };
 
+              const endpoint = `/api/v1/students/${student.id}/shared-content`;
+
               authClient
-                .apiFetch('/api/v1/students/me/shared-content', {
+                .apiFetch(endpoint, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(payload),
                 })
                 .catch(() => {
-                  return enqueueSync('/api/v1/students/shared-content', payload);
+                  return enqueueSync(endpoint, payload);
                 });
 
               await refreshJournal();
@@ -342,9 +355,11 @@ export default function ChatScreen() {
         detail: `Modo continuo · Lectura estimada: ${bpm ?? 72} bpm`,
       };
 
+  const displayName = student?.fullName || greetingNameFrom(user?.email);
+
   return (
     <View style={styles.mainContainer}>
-      <CustomTopBar name={greetingNameFrom(user?.email)} />
+      <CustomTopBar name={displayName} />
 
       {/* Screen Subheader */}
       <View style={styles.subHeader}>
@@ -438,7 +453,11 @@ export default function ChatScreen() {
                   {isShared ? (
                     <View style={styles.sharedBadge}>
                       <CheckIcon size={12} color="#15803D" />
-                      <Text style={styles.sharedBadgeText}>Compartido con Dr. Méndez</Text>
+                      <Text style={styles.sharedBadgeText}>
+                        {student?.assignedTherapist?.fullName
+                          ? `Compartido con ${student.assignedTherapist.fullName}`
+                          : 'Compartido con terapeuta'}
+                      </Text>
                     </View>
                   ) : (
                     <TouchableOpacity

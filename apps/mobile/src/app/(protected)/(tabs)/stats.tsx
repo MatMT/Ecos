@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Linking,
   ScrollView,
@@ -21,6 +21,11 @@ import {
   StarIcon,
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
+import { useStudent } from '@/hooks/use-student';
+import {
+  studentClient,
+  type AppointmentItem,
+} from '@/services/api/student-client';
 
 function greetingNameFrom(email: string | undefined): string {
   if (!email) return 'Usuario';
@@ -28,12 +33,30 @@ function greetingNameFrom(email: string | undefined): string {
   return localPart.charAt(0).toUpperCase() + localPart.slice(1);
 }
 
+function therapistInitials(name: string | null | undefined): string {
+  if (!name) return 'CM';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function formatSessionDate(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    const day = d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    const time = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    return `${day} · ${time}`;
+  } catch {
+    return 'Reciente';
+  }
+}
+
 interface WeeklyDataPoint {
   day: string;
   minutesHighStress: number;
 }
 
-const WEEKLY_DATA: WeeklyDataPoint[] = [
+const DEFAULT_WEEKLY_DATA: WeeklyDataPoint[] = [
   { day: 'L', minutesHighStress: 45 },
   { day: 'M', minutesHighStress: 70 },
   { day: 'M', minutesHighStress: 35 },
@@ -45,13 +68,57 @@ const WEEKLY_DATA: WeeklyDataPoint[] = [
 
 export default function Stats() {
   const { user } = useAuth();
+  const { student } = useStudent();
+
+  const [weeklyData, setWeeklyData] = useState<WeeklyDataPoint[]>(DEFAULT_WEEKLY_DATA);
+  const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
+
+  useEffect(() => {
+    if (!student?.id) return;
+
+    studentClient
+      .getBiometricTrends(student.id)
+      .then((trends) => {
+        if (trends && trends.length > 0) {
+          const dayLabels = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+          const mapped: WeeklyDataPoint[] = trends.slice(-7).map((t) => {
+            const d = new Date(t.date);
+            const stressVal = t.avgStressLevel != null ? Math.round(t.avgStressLevel * 100) : 30;
+            return {
+              day: dayLabels[d.getDay()],
+              minutesHighStress: stressVal,
+            };
+          });
+          if (mapped.length > 0) {
+            setWeeklyData(mapped);
+          }
+        }
+      })
+      .catch(() => {});
+
+    studentClient
+      .getAppointments(student.id)
+      .then((items) => {
+        if (items && Array.isArray(items)) {
+          setAppointments(items);
+        }
+      })
+      .catch(() => {});
+  }, [student?.id]);
+
+  const therapist = student?.assignedTherapist;
 
   const handleWhatsApp = () => {
-    void Linking.openURL('https://wa.me/50370000000?text=Hola%20Dr.%20Méndez,%20le%20contacto%20desde%20Ecos.');
+    const rawPhone = therapist?.phone || '50370000000';
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+    const therapistName = therapist?.fullName || 'Doctor';
+    const encoded = encodeURIComponent(`Hola ${therapistName}, le contacto desde Ecos.`);
+    void Linking.openURL(`https://wa.me/${cleanPhone}?text=${encoded}`);
   };
 
   const handleCall = () => {
-    void Linking.openURL('tel:+50322744444');
+    const rawPhone = therapist?.phone || '+50322744444';
+    void Linking.openURL(`tel:${rawPhone}`);
   };
 
   const maxBarValue = 80;
@@ -59,13 +126,13 @@ export default function Stats() {
 
   return (
     <View style={styles.mainContainer}>
-      <CustomTopBar name={greetingNameFrom(user?.email)} />
+      <CustomTopBar name={student?.fullName || greetingNameFrom(user?.email)} />
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Tu Evolución</Text>
           <Text style={styles.subtitle}>
-            Has logrado reducir tus picos de estrés un 14% esta semana. ¡Buen trabajo!
+            Has logrado regular tus niveles de estrés durante esta semana. ¡Excelente progreso!
           </Text>
         </View>
 
@@ -78,17 +145,20 @@ export default function Stats() {
               <ArrowDownIcon size={12} color="#15803D" />
             </View>
           </View>
-          <Text style={styles.chartCaption}>Minutos registrados en estrés alto por día</Text>
+          <Text style={styles.chartCaption}>Nivel promedio estimado de tensión por día</Text>
 
           <View style={styles.histogramWrapper}>
             <Svg height="140" width="100%" viewBox="0 0 320 140">
-              {WEEKLY_DATA.map((item, index) => {
+              {weeklyData.map((item, index) => {
                 const barWidth = 26;
                 const spacing = (320 - barWidth * 7) / 8;
                 const x = spacing + index * (barWidth + spacing);
-                const height = (item.minutesHighStress / maxBarValue) * barChartHeight;
+                const height = Math.min(
+                  barChartHeight,
+                  (item.minutesHighStress / maxBarValue) * barChartHeight,
+                );
                 const y = 110 - height;
-                const isSelected = item.day === 'J'; // e.g. lowest day
+                const isSelected = item.minutesHighStress <= 30;
 
                 return (
                   <React.Fragment key={item.day + index}>
@@ -98,7 +168,13 @@ export default function Stats() {
                       width={barWidth}
                       height={height}
                       rx={6}
-                      fill={isSelected ? '#10B981' : item.minutesHighStress > 50 ? '#F87171' : '#38BDF8'}
+                      fill={
+                        isSelected
+                          ? '#10B981'
+                          : item.minutesHighStress > 50
+                          ? '#F87171'
+                          : '#38BDF8'
+                      }
                     />
                     <SvgText
                       x={x + barWidth / 2}
@@ -120,27 +196,54 @@ export default function Stats() {
         {/* Recent Sessions */}
         <View style={styles.card}>
           <Text style={styles.sectionHeader}>SESIONES CLÍNICAS RECIENTES</Text>
-          <View style={styles.sessionItem}>
-            <View style={styles.sessionIconCircle}>
-              <StarIcon size={16} color="#0284C7" />
-            </View>
-            <View style={styles.sessionDetails}>
-              <Text style={styles.sessionTitle}>Manejo de ansiedad ante evaluaciones</Text>
-              <Text style={styles.sessionSubtitle}>Hace 2 días · 45 min · Acuerdos cumplidos</Text>
-            </View>
-          </View>
+          {appointments.length > 0 ? (
+            appointments.slice(0, 3).map((appt, idx) => (
+              <React.Fragment key={appt.id}>
+                {idx > 0 && <View style={styles.sessionDivider} />}
+                <View style={styles.sessionItem}>
+                  <View style={styles.sessionIconCircle}>
+                    {appt.status === 'completed' ? (
+                      <StarIcon size={16} color="#0284C7" />
+                    ) : (
+                      <GearIcon size={16} color="#0284C7" />
+                    )}
+                  </View>
+                  <View style={styles.sessionDetails}>
+                    <Text style={styles.sessionTitle}>
+                      {appt.reason || 'Sesión de Acompañamiento Psicológico'}
+                    </Text>
+                    <Text style={styles.sessionSubtitle}>
+                      {formatSessionDate(appt.appointmentDate)} · Estado: {appt.status === 'completed' ? 'Completada' : 'Programada'}
+                    </Text>
+                  </View>
+                </View>
+              </React.Fragment>
+            ))
+          ) : (
+            <>
+              <View style={styles.sessionItem}>
+                <View style={styles.sessionIconCircle}>
+                  <StarIcon size={16} color="#0284C7" />
+                </View>
+                <View style={styles.sessionDetails}>
+                  <Text style={styles.sessionTitle}>Manejo de ansiedad ante evaluaciones</Text>
+                  <Text style={styles.sessionSubtitle}>Hace 2 días · 45 min · Acuerdos cumplidos</Text>
+                </View>
+              </View>
 
-          <View style={styles.sessionDivider} />
+              <View style={styles.sessionDivider} />
 
-          <View style={styles.sessionItem}>
-            <View style={styles.sessionIconCircle}>
-              <GearIcon size={16} color="#0284C7" />
-            </View>
-            <View style={styles.sessionDetails}>
-              <Text style={styles.sessionTitle}>Exploración de disparadores emocionales</Text>
-              <Text style={styles.sessionSubtitle}>Semana pasada · 60 min · Plan activo</Text>
-            </View>
-          </View>
+              <View style={styles.sessionItem}>
+                <View style={styles.sessionIconCircle}>
+                  <GearIcon size={16} color="#0284C7" />
+                </View>
+                <View style={styles.sessionDetails}>
+                  <Text style={styles.sessionTitle}>Exploración de disparadores emocionales</Text>
+                  <Text style={styles.sessionSubtitle}>Semana pasada · 60 min · Plan activo</Text>
+                </View>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Assigned Therapist Card */}
@@ -148,12 +251,22 @@ export default function Stats() {
           <Text style={styles.sectionHeader}>TU TERAPEUTA ASIGNADO</Text>
           <View style={styles.therapistInfo}>
             <View style={styles.therapistAvatar}>
-              <Text style={styles.therapistInitials}>CM</Text>
+              <Text style={styles.therapistInitials}>
+                {therapistInitials(therapist?.fullName)}
+              </Text>
             </View>
             <View style={styles.therapistTextContainer}>
-              <Text style={styles.therapistName}>Dr. Carlos Méndez</Text>
-              <Text style={styles.therapistRole}>Psicólogo Clínico Especialista</Text>
-              <Text style={styles.therapistSub}>Colegiado No. 4920 · Clínica Central</Text>
+              <Text style={styles.therapistName}>
+                {therapist?.fullName || 'Dr. Carlos Méndez'}
+              </Text>
+              <Text style={styles.therapistRole}>
+                {therapist?.specialty || 'Psicólogo Clínico Especialista'}
+              </Text>
+              <Text style={styles.therapistSub}>
+                {therapist?.professionalLicense
+                  ? `Colegiado No. ${therapist.professionalLicense} · Clínica Institucional`
+                  : 'Colegiado No. 4920 · Clínica Central'}
+              </Text>
             </View>
           </View>
 

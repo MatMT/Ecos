@@ -21,6 +21,7 @@ import {
   WatchIcon,
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
+import { useStudent } from '@/hooks/use-student';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 
 function formatDisplayName(email: string | undefined): string {
@@ -32,13 +33,30 @@ function formatDisplayName(email: string | undefined): string {
     .join(' ');
 }
 
+function formatAppointmentDate(isoString: string | null | undefined): string {
+  if (!isoString) return 'Sin sesiones programadas';
+  try {
+    const d = new Date(isoString);
+    const dayName = d.toLocaleDateString('es-ES', { weekday: 'long' });
+    const time = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+    return `Próxima sesión: ${capitalizedDay} ${time}`;
+  } catch {
+    return 'Próxima sesión programada';
+  }
+}
+
 export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { student } = useStudent();
   const { isBleConnected } = useBiometricMonitor();
 
-  const displayName = formatDisplayName(user?.email);
+  const displayName = student?.fullName || formatDisplayName(user?.email);
   const userInitial = displayName.charAt(0).toUpperCase();
+  const institutionName = student?.institution?.name || 'Universidad Don Bosco';
+  const carnetLabel = student?.studentCode ? `Carnet: ${student.studentCode}` : 'Carnet: UDB-2024-0491';
+  const therapist = student?.assignedTherapist;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -56,11 +74,11 @@ export default function Profile() {
             </View>
             <View style={styles.identityDetails}>
               <Text style={styles.userName}>{displayName}</Text>
-              <Text style={styles.userInstitution}>Universidad Don Bosco</Text>
+              <Text style={styles.userInstitution}>{institutionName}</Text>
               <Text style={styles.userEmail}>{user?.email ?? 'usuario@ecos.local'}</Text>
               <View style={styles.badgeRow}>
                 <View style={styles.carnetBadge}>
-                  <Text style={styles.carnetText}>Carnet: UDB-2024-0491</Text>
+                  <Text style={styles.carnetText}>{carnetLabel}</Text>
                 </View>
                 <View style={styles.statusBadge}>
                   <View style={styles.greenDot} />
@@ -79,18 +97,30 @@ export default function Profile() {
               <UserCheckIcon size={20} color="#0F766E" />
             </View>
             <View style={styles.cardHeaderTextWrap}>
-              <Text style={styles.cardMainTitle}>Dr. Carlos Méndez</Text>
-              <Text style={styles.cardSubTitle}>Psicólogo Clínico Especialista · Colegiado 4920</Text>
+              <Text style={styles.cardMainTitle}>
+                {therapist?.fullName ?? 'Dr. Carlos Méndez'}
+              </Text>
+              <Text style={styles.cardSubTitle}>
+                {therapist
+                  ? `${therapist.specialty ?? 'Psicólogo Clínico'} · Colegiado ${therapist.professionalLicense ?? '4920'}`
+                  : 'Psicólogo Clínico Especialista · Colegiado 4920'}
+              </Text>
             </View>
           </View>
           <View style={styles.cardDivider} />
           <View style={styles.detailRow}>
             <Text style={styles.detailKey}>Enfoque terapéutico: </Text>
-            <Text style={styles.detailVal}>Manejo de Estrés y Ansiedad Académica</Text>
+            <Text style={styles.detailVal}>
+              {student?.primaryDiagnosis || 'Manejo de Estrés y Ansiedad Académica'}
+            </Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailKey}>Plan de atención: </Text>
-            <Text style={styles.detailValGreen}>Activo · 3 metas en curso</Text>
+            <Text style={styles.detailValGreen}>
+              {student && student.activeGoalsCount > 0
+                ? `Activo · ${student.activeGoalsCount} meta(s) en curso`
+                : 'Activo · 3 metas en curso'}
+            </Text>
           </View>
 
           {/* Interactive microinteraction actions */}
@@ -99,7 +129,9 @@ export default function Profile() {
             onPress={() => router.push('/stats')}
             activeOpacity={0.7}
           >
-            <Text style={styles.planActionText}>Ver Objetivos del Plan (3)</Text>
+            <Text style={styles.planActionText}>
+              Ver Objetivos del Plan ({student?.activeGoalsCount || 3})
+            </Text>
             <ChevronRightIcon size={14} color="#0F766E" />
           </TouchableOpacity>
 
@@ -109,7 +141,9 @@ export default function Profile() {
             activeOpacity={0.7}
           >
             <CalendarIcon size={14} color="#0284C7" />
-            <Text style={styles.appointmentText}>Próxima sesión: Jueves 15:00 · Ver agenda</Text>
+            <Text style={styles.appointmentText}>
+              {formatAppointmentDate(student?.nextAppointment?.appointmentDate)} · Ver agenda
+            </Text>
             <ChevronRightIcon size={14} color="#0284C7" />
           </TouchableOpacity>
         </View>

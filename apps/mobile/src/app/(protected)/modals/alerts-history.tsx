@@ -78,19 +78,7 @@ export default function AlertsHistoryModal() {
           });
 
         if (mounted) {
-          // If no alerts found yet, provide the active session dispatch fallback
           const combined = [...pendingAlerts, ...remoteAlerts];
-          if (combined.length === 0) {
-            combined.push({
-              id: 16,
-              alertType: 'panic_button',
-              priority: 'critical',
-              description: 'Pulsación voluntaria del botón de pánico SOS. Frecuencia cardíaca registrada: 120 bpm (Actividad: 45%).',
-              contextSummary: 'Pulsación voluntaria del botón de pánico SOS.',
-              status: 'new',
-              createdAt: new Date().toISOString(),
-            });
-          }
           setAlerts(combined);
           setLoading(false);
         }
