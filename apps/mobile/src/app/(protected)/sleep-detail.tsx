@@ -143,10 +143,10 @@ export default function SleepDetailScreen() {
 
   const handleTipScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = e.nativeEvent.contentOffset.x;
-    const width = e.nativeEvent.layoutMeasurement.width;
-    if (width > 0) {
-      const idx = Math.round(offsetX / width);
-      setActiveTipIndex(idx);
+    const interval = tipCardWidth + 12;
+    if (interval > 0) {
+      const idx = Math.round(offsetX / interval);
+      setActiveTipIndex(Math.max(0, Math.min(SLEEP_HYGIENE_TIPS.length - 1, idx)));
     }
   };
 
@@ -155,7 +155,7 @@ export default function SleepDetailScreen() {
   const daysMetGoal = weeklyRecords.filter((r) => r.hours >= currentGoal).length;
 
   const screenWidth = Dimensions.get('window').width;
-  const tipCardWidth = Math.max(270, screenWidth - 72);
+  const tipCardWidth = Math.max(260, screenWidth - 66);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -263,7 +263,9 @@ export default function SleepDetailScreen() {
         <View style={[styles.tipsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ScrollView
             horizontal
-            pagingEnabled
+            decelerationRate="fast"
+            snapToInterval={tipCardWidth + 12}
+            snapToAlignment="start"
             showsHorizontalScrollIndicator={false}
             onScroll={handleTipScroll}
             scrollEventThrottle={16}

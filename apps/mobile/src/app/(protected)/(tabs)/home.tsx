@@ -112,21 +112,21 @@ export default function Home() {
       case 'RED':
         return {
           tag: '● ESTADO CRÍTICO · IA',
-          color: Colors.danger,
-          bg: Colors.dangerSurface,
+          color: colors.danger,
+          bg: colors.dangerSurface,
         };
       case 'YELLOW':
         return {
           tag: '● ATENCIÓN PREVENTIVA · IA',
-          color: '#EAB308',
-          bg: '#FEF9C3',
+          color: colors.status.elevated,
+          bg: colors.surfaceSubtle,
         };
       case 'GREEN':
       default:
         return {
           tag: '● ESTADO ACTUAL · IA',
-          color: Colors.status.normal,
-          bg: Colors.surface,
+          color: colors.status.normal,
+          bg: colors.surface,
         };
     }
   };
@@ -316,9 +316,9 @@ export default function Home() {
               <View style={[styles.sleepIconCircle, { backgroundColor: colors.brandLight }]}>
                 <BedIcon size={18} color={colors.brand} />
               </View>
-              <View>
-                <Text style={styles.sleepTitle}>Sueño y Descanso</Text>
-                <Text style={styles.sleepSubLabel}>Últimos 7 días · Toca para ver detalle</Text>
+              <View style={styles.sleepTitleTextWrap}>
+                <Text style={styles.sleepTitle} numberOfLines={1}>Sueño y Descanso</Text>
+                <Text style={styles.sleepSubLabel} numberOfLines={1}>Últimos 7 días · Toca para ver detalle</Text>
               </View>
             </View>
             <View style={styles.sleepQualityBadgeRow}>
@@ -364,66 +364,88 @@ export default function Home() {
                 const targetY = Math.round(baseY - (Math.min(10, sleepGoal) / 10) * maxBarH);
                 const clampedAvg = Math.max(2, Math.min(10, avgSleepHours));
                 const avgY = Math.round(baseY - (clampedAvg / 10) * maxBarH);
-                const avgLabelY = Math.abs(avgY - targetY) < 11
-                  ? avgY >= targetY
-                    ? Math.max(avgY + 3, 50)
-                    : Math.min(avgY + 3, 26)
-                  : avgY + 3;
+                const isClose = Math.abs(sleepGoal - avgSleepHours) < 0.5;
 
                 return (
-                  <Svg width="100%" height={112} viewBox="0 0 180 112">
+                  <Svg width="100%" height={112} viewBox="0 0 210 112">
                     {/* Soft shaded area representing user's average restful zone */}
                     <Rect
                       x="0"
                       y={avgY}
-                      width="130"
+                      width="128"
                       height={Math.max(0, baseY - avgY)}
-                      fill="#0D9488"
-                      fillOpacity={0.05}
+                      fill={colors.brand}
+                      fillOpacity={0.06}
                       rx={3}
                     />
 
-                    {/* Dotted guideline for Target with explicit label */}
-                    <Line
-                      x1="0"
-                      y1={targetY}
-                      x2="128"
-                      y2={targetY}
-                      stroke="#0D9488"
-                      strokeWidth={1.2}
-                      strokeDasharray="3 3"
-                      strokeOpacity="0.55"
-                    />
-                    <SvgText
-                      x="132"
-                      y={targetY + 3}
-                      fill="#0F766E"
-                      fontSize="8"
-                      fontWeight="700"
-                    >
-                      {sleepGoal}h (Meta)
-                    </SvgText>
+                    {isClose ? (
+                      /* When difference is under 0.5h, unify into a single guideline to prevent visual collision */
+                      <>
+                        <Line
+                          x1="0"
+                          y1={targetY}
+                          x2="128"
+                          y2={targetY}
+                          stroke={colors.brand}
+                          strokeWidth={1.2}
+                          strokeDasharray="3 3"
+                          strokeOpacity={0.65}
+                        />
+                        <SvgText
+                          x="132"
+                          y={targetY + 3}
+                          fill={colors.brand}
+                          fontSize="7.5"
+                          fontWeight="700"
+                        >
+                          Meta: {sleepGoal}h · Prom: {avgSleepHours}h
+                        </SvgText>
+                      </>
+                    ) : (
+                      /* Distinct separated guidelines */
+                      <>
+                        <Line
+                          x1="0"
+                          y1={targetY}
+                          x2="128"
+                          y2={targetY}
+                          stroke={colors.brand}
+                          strokeWidth={1.2}
+                          strokeDasharray="3 3"
+                          strokeOpacity={0.55}
+                        />
+                        <SvgText
+                          x="132"
+                          y={targetY + 3}
+                          fill={colors.brand}
+                          fontSize="7.5"
+                          fontWeight="700"
+                        >
+                          Meta: {sleepGoal}h
+                        </SvgText>
 
-                    {/* Subtle dashed line for real weekly average with explicit label */}
-                    <Line
-                      x1="0"
-                      y1={avgY}
-                      x2="128"
-                      y2={avgY}
-                      stroke="#64748B"
-                      strokeWidth="1"
-                      strokeDasharray="2 3"
-                      strokeOpacity="0.45"
-                    />
-                    <SvgText
-                      x="132"
-                      y={avgLabelY}
-                      fill="#64748B"
-                      fontSize="7.5"
-                      fontWeight="600"
-                    >
-                      {avgSleepHours}h Prom
-                    </SvgText>
+                        <Line
+                          x1="0"
+                          y1={avgY}
+                          x2="128"
+                          y2={avgY}
+                          stroke="#64748B"
+                          strokeWidth={1}
+                          strokeDasharray="2 3"
+                          strokeOpacity={0.45}
+                        />
+                        <SvgText
+                          x="132"
+                          y={avgY >= targetY ? Math.max(avgY + 3, targetY + 12) : Math.min(avgY + 3, targetY - 6)}
+                          fill="#64748B"
+                          fontSize="7.5"
+                          fontWeight="600"
+                        >
+                          Prom: {avgSleepHours}h
+                        </SvgText>
+                      </>
+                    )}
 
                     {/* 7 Daily Bars */}
                     {weeklySleep.map((item, index) => {
@@ -717,9 +739,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sleepTitleGroup: {
+    flex: 1,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginRight: 8,
+  },
+  sleepTitleTextWrap: {
+    flex: 1,
+    flexShrink: 1,
   },
   sleepIconCircle: {
     width: 36,
@@ -748,6 +777,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   sleepQualityBadgeRow: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

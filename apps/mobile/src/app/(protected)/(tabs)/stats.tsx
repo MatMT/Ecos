@@ -117,15 +117,15 @@ export default function Stats() {
 
   const handleCarouselScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = e.nativeEvent.contentOffset.x;
-    const width = e.nativeEvent.layoutMeasurement.width;
-    if (width > 0) {
-      const index = Math.round(offsetX / width);
-      setActiveInsightIndex(index);
+    const interval = carouselCardWidth + 12;
+    if (interval > 0) {
+      const index = Math.round(offsetX / interval);
+      setActiveInsightIndex(Math.max(0, Math.min(2, index)));
     }
   };
 
   const screenWidth = Dimensions.get('window').width;
-  const carouselCardWidth = Math.max(280, screenWidth - 76);
+  const carouselCardWidth = Math.max(260, screenWidth - 74);
 
   return (
     <View style={[styles.mainContainer, { backgroundColor: colors.background }]}>
@@ -317,7 +317,9 @@ export default function Stats() {
 
               <ScrollView
                 horizontal
-                pagingEnabled
+                decelerationRate="fast"
+                snapToInterval={carouselCardWidth + 12}
+                snapToAlignment="start"
                 showsHorizontalScrollIndicator={false}
                 onScroll={handleCarouselScroll}
                 scrollEventThrottle={16}
