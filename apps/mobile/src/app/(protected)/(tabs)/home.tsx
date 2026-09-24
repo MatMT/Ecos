@@ -29,6 +29,7 @@ import {
   WatchIcon,
 } from '@/components/ui/app-icons';
 import { useStudent } from '@/hooks/use-student';
+import { useTheme } from '@/context/theme-context';
 import { studentClient } from '@/services/api/student-client';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import { useTodayLabel } from '@/hooks/use-today-label';
@@ -56,6 +57,7 @@ const WEEKLY_SLEEP_DATA: DailySleepData[] = [
 export default function Home() {
   const router = useRouter();
   const { student, displayName, preferences } = useStudent();
+  const { colors } = useTheme();
   const todayLabel = useTodayLabel();
   const {
     bpm,
@@ -134,7 +136,7 @@ export default function Home() {
   const avgMinsPart = Math.round((avgSleepHours - avgHoursPart) * 60);
 
   return (
-    <View style={styles.mainContainer}>
+    <View style={[styles.mainContainer, { backgroundColor: colors.background }]}>
       <CustomTopBar name={displayName} />
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
@@ -187,8 +189,8 @@ export default function Home() {
             onPress={() => router.push('/modals/breathing-guide' as Href)}
             activeOpacity={0.85}
           >
-            <View style={styles.actionBreathingIconWrap}>
-              <LeafIcon size={20} color="#0F766E" />
+            <View style={[styles.actionBreathingIconWrap, { backgroundColor: colors.brandLight }]}>
+              <LeafIcon size={20} color={colors.brand} />
             </View>
             <View style={styles.actionTextWrap}>
               <Text style={styles.actionBreathingTitle}>Iniciar Respiración</Text>
@@ -302,7 +304,7 @@ export default function Home() {
         {/* Monitoreo de Sueño y Descanso (Diseño armonizado con Ecos) */}
         <Text style={styles.sectionHeaderLabel}>MONITOREO DE SUEÑO Y DESCANSO</Text>
         <TouchableOpacity
-          style={styles.sleepCard}
+          style={[styles.sleepCard, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={() => router.push('/sleep-detail')}
           activeOpacity={0.88}
           accessibilityRole="button"
@@ -311,8 +313,8 @@ export default function Home() {
           {/* Header row with Bed Icon Circle, Title and Quality Badge */}
           <View style={styles.sleepHeader}>
             <View style={styles.sleepTitleGroup}>
-              <View style={styles.sleepIconCircle}>
-                <BedIcon size={18} color="#0F766E" />
+              <View style={[styles.sleepIconCircle, { backgroundColor: colors.brandLight }]}>
+                <BedIcon size={18} color={colors.brand} />
               </View>
               <View>
                 <Text style={styles.sleepTitle}>Sueño y Descanso</Text>
@@ -320,12 +322,12 @@ export default function Home() {
               </View>
             </View>
             <View style={styles.sleepQualityBadgeRow}>
-              <View style={styles.sleepQualityBadge}>
-                <Text style={styles.sleepQualityBadgeText}>
-                  {avgSleepHours}h · {avgSleepHours >= (preferences.sleepGoalHours || 8) ? 'Reparador' : 'Ligero'}
+              <View style={[styles.sleepQualityBadge, { backgroundColor: colors.brandLight }]}>
+                <Text style={[styles.sleepQualityBadgeText, { color: colors.brand }]}>
+                  {avgSleepHours}h · {avgSleepHours >= (preferences.sleepGoalHours || 8) ? 'Descanso pleno' : 'Descanso breve'}
                 </Text>
               </View>
-              <ChevronRightIcon size={14} color="#0D9488" strokeWidth={2.5} />
+              <ChevronRightIcon size={14} color={colors.brand} strokeWidth={2.5} />
             </View>
           </View>
 

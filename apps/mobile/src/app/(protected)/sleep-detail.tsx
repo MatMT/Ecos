@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,15 +12,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
-import { Colors, Radius } from '@/constants/theme';
+import { Radius } from '@/constants/theme';
 import {
   ArrowLeftIcon,
   BedIcon,
+  BookOpenIcon,
   CheckIcon,
-  LeafIcon,
+  CoffeeIcon,
   MoonIcon,
+  SmartphoneOffIcon,
+  SunIcon,
+  WindIcon,
 } from '@/components/ui/app-icons';
 import { useStudent } from '@/hooks/use-student';
+import { useTheme } from '@/context/theme-context';
 import { studentClient } from '@/services/api/student-client';
 
 interface DailySleepRecord {
@@ -40,12 +48,65 @@ const DEFAULT_WEEKLY_RECORDS: DailySleepRecord[] = [
 
 const GOAL_OPTIONS = [6, 7, 8, 9];
 
+const SLEEP_HYGIENE_TIPS = [
+  {
+    id: 'circadian',
+    title: 'Constancia de ritmo',
+    description: 'Procura acostarte y levantarte en una ventana similar para sincronizar tu reloj circadiano.',
+    Icon: MoonIcon,
+    bgColor: '#F0F9FF',
+    iconColor: '#0284C7',
+  },
+  {
+    id: 'screens',
+    title: 'Desconexión digital',
+    description: 'Aleja las pantallas 30 minutos antes de dormir; la luz azul inhibe la síntesis de melatonina.',
+    Icon: SmartphoneOffIcon,
+    bgColor: '#F1F5F9',
+    iconColor: '#475569',
+  },
+  {
+    id: 'caffeine',
+    title: 'Ventana de cafeína',
+    description: 'Evita café, bebidas energéticas o té estimulante al menos 6 horas antes de tu descanso.',
+    Icon: CoffeeIcon,
+    bgColor: '#FEF3C7',
+    iconColor: '#D97706',
+  },
+  {
+    id: 'temp',
+    title: 'Temperatura y ventilación',
+    description: 'Un ambiente fresco (18°C a 20°C) facilita la reducción fisiológica del pulso nocturno.',
+    Icon: WindIcon,
+    bgColor: '#F0FDFA',
+    iconColor: '#0D9488',
+  },
+  {
+    id: 'mind',
+    title: 'Desaceleración mental',
+    description: 'Dedica 10 minutos a una lectura ligera en papel o ejercicios de respiración suave.',
+    Icon: BookOpenIcon,
+    bgColor: '#EDE9FE',
+    iconColor: '#7C3AED',
+  },
+  {
+    id: 'sun',
+    title: 'Luz matutina natural',
+    description: 'Recibir luz solar en los primeros 20 minutos tras despertar afianza tu energía diurna.',
+    Icon: SunIcon,
+    bgColor: '#FEF9C3',
+    iconColor: '#CA8A04',
+  },
+];
+
 export default function SleepDetailScreen() {
   const router = useRouter();
   const { student, preferences, updatePreferences } = useStudent();
+  const { colors } = useTheme();
 
   const currentGoal = preferences.sleepGoalHours || 8;
   const [weeklyRecords, setWeeklyRecords] = useState<DailySleepRecord[]>(DEFAULT_WEEKLY_RECORDS);
+  const [activeTipIndex, setActiveTipIndex] = useState<number>(0);
 
   useEffect(() => {
     if (!student?.id) return;
@@ -80,14 +141,26 @@ export default function SleepDetailScreen() {
     void updatePreferences({ sleepGoalHours: hours });
   };
 
+  const handleTipScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const width = e.nativeEvent.layoutMeasurement.width;
+    if (width > 0) {
+      const idx = Math.round(offsetX / width);
+      setActiveTipIndex(idx);
+    }
+  };
+
   const totalHours = weeklyRecords.reduce((acc, cur) => acc + cur.hours, 0);
   const avgHours = Number((totalHours / weeklyRecords.length).toFixed(1));
   const daysMetGoal = weeklyRecords.filter((r) => r.hours >= currentGoal).length;
 
+  const screenWidth = Dimensions.get('window').width;
+  const tipCardWidth = Math.max(270, screenWidth - 72);
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header con retroceso */}
-      <View style={styles.topHeader}>
+      <View style={[styles.topHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -95,9 +168,9 @@ export default function SleepDetailScreen() {
           accessibilityRole="button"
           accessibilityLabel="Volver al inicio"
         >
-          <ArrowLeftIcon size={20} color={Colors.text} />
+          <ArrowLeftIcon size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Detalle de Descanso</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Detalle de Descanso</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -106,14 +179,14 @@ export default function SleepDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Card 1: Configurador Interactivo de Meta */}
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardHeaderRow}>
-            <View style={styles.iconCircleTeal}>
-              <BedIcon size={20} color="#0F766E" />
+            <View style={[styles.iconCircleTeal, { backgroundColor: colors.brandLight }]}>
+              <BedIcon size={20} color={colors.brand} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>Meta Diaria de Descanso</Text>
-              <Text style={styles.cardSubtitle}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Meta Diaria de Descanso</Text>
+              <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
                 Ajusta tu objetivo para adaptar el seguimiento de tu bienestar.
               </Text>
             </View>
@@ -128,7 +201,8 @@ export default function SleepDetailScreen() {
                   key={hours}
                   style={[
                     styles.goalPill,
-                    isSelected && styles.goalPillActive,
+                    { borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+                    isSelected && [styles.goalPillActive, { backgroundColor: colors.brand, borderColor: colors.brand }],
                   ]}
                   onPress={() => handleSelectGoal(hours)}
                   activeOpacity={0.8}
@@ -138,6 +212,7 @@ export default function SleepDetailScreen() {
                   <Text
                     style={[
                       styles.goalPillNumber,
+                      { color: colors.text },
                       isSelected && styles.goalPillNumberActive,
                     ]}
                   >
@@ -146,6 +221,7 @@ export default function SleepDetailScreen() {
                   <Text
                     style={[
                       styles.goalPillLabel,
+                      { color: colors.textSecondary },
                       isSelected && styles.goalPillLabelActive,
                     ]}
                   >
@@ -157,48 +233,99 @@ export default function SleepDetailScreen() {
           </View>
         </View>
 
-        {/* Card 2: Resumen Semanal de Rendimiento */}
-        <View style={styles.summaryCard}>
+        {/* Card 2: Resumen Semanal No Punitivo */}
+        <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.summaryMetricItem}>
-            <Text style={styles.summaryMetricLabel}>PROMEDIO SEMANAL</Text>
-            <Text style={styles.summaryMetricValue}>{avgHours} <Text style={styles.summaryMetricUnit}>hrs</Text></Text>
-            <Text style={styles.summaryMetricSub}>
-              {avgHours >= currentGoal ? '✅ Meta superada' : '⚠️ Por debajo de meta'}
+            <Text style={[styles.summaryMetricLabel, { color: colors.textSecondary }]}>PROMEDIO SEMANAL</Text>
+            <Text style={[styles.summaryMetricValue, { color: colors.text }]}>
+              {avgHours} <Text style={[styles.summaryMetricUnit, { color: colors.textSecondary }]}>hrs</Text>
+            </Text>
+            <Text style={[styles.summaryMetricSub, { color: colors.textSecondary }]}>
+              Promedio semanal: {avgHours}h · Meta sugerida: {currentGoal}h
             </Text>
           </View>
 
-          <View style={styles.summaryDivider} />
+          <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
 
           <View style={styles.summaryMetricItem}>
-            <Text style={styles.summaryMetricLabel}>DÍAS CUMPLIDOS</Text>
-            <Text style={styles.summaryMetricValue}>
-              {daysMetGoal} <Text style={styles.summaryMetricUnit}>/ {weeklyRecords.length}</Text>
+            <Text style={[styles.summaryMetricLabel, { color: colors.textSecondary }]}>NOCHES REPARADORAS</Text>
+            <Text style={[styles.summaryMetricValue, { color: colors.text }]}>
+              {daysMetGoal} <Text style={[styles.summaryMetricUnit, { color: colors.textSecondary }]}>de {weeklyRecords.length}</Text>
             </Text>
-            <Text style={styles.summaryMetricSub}>
-              Meta de {currentGoal}h al día
+            <Text style={[styles.summaryMetricSub, { color: colors.textSecondary }]}>
+              Meta personal de {currentGoal}h
             </Text>
           </View>
         </View>
 
-        {/* Card 3: Desglose Día por Día */}
-        <Text style={styles.sectionTitle}>DESGLOSE DE LOS ÚLTIMOS 7 DÍAS</Text>
-        <View style={styles.card}>
+        {/* Card 3: Consejos de Higiene del Sueño (Carrusel Superior Swipeable) */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>CONSEJOS DE HIGIENE DEL SUEÑO</Text>
+        <View style={[styles.tipsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={handleTipScroll}
+            scrollEventThrottle={16}
+            contentContainerStyle={styles.tipsCarouselContent}
+          >
+            {SLEEP_HYGIENE_TIPS.map((tip) => {
+              const TipIconComponent = tip.Icon;
+              return (
+                <View
+                  key={tip.id}
+                  style={[styles.tipSlide, { width: tipCardWidth }]}
+                >
+                  <View style={styles.tipSlideHeader}>
+                    <View style={[styles.tipSlideIconCircle, { backgroundColor: tip.bgColor }]}>
+                      <TipIconComponent size={20} color={tip.iconColor} strokeWidth={2.2} />
+                    </View>
+                    <Text style={[styles.tipSlideTitle, { color: colors.text }]}>
+                      {tip.title}
+                    </Text>
+                  </View>
+                  <Text style={[styles.tipSlideBody, { color: colors.textSecondary }]}>
+                    {tip.description}
+                  </Text>
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          {/* Indicador de Páginas (Dots) */}
+          <View style={styles.tipDotsRow}>
+            {SLEEP_HYGIENE_TIPS.map((tip, idx) => (
+              <View
+                key={tip.id}
+                style={[
+                  styles.tipDot,
+                  { backgroundColor: colors.border },
+                  activeTipIndex === idx && [styles.tipDotActive, { backgroundColor: colors.brand }],
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Card 4: Desglose de los Últimos 7 Días */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>DESGLOSE DE LOS ÚLTIMOS 7 DÍAS</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {weeklyRecords.map((item, index) => {
             const isTargetMet = item.hours >= currentGoal;
             return (
               <React.Fragment key={item.dayName + index}>
-                {index > 0 && <View style={styles.itemDivider} />}
+                {index > 0 && <View style={[styles.itemDivider, { backgroundColor: colors.borderSubtle }]} />}
                 <View style={styles.recordRow}>
                   <View style={styles.recordLeftCol}>
-                    <Text style={styles.recordDayName}>{item.dayName}</Text>
-                    <Text style={styles.recordDateText}>{item.dateStr}</Text>
+                    <Text style={[styles.recordDayName, { color: colors.text }]}>{item.dayName}</Text>
+                    <Text style={[styles.recordDateText, { color: colors.textMuted }]}>{item.dateStr}</Text>
                   </View>
 
                   <View style={styles.recordMidCol}>
-                    <Text style={styles.recordHoursText}>
-                      {item.hours} <Text style={styles.recordHoursUnit}>hrs</Text>
+                    <Text style={[styles.recordHoursText, { color: colors.text }]}>
+                      {item.hours} <Text style={[styles.recordHoursUnit, { color: colors.textSecondary }]}>hrs</Text>
                     </Text>
-                    <Text style={styles.recordTimeRange}>
+                    <Text style={[styles.recordTimeRange, { color: colors.textMuted }]}>
                       {item.bedtime} – {item.wakeTime}
                     </Text>
                   </View>
@@ -218,43 +345,13 @@ export default function SleepDetailScreen() {
                         isTargetMet ? styles.recordBadgeTextSuccess : styles.recordBadgeTextMuted,
                       ]}
                     >
-                      {isTargetMet ? 'Cumplido' : 'Ligero'}
+                      {isTargetMet ? 'Descanso pleno' : 'Descanso breve'}
                     </Text>
                   </View>
                 </View>
               </React.Fragment>
             );
           })}
-        </View>
-
-        {/* Card 4: Consejos de Higiene del Sueño */}
-        <Text style={styles.sectionTitle}>CONSEJOS DE HIGIENE DEL SUEÑO</Text>
-        <View style={styles.tipsCard}>
-          <View style={styles.tipItem}>
-            <View style={[styles.tipIconWrap, { backgroundColor: '#F0FDFA' }]}>
-              <LeafIcon size={18} color="#0D9488" />
-            </View>
-            <View style={styles.tipTextWrap}>
-              <Text style={styles.tipTitle}>Desconexión de pantallas</Text>
-              <Text style={styles.tipBody}>
-                Procura apagar dispositivos 30 minutos antes de dormir para permitir que la melatonina regule tu ritmo de descanso.
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.itemDivider} />
-
-          <View style={styles.tipItem}>
-            <View style={[styles.tipIconWrap, { backgroundColor: '#EFF6FF' }]}>
-              <MoonIcon size={18} color="#2563EB" />
-            </View>
-            <View style={styles.tipTextWrap}>
-              <Text style={styles.tipTitle}>Constancia en el horario</Text>
-              <Text style={styles.tipBody}>
-                Acostarte y levantarte en ventanas similares estabiliza la variabilidad de tu frecuencia cardíaca (VFC).
-              </Text>
-            </View>
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -274,43 +371,38 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 6,
+    borderRadius: Radius.pill,
   },
   headerTitle: {
     fontSize: 17,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
+    padding: 16,
     paddingBottom: 40,
+    gap: 16,
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: Radius.large,
-    padding: 18,
-    marginBottom: 16,
+    borderRadius: Radius.medium,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
-    shadowRadius: 4,
+    shadowRadius: 3,
+    elevation: 1,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   iconCircleTeal: {
     width: 40,
@@ -322,14 +414,14 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   cardSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
+    fontSize: 13,
+    color: '#64748B',
     marginTop: 2,
-    lineHeight: 16,
+    lineHeight: 18,
   },
   goalPillsRow: {
     flexDirection: 'row',
@@ -337,8 +429,8 @@ const styles = StyleSheet.create({
   },
   goalPill: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: Radius.medium,
+    paddingVertical: 10,
+    borderRadius: Radius.small,
     backgroundColor: '#F8FAFC',
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
@@ -346,127 +438,194 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   goalPillActive: {
-    backgroundColor: '#0D9488',
-    borderColor: '#0D9488',
-    elevation: 2,
-    shadowColor: '#0D9488',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    backgroundColor: '#0F766E',
+    borderColor: '#0F766E',
   },
   goalPillNumber: {
     fontSize: 17,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: '800',
+    color: '#0F172A',
   },
   goalPillNumberActive: {
     color: '#FFFFFF',
   },
   goalPillLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginTop: 2,
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+    fontWeight: '500',
   },
   goalPillLabelActive: {
     color: '#CCFBF1',
+    fontWeight: '600',
   },
   summaryCard: {
-    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: Radius.large,
+    borderRadius: Radius.medium,
     padding: 16,
-    marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   summaryMetricItem: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   summaryMetricLabel: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 0.5,
+    color: '#64748B',
+    letterSpacing: 0.6,
   },
   summaryMetricValue: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginTop: 4,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginVertical: 4,
   },
   summaryMetricUnit: {
     fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
+    fontWeight: '500',
+    color: '#64748B',
   },
   summaryMetricSub: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
-    marginTop: 4,
+    fontSize: 11.5,
+    color: '#64748B',
+    lineHeight: 16,
   },
   summaryDivider: {
     width: 1,
     height: 48,
     backgroundColor: '#E2E8F0',
+    marginHorizontal: 12,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: Colors.textSecondary,
-    letterSpacing: 0.5,
-    marginBottom: 8,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748B',
+    letterSpacing: 0.8,
+    marginTop: 4,
     marginLeft: 2,
+  },
+  tipsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.medium,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  tipsCarouselContent: {
+    gap: 12,
+  },
+  tipSlide: {
+    padding: 14,
+    borderRadius: Radius.small,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  tipSlideHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  tipSlideIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tipSlideTitle: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  tipSlideBody: {
+    fontSize: 12.5,
+    color: '#526E65',
+    lineHeight: 18,
+  },
+  tipDotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  tipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E2E8F0',
+  },
+  tipDotActive: {
+    width: 16,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0F766E',
   },
   recordRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: 10,
   },
+  itemDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+  },
   recordLeftCol: {
-    width: '32%',
+    flex: 1,
   },
   recordDayName: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.text,
+    color: '#0F172A',
   },
   recordDateText: {
     fontSize: 11,
-    color: Colors.textSecondary,
+    color: '#94A3B8',
     marginTop: 1,
   },
   recordMidCol: {
-    flex: 1,
-    alignItems: 'center',
+    flex: 1.2,
+    alignItems: 'flex-start',
   },
   recordHoursText: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   recordHoursUnit: {
     fontSize: 12,
     fontWeight: '500',
-    color: Colors.textSecondary,
+    color: '#64748B',
   },
   recordTimeRange: {
     fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
+    color: '#94A3B8',
+    marginTop: 1,
   },
   recordBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 4,
     paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: Radius.pill,
-    width: 82,
-    justifyContent: 'center',
   },
   recordBadgeSuccess: {
     backgroundColor: '#DCFCE7',
@@ -483,45 +642,5 @@ const styles = StyleSheet.create({
   },
   recordBadgeTextMuted: {
     color: '#64748B',
-  },
-  itemDivider: {
-    height: 1,
-    backgroundColor: '#F1F5F9',
-    marginVertical: 4,
-  },
-  tipsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: Radius.large,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  tipItem: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 6,
-  },
-  tipIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  tipTextWrap: {
-    flex: 1,
-  },
-  tipTitle: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  tipBody: {
-    fontSize: 12,
-    color: '#475569',
-    lineHeight: 17,
   },
 });
