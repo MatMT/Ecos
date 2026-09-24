@@ -276,56 +276,74 @@ export default function ChatScreen() {
     }
   };
 
-  const handleShareWithTherapist = (entry: LocalJournalEntry) => {
-    const therapistName = student?.assignedTherapist?.fullName || 'su terapeuta asignado';
-    Alert.alert(
-      'Compartir con su terapeuta',
-      `¿Desea compartir esta reflexión con ${therapistName}? Esta acción creará una copia inmutable visible para su psicólogo en su expediente clínico.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Compartir',
-          onPress: async () => {
-            if (!student?.id) {
-              Alert.alert(
-                'Atención',
-                'No se ha podido identificar su expediente de estudiante. Por favor, verifique su conexión e intente nuevamente.'
-              );
-              return;
-            }
+  // Share with Therapist State (Mental Health UX: Empowering granular modal)
+  const [entryToShare, setEntryToShare] = useState<LocalJournalEntry | null>(null);
+  const [shareIncludeBiometrics, setShareIncludeBiometrics] = useState<boolean>(true);
+  const [shareIncludeNarrative, setShareIncludeNarrative] = useState<boolean>(true);
 
-            const snapshotId = `snap_${Date.now()}`;
-            try {
-              await markJournalEntryShared(entry.id, snapshotId);
+  const handleOpenShareModal = (entry: LocalJournalEntry) => {
+    setEntryToShare(entry);
+    setShareIncludeBiometrics(true);
+    setShareIncludeNarrative(true);
+  };
 
-              const payload = {
-                therapistId: student.assignedTherapist?.id,
-                contentType: 'journal_entry',
-                sourceLocalId: entry.id,
-                content: `[Emoción: ${entry.primary_emotion}, Ánimo: ${entry.mood_score}/5, FC: ${entry.associated_bpm ?? '--'} bpm]\n${entry.narrative_text}`,
-              };
+  const handleConfirmShare = async () => {
+    if (!entryToShare || !student?.id) {
+      Alert.alert(
+        'Atención',
+        'No se ha podido identificar su expediente de estudiante. Por favor, verifique su conexión e intente nuevamente.'
+      );
+      return;
+    }
 
-              const endpoint = `/api/v1/students/${student.id}/shared-content`;
+    if (!shareIncludeBiometrics && !shareIncludeNarrative) {
+      Alert.alert('Atención', 'Por favor, seleccione al menos una opción para compartir con su terapeuta.');
+      return;
+    }
 
-              authClient
-                .apiFetch(endpoint, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(payload),
-                })
-                .catch(() => {
-                  return enqueueSync(endpoint, payload);
-                });
+    const snapshotId = `snap_${Date.now()}`;
+    try {
+      await markJournalEntryShared(entryToShare.id, snapshotId);
 
-              await refreshJournal();
-              Alert.alert('Éxito', 'Su reflexión ha sido compartida confidencialmente con su terapeuta.');
-            } catch {
-              Alert.alert('Aviso', 'Se ha programado el envío para cuando se restablezca la conexión.');
-            }
-          },
-        },
-      ]
-    );
+      const parts: string[] = [];
+      if (shareIncludeBiometrics) {
+        parts.push(
+          `[Métricas fisiológicas: Emoción: ${entryToShare.primary_emotion}, Ánimo: ${entryToShare.mood_score}/5, FC: ${entryToShare.associated_bpm ?? '--'} bpm]`
+        );
+      }
+      if (shareIncludeNarrative) {
+        parts.push(entryToShare.narrative_text);
+      }
+
+      const payload = {
+        therapistId: student.assignedTherapist?.id,
+        contentType: 'journal_entry',
+        sourceLocalId: entryToShare.id,
+        content: parts.join('\n\n'),
+      };
+
+      const endpoint = `/api/v1/students/${student.id}/shared-content`;
+
+      authClient
+        .apiFetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        .catch(() => {
+          return enqueueSync(endpoint, payload);
+        });
+
+      await refreshJournal();
+      setEntryToShare(null);
+      Alert.alert(
+        'Nota preparada',
+        `Esta información se ha organizado para revisarla con ${student.assignedTherapist?.fullName || 'su psicólogo'} en su próxima sesión.`
+      );
+    } catch {
+      setEntryToShare(null);
+      Alert.alert('Aviso', 'Se ha programado el envío para cuando se restablezca la conexión.');
+    }
   };
 
   // Subtle Biometric Chip State
@@ -462,10 +480,10 @@ export default function ChatScreen() {
                   ) : (
                     <TouchableOpacity
                       style={styles.shareButton}
-                      onPress={() => handleShareWithTherapist(item)}
+                      onPress={() => handleOpenShareModal(item)}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.shareButtonText}>Compartir con terapeuta</Text>
+                      <Text style={styles.shareButtonText}>Preparar para mi sesión</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -630,6 +648,114 @@ export default function ChatScreen() {
                 <Text style={styles.saveEntryButtonText}>Guardar en mi diario</Text>
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      {/* Modal de Preparación para la Sesión (Alianza Terapéutica & Mental Health UX) */}
+      <Modal visible={entryToShare !== null} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.shareModalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderTitleRow}>
+                <BookOpenIcon size={20} color="#0D9488" />
+                <Text style={styles.shareModalTitle}>Preparar nota para tu sesión</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setEntryToShare(null)}
+                activeOpacity={0.7}
+              >
+                <CloseIcon size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.shareModalExplanation}>
+              Esta información se compartirá de forma confidencial con{' '}
+              <Text style={{ fontWeight: '700', color: Colors.text }}>
+                {student?.assignedTherapist?.fullName || 'tu psicólogo'}
+              </Text>{' '}
+              para que puedan revisarla juntos en tu próxima consulta clínica.
+            </Text>
+
+            {/* Checkbox 1: Narrative */}
+            <TouchableOpacity
+              style={[
+                styles.shareCheckboxRow,
+                shareIncludeNarrative && styles.shareCheckboxRowActive,
+              ]}
+              onPress={() => setShareIncludeNarrative((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.checkboxBox,
+                  shareIncludeNarrative && styles.checkboxBoxActive,
+                ]}
+              >
+                {shareIncludeNarrative && <CheckIcon size={14} color="#FFFFFF" />}
+              </View>
+              <View style={styles.checkboxTextWrap}>
+                <Text style={styles.checkboxTitle}>Incluir mi reflexión escrita</Text>
+                <Text style={styles.checkboxSub} numberOfLines={2}>
+                  &ldquo;{entryToShare?.narrative_text}&rdquo;
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Checkbox 2: Biometrics */}
+            <TouchableOpacity
+              style={[
+                styles.shareCheckboxRow,
+                shareIncludeBiometrics && styles.shareCheckboxRowActive,
+              ]}
+              onPress={() => setShareIncludeBiometrics((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.checkboxBox,
+                  shareIncludeBiometrics && styles.checkboxBoxActive,
+                ]}
+              >
+                {shareIncludeBiometrics && <CheckIcon size={14} color="#FFFFFF" />}
+              </View>
+              <View style={styles.checkboxTextWrap}>
+                <Text style={styles.checkboxTitle}>Incluir biometría registrada</Text>
+                <Text style={styles.checkboxSub}>
+                  Frecuencia cardíaca ({entryToShare?.associated_bpm ?? '--'} bpm) y estado anímico ({entryToShare?.mood_score}/5).
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.privacyNoteBox}>
+              <LockIcon size={13} color="#0D9488" />
+              <Text style={styles.privacyNoteText}>
+                Tu privacidad es absoluta. Solo tú y tu terapeuta asignado tienen acceso a esta nota.
+              </Text>
+            </View>
+
+            {/* Actions */}
+            <TouchableOpacity
+              style={[
+                styles.shareConfirmButton,
+                (!shareIncludeBiometrics && !shareIncludeNarrative) && styles.shareConfirmButtonDisabled,
+              ]}
+              onPress={handleConfirmShare}
+              disabled={!shareIncludeBiometrics && !shareIncludeNarrative}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.shareConfirmButtonText}>
+                Guardar y compartir con mi psicólogo
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.shareCancelButton}
+              onPress={() => setEntryToShare(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.shareCancelButtonText}>Mantener solo en mi diario</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1002,5 +1128,121 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  shareModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 36,
+  },
+  modalHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  shareModalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  shareModalExplanation: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 19,
+    marginVertical: 12,
+  },
+  shareCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    marginBottom: 10,
+    gap: 12,
+  },
+  shareCheckboxRowActive: {
+    borderColor: '#0D9488',
+    backgroundColor: '#F0FDFA',
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  checkboxBoxActive: {
+    backgroundColor: '#0D9488',
+    borderColor: '#0D9488',
+  },
+  checkboxTextWrap: {
+    flex: 1,
+  },
+  checkboxTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  checkboxSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  privacyNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDFA',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.small,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  privacyNoteText: {
+    fontSize: 11,
+    color: '#0F766E',
+    fontWeight: '500',
+    flex: 1,
+  },
+  shareConfirmButton: {
+    backgroundColor: '#0D9488',
+    paddingVertical: 14,
+    borderRadius: Radius.large,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#0D9488',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  shareConfirmButtonDisabled: {
+    backgroundColor: '#94A3B8',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  shareConfirmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  shareCancelButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  shareCancelButtonText: {
+    color: '#64748B',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });
