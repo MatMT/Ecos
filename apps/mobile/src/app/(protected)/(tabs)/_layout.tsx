@@ -53,6 +53,12 @@ export default function TabLayout() {
           tabBarIcon: () => <UserIcon width="90%" height="100%" />,
         }}
       />
+      <Tabs.Screen
+        name="diario"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

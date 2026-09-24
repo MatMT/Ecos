@@ -119,15 +119,15 @@ export default function SettingsScreen() {
                 onPress={() => handleSelectTheme('salvia')}
                 activeOpacity={0.85}
               >
-                <View style={[styles.themeColorCircle, { backgroundColor: '#4E8777' }]} />
+                <View style={[styles.themeColorCircle, { backgroundColor: '#0F766E' }]} />
                 <View style={styles.themeInfoWrap}>
-                  <Text style={styles.themeTitle}>Modo Salvia</Text>
+                  <Text style={styles.themeTitle}>Modo Salvia (Predeterminado)</Text>
                   <Text style={styles.themeSubtitle}>
-                    Tonos verdes suaves que transmiten calma y ayudan a descansar.
+                    Verde aqua sereno y luminoso, la identidad por defecto de Ecos.
                   </Text>
                 </View>
                 {selectedTheme === 'salvia' && (
-                  <View style={[styles.checkCircle, { backgroundColor: '#4E8777' }]}>
+                  <View style={[styles.checkCircle, { backgroundColor: '#0F766E' }]}>
                     <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
                   </View>
                 )}
@@ -165,15 +165,15 @@ export default function SettingsScreen() {
                 onPress={() => handleSelectTheme('arena')}
                 activeOpacity={0.85}
               >
-                <View style={[styles.themeColorCircle, { backgroundColor: '#8C6D58' }]} />
+                <View style={[styles.themeColorCircle, { backgroundColor: '#9E866C' }]} />
                 <View style={styles.themeInfoWrap}>
                   <Text style={styles.themeTitle}>Modo Arena</Text>
                   <Text style={styles.themeSubtitle}>
-                    Tonos cálidos y acogedores para relajar la vista.
+                    Tonos lino y avena suaves que ofrecen calidez sin fatigar la vista.
                   </Text>
                 </View>
                 {selectedTheme === 'arena' && (
-                  <View style={[styles.checkCircle, { backgroundColor: '#8C6D58' }]}>
+                  <View style={[styles.checkCircle, { backgroundColor: '#9E866C' }]}>
                     <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
                   </View>
                 )}
@@ -360,16 +360,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   themeItemActiveSalvia: {
-    borderColor: '#86A789',
-    backgroundColor: '#F3F7F4',
+    borderColor: '#0F766E',
+    backgroundColor: '#F0FDFA',
   },
   themeItemActiveNiebla: {
     borderColor: '#60A5FA',
     backgroundColor: '#EFF6FF',
   },
   themeItemActiveArena: {
-    borderColor: '#E0A96D',
-    backgroundColor: '#FFFBEB',
+    borderColor: '#9E866C',
+    backgroundColor: '#F8F6F2',
   },
   themeColorCircle: {
     width: 28,

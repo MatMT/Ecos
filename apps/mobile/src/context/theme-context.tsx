@@ -31,25 +31,25 @@ export interface ThemeColors {
 
 export const THEME_PALETTES: Record<VisualTheme, ThemeColors> = {
   salvia: {
-    background: '#F4F7F5', // Blanco hueso verdoso
+    background: '#F2F9F8', // Blanco aqua suave y luminoso
     card: '#FFFFFF',
     surface: '#FFFFFF',
-    surfaceSubtle: '#EDF3F0',
-    border: '#E2ECE5',
-    borderSubtle: '#EEF5F1',
-    brand: '#4E8777', // Verde salvia calmante
-    brandDark: '#24433B',
-    brandLight: '#E8F2EE',
+    surfaceSubtle: '#E6F4F1',
+    border: '#D0EBE6',
+    borderSubtle: '#E8F5F3',
+    brand: '#0F766E', // Deep Teal característico y por defecto de Ecos
+    brandDark: '#115E59',
+    brandLight: '#CCFBF1',
     accent: '#0D9488',
-    text: '#162722',
-    textSecondary: '#526E65',
-    textMuted: '#8BA39B',
-    placeholder: '#8BA39B',
-    inputBackground: '#EDF3F0',
-    tagBackground: '#E8F2EE',
-    tagText: '#4E8777',
+    text: '#0F172A',
+    textSecondary: '#475569',
+    textMuted: '#94A3B8',
+    placeholder: '#94A3B8',
+    inputBackground: '#F0FDF4',
+    tagBackground: '#CCFBF1',
+    tagText: '#0F766E',
     status: {
-      normal: '#4E8777',
+      normal: '#0F766E',
       elevated: '#6482AD',
       high: '#D97D64',
     },
@@ -85,31 +85,31 @@ export const THEME_PALETTES: Record<VisualTheme, ThemeColors> = {
     dangerBorder: '#FFE4E6',
   },
   arena: {
-    background: '#FAF8F5', // Crema cálido
+    background: '#F8F6F2', // Avena / Pergamino suave (greige neutro cálido)
     card: '#FFFFFF',
     surface: '#FFFFFF',
-    surfaceSubtle: '#F5EFEB',
-    border: '#EBE5DD',
-    borderSubtle: '#F4EFE9',
-    brand: '#8C6D58', // Ocre arena y tierra suave
-    brandDark: '#4A3525',
-    brandLight: '#F4EDE7',
-    accent: '#A07A60',
-    text: '#2B201A',
-    textSecondary: '#735F52',
-    textMuted: '#A6968B',
-    placeholder: '#A6968B',
-    inputBackground: '#F5EFEB',
-    tagBackground: '#F4EDE7',
-    tagText: '#8C6D58',
+    surfaceSubtle: '#F2EDE6',
+    border: '#EAE5DD', // Tono cálido atenuado
+    borderSubtle: '#F2EDE6',
+    brand: '#9E866C', // Lino y avena neutro y relajante
+    brandDark: '#3E342B',
+    brandLight: '#F3EFE9',
+    accent: '#8C755D',
+    text: '#26201B',
+    textSecondary: '#6B5E53',
+    textMuted: '#9E9287',
+    placeholder: '#9E9287',
+    inputBackground: '#F4F0EA',
+    tagBackground: '#F3EFE9',
+    tagText: '#6B5E53',
     status: {
-      normal: '#7D8A58',
-      elevated: '#C98A4B',
-      high: '#D97D64',
+      normal: '#4B7A60', // Verde eucalipto armónico sobre cálido
+      elevated: '#C48A3F', // Ocre suave atenuado
+      high: '#B85244', // Terracota / ladrillo suave
     },
-    danger: '#DC2626',
-    dangerSurface: '#FFF1F2',
-    dangerBorder: '#FFE4E6',
+    danger: '#B85244',
+    dangerSurface: '#FDF3F1',
+    dangerBorder: '#F8DDD9',
   },
 };
 
