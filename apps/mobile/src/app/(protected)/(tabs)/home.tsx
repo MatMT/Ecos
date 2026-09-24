@@ -27,7 +27,6 @@ import {
   LeafIcon,
   WatchIcon,
 } from '@/components/ui/app-icons';
-import { useAuth } from '@/hooks/use-auth';
 import { useStudent } from '@/hooks/use-student';
 import { studentClient } from '@/services/api/student-client';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
@@ -53,16 +52,9 @@ const WEEKLY_SLEEP_DATA: DailySleepData[] = [
   { day: 'D', hours: 7.7 },
 ];
 
-function greetingNameFrom(email: string | undefined): string {
-  if (!email) return 'Usuario';
-  const localPart = email.split('@')[0];
-  return localPart.charAt(0).toUpperCase() + localPart.slice(1);
-}
-
 export default function Home() {
   const router = useRouter();
-  const { user } = useAuth();
-  const { student } = useStudent();
+  const { student, displayName } = useStudent();
   const todayLabel = useTodayLabel();
   const {
     bpm,
@@ -101,8 +93,6 @@ export default function Home() {
       })
       .catch(() => {});
   }, [student?.id]);
-
-  const displayName = student?.fullName || greetingNameFrom(user?.email);
 
   const toggleMetrics = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -353,53 +343,120 @@ export default function Home() {
 
             {/* Right Column: 7-Day Bar Chart */}
             <View style={styles.sleepChartCol}>
-              <Svg width="100%" height={105} viewBox="0 0 165 105">
-                {/* Subtle reference guideline for 8h target (only inside chart area) */}
-                <Line
-                  x1="0"
-                  y1="30"
-                  x2="165"
-                  y2="30"
-                  stroke="#0D9488"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 3"
-                  strokeOpacity="0.35"
-                />
+              {(() => {
+                const baseY = 86;
+                const maxBarH = 60;
+                const targetY = 38; // 8h on a 10h scale (86 - 48)
+                const clampedAvg = Math.max(2, Math.min(10, avgSleepHours));
+                const avgY = Math.round(baseY - (clampedAvg / 10) * maxBarH);
+                const avgLabelY = Math.abs(avgY - targetY) < 11
+                  ? avgY >= targetY
+                    ? Math.max(avgY + 3, 50)
+                    : Math.min(avgY + 3, 26)
+                  : avgY + 3;
 
-                {weeklySleep.map((item, index) => {
-                  const barWidth = 12;
-                  const totalW = 165;
-                  const spacing = (totalW - barWidth * 7) / 6;
-                  const x = index * (barWidth + spacing);
-                  const maxH = 55;
-                  const height = Math.min(maxH, (item.hours / 10) * maxH);
-                  const y = 80 - height;
-                  const isToday = index === weeklySleep.length - 1;
+                return (
+                  <Svg width="100%" height={112} viewBox="0 0 180 112">
+                    {/* Soft shaded area representing user's average restful zone */}
+                    <Rect
+                      x="0"
+                      y={avgY}
+                      width="130"
+                      height={Math.max(0, baseY - avgY)}
+                      fill="#0D9488"
+                      fillOpacity={0.05}
+                      rx={3}
+                    />
 
-                  return (
-                    <React.Fragment key={item.day + index}>
-                      <Rect
-                        x={x}
-                        y={y}
-                        width={barWidth}
-                        height={height}
-                        rx={5}
-                        fill={isToday ? '#0D9488' : '#CBD5E1'}
-                      />
-                      <SvgText
-                        x={x + barWidth / 2}
-                        y="98"
-                        fill={isToday ? '#0D9488' : '#64748B'}
-                        fontSize="11"
-                        fontWeight={isToday ? '700' : '600'}
-                        textAnchor="middle"
-                      >
-                        {item.day}
-                      </SvgText>
-                    </React.Fragment>
-                  );
-                })}
-              </Svg>
+                    {/* Dotted guideline for 8h Target with explicit label */}
+                    <Line
+                      x1="0"
+                      y1={targetY}
+                      x2="128"
+                      y2={targetY}
+                      stroke="#0D9488"
+                      strokeWidth="1.2"
+                      strokeDasharray="3 3"
+                      strokeOpacity="0.55"
+                    />
+                    <SvgText
+                      x="132"
+                      y={targetY + 3}
+                      fill="#0F766E"
+                      fontSize="8"
+                      fontWeight="700"
+                    >
+                      8h (Meta)
+                    </SvgText>
+
+                    {/* Subtle dashed line for real weekly average with explicit label */}
+                    <Line
+                      x1="0"
+                      y1={avgY}
+                      x2="128"
+                      y2={avgY}
+                      stroke="#64748B"
+                      strokeWidth="1"
+                      strokeDasharray="2 3"
+                      strokeOpacity="0.45"
+                    />
+                    <SvgText
+                      x="132"
+                      y={avgLabelY}
+                      fill="#64748B"
+                      fontSize="7.5"
+                      fontWeight="600"
+                    >
+                      {avgSleepHours}h Prom
+                    </SvgText>
+
+                    {/* 7 Daily Bars */}
+                    {weeklySleep.map((item, index) => {
+                      const barWidth = 11;
+                      const totalBarArea = 126;
+                      const spacing = (totalBarArea - barWidth * 7) / 6;
+                      const x = index * (barWidth + spacing);
+                      const height = Math.min(maxBarH, (item.hours / 10) * maxBarH);
+                      const y = baseY - height;
+                      const isToday = index === weeklySleep.length - 1;
+                      const isGoalReached = item.hours >= 7.8;
+                      const isNearGoal = item.hours >= 6.8;
+
+                      // Mental Health UX: Tonos orgánicos vivos y calmantes
+                      const barFill = isToday
+                        ? '#0D9488' // Hoy: Verde azulado principal
+                        : isGoalReached
+                        ? '#86A789' // Meta alcanzada: Verde salvia
+                        : isNearGoal
+                        ? '#93C5FD' // Descanso balanceado: Azul cielo suave
+                        : '#CBD5E1'; // Descanso ligero
+
+                      return (
+                        <React.Fragment key={item.day + index}>
+                          <Rect
+                            x={x}
+                            y={y}
+                            width={barWidth}
+                            height={height}
+                            rx={4}
+                            fill={barFill}
+                          />
+                          <SvgText
+                            x={x + barWidth / 2}
+                            y="102"
+                            fill={isToday ? '#0D9488' : '#64748B'}
+                            fontSize="10"
+                            fontWeight={isToday ? '700' : '600'}
+                            textAnchor="middle"
+                          >
+                            {item.day}
+                          </SvgText>
+                        </React.Fragment>
+                      );
+                    })}
+                  </Svg>
+                );
+              })()}
             </View>
           </View>
         </View>
@@ -694,7 +751,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sleepLeftCol: {
-    width: '42%',
+    width: '38%',
     justifyContent: 'center',
   },
   sleepAverageSubLabel: {
@@ -740,7 +797,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   sleepChartCol: {
-    width: '54%',
+    width: '60%',
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
