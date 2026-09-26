@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutAnimation,
   Platform,
@@ -23,11 +23,14 @@ import {
   AlertShieldIcon,
   BedIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ChevronUpIcon,
   LeafIcon,
   WatchIcon,
 } from '@/components/ui/app-icons';
-import { useAuth } from '@/hooks/use-auth';
+import { useStudent } from '@/hooks/use-student';
+import { useTheme } from '@/context/theme-context';
+import { studentClient } from '@/services/api/student-client';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import { useTodayLabel } from '@/hooks/use-today-label';
 import { triageMessageManager } from '@/services/ai/ai-triage-messages';
@@ -51,15 +54,10 @@ const WEEKLY_SLEEP_DATA: DailySleepData[] = [
   { day: 'D', hours: 7.7 },
 ];
 
-function greetingNameFrom(email: string | undefined): string {
-  if (!email) return 'Usuario';
-  const localPart = email.split('@')[0];
-  return localPart.charAt(0).toUpperCase() + localPart.slice(1);
-}
-
 export default function Home() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { student, displayName, preferences } = useStudent();
+  const { colors } = useTheme();
   const todayLabel = useTodayLabel();
   const {
     bpm,
@@ -70,6 +68,34 @@ export default function Home() {
   } = useBiometricMonitor();
 
   const [showMetrics, setShowMetrics] = useState<boolean>(false);
+  const [weeklySleep, setWeeklySleep] = useState<DailySleepData[]>(WEEKLY_SLEEP_DATA);
+  const [avgSleepHours, setAvgSleepHours] = useState<number>(7.7);
+
+  useEffect(() => {
+    if (!student?.id) return;
+    studentClient
+      .getBiometricTrends(student.id)
+      .then((trends) => {
+        if (trends && trends.length > 0) {
+          const dayLabels = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+          const mapped: DailySleepData[] = trends.slice(-7).map((t) => {
+            const d = new Date(t.date);
+            return {
+              day: dayLabels[d.getDay()],
+              hours: t.avgSleepQualityHours
+                ? Number(t.avgSleepQualityHours.toFixed(1))
+                : 7.0,
+            };
+          });
+          if (mapped.length > 0) {
+            setWeeklySleep(mapped);
+            const sum = mapped.reduce((acc, cur) => acc + cur.hours, 0);
+            setAvgSleepHours(Number((sum / mapped.length).toFixed(1)));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [student?.id]);
 
   const toggleMetrics = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -86,30 +112,32 @@ export default function Home() {
       case 'RED':
         return {
           tag: '● ESTADO CRÍTICO · IA',
-          color: Colors.danger,
-          bg: Colors.dangerSurface,
+          color: colors.danger,
+          bg: colors.dangerSurface,
         };
       case 'YELLOW':
         return {
           tag: '● ATENCIÓN PREVENTIVA · IA',
-          color: '#EAB308',
-          bg: '#FEF9C3',
+          color: colors.status.elevated,
+          bg: colors.surfaceSubtle,
         };
       case 'GREEN':
       default:
         return {
           tag: '● ESTADO ACTUAL · IA',
-          color: Colors.status.normal,
-          bg: Colors.surface,
+          color: colors.status.normal,
+          bg: colors.surface,
         };
     }
   };
 
   const banner = getAiBannerColor();
+  const avgHoursPart = Math.floor(avgSleepHours);
+  const avgMinsPart = Math.round((avgSleepHours - avgHoursPart) * 60);
 
   return (
-    <View style={styles.mainContainer}>
-      <CustomTopBar name={greetingNameFrom(user?.email)} />
+    <View style={[styles.mainContainer, { backgroundColor: colors.background }]}>
+      <CustomTopBar name={displayName} />
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
@@ -161,8 +189,8 @@ export default function Home() {
             onPress={() => router.push('/modals/breathing-guide' as Href)}
             activeOpacity={0.85}
           >
-            <View style={styles.actionBreathingIconWrap}>
-              <LeafIcon size={20} color="#0F766E" />
+            <View style={[styles.actionBreathingIconWrap, { backgroundColor: colors.brandLight }]}>
+              <LeafIcon size={20} color={colors.brand} />
             </View>
             <View style={styles.actionTextWrap}>
               <Text style={styles.actionBreathingTitle}>Iniciar Respiración</Text>
@@ -251,7 +279,7 @@ export default function Home() {
             <View style={styles.gridRow}>
               <MetricCard
                 label="Calidad de Sueño"
-                value="7.8"
+                value={avgSleepHours.toFixed(1)}
                 unit="h"
                 status="normal"
               />
@@ -275,26 +303,37 @@ export default function Home() {
 
         {/* Monitoreo de Sueño y Descanso (Diseño armonizado con Ecos) */}
         <Text style={styles.sectionHeaderLabel}>MONITOREO DE SUEÑO Y DESCANSO</Text>
-        <View style={styles.sleepCard}>
+        <TouchableOpacity
+          style={[styles.sleepCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => router.push('/sleep-detail')}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel="Ver detalle completo de descanso y sueño"
+        >
           {/* Header row with Bed Icon Circle, Title and Quality Badge */}
           <View style={styles.sleepHeader}>
             <View style={styles.sleepTitleGroup}>
-              <View style={styles.sleepIconCircle}>
-                <BedIcon size={18} color="#0F766E" />
+              <View style={[styles.sleepIconCircle, { backgroundColor: colors.brandLight }]}>
+                <BedIcon size={18} color={colors.brand} />
               </View>
-              <View>
-                <Text style={styles.sleepTitle}>Sueño y Descanso</Text>
-                <Text style={styles.sleepSubLabel}>Últimos 7 días</Text>
+              <View style={styles.sleepTitleTextWrap}>
+                <Text style={styles.sleepTitle} numberOfLines={1}>Sueño y Descanso</Text>
+                <Text style={styles.sleepSubLabel} numberOfLines={1}>Últimos 7 días · Toca para ver detalle</Text>
               </View>
             </View>
-            <View style={styles.sleepQualityBadge}>
-              <Text style={styles.sleepQualityBadgeText}>7.7h · Reparador</Text>
+            <View style={styles.sleepQualityBadgeRow}>
+              <View style={[styles.sleepQualityBadge, { backgroundColor: colors.brandLight }]}>
+                <Text style={[styles.sleepQualityBadgeText, { color: colors.brand }]}>
+                  {avgSleepHours}h · {avgSleepHours >= (preferences.sleepGoalHours || 8) ? 'Descanso pleno' : 'Descanso breve'}
+                </Text>
+              </View>
+              <ChevronRightIcon size={14} color={colors.brand} strokeWidth={2.5} />
             </View>
           </View>
 
           {/* Headline */}
           <Text style={styles.sleepHeadline}>
-            En los últimos 7 días, tu promedio de descanso ha sido de 7 h 42 min.
+            En los últimos 7 días, tu promedio de descanso ha sido de {avgHoursPart} h {avgMinsPart} min.
           </Text>
 
           {/* Chart & stats area: Clean 2-column flexbox layout without overlapping lines */}
@@ -304,68 +343,160 @@ export default function Home() {
               <Text style={styles.sleepAverageSubLabel}>PROMEDIO</Text>
               <Text style={styles.sleepAverageLabel}>Tiempo Dormido</Text>
               <View style={styles.sleepTimeRow}>
-                <Text style={styles.sleepBigNumber}>7</Text>
+                <Text style={styles.sleepBigNumber}>{avgHoursPart}</Text>
                 <Text style={styles.sleepBigUnit}>hr </Text>
-                <Text style={styles.sleepBigNumber}>42</Text>
+                <Text style={styles.sleepBigNumber}>{avgMinsPart}</Text>
                 <Text style={styles.sleepBigUnit}>min</Text>
               </View>
               <View style={styles.sleepGoalPill}>
-                <Text style={styles.sleepGoalPillText}>Meta: 8h diarias</Text>
+                <Text style={styles.sleepGoalPillText}>
+                  Meta: {preferences.sleepGoalHours || 8}h diarias
+                </Text>
               </View>
             </View>
 
             {/* Right Column: 7-Day Bar Chart */}
             <View style={styles.sleepChartCol}>
-              <Svg width="100%" height={105} viewBox="0 0 165 105">
-                {/* Subtle reference guideline for 8h target (only inside chart area) */}
-                <Line
-                  x1="0"
-                  y1="30"
-                  x2="165"
-                  y2="30"
-                  stroke="#0D9488"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 3"
-                  strokeOpacity="0.35"
-                />
+              {(() => {
+                const sleepGoal = preferences.sleepGoalHours || 8;
+                const baseY = 86;
+                const maxBarH = 60;
+                const targetY = Math.round(baseY - (Math.min(10, sleepGoal) / 10) * maxBarH);
+                const clampedAvg = Math.max(2, Math.min(10, avgSleepHours));
+                const avgY = Math.round(baseY - (clampedAvg / 10) * maxBarH);
+                const isClose = Math.abs(sleepGoal - avgSleepHours) < 0.5;
 
-                {WEEKLY_SLEEP_DATA.map((item, index) => {
-                  const barWidth = 12;
-                  const totalW = 165;
-                  const spacing = (totalW - barWidth * 7) / 6;
-                  const x = index * (barWidth + spacing);
-                  const maxH = 55;
-                  const height = Math.min(maxH, (item.hours / 10) * maxH);
-                  const y = 80 - height;
-                  const isToday = index === WEEKLY_SLEEP_DATA.length - 1;
+                return (
+                  <Svg width="100%" height={112} viewBox="0 0 210 112">
+                    {/* Soft shaded area representing user's average restful zone */}
+                    <Rect
+                      x="0"
+                      y={avgY}
+                      width="128"
+                      height={Math.max(0, baseY - avgY)}
+                      fill={colors.brand}
+                      fillOpacity={0.06}
+                      rx={3}
+                    />
 
-                  return (
-                    <React.Fragment key={item.day + index}>
-                      <Rect
-                        x={x}
-                        y={y}
-                        width={barWidth}
-                        height={height}
-                        rx={5}
-                        fill={isToday ? '#0D9488' : '#CBD5E1'}
-                      />
-                      <SvgText
-                        x={x + barWidth / 2}
-                        y="98"
-                        fill={isToday ? '#0D9488' : '#64748B'}
-                        fontSize="11"
-                        fontWeight={isToday ? '700' : '600'}
-                        textAnchor="middle"
-                      >
-                        {item.day}
-                      </SvgText>
-                    </React.Fragment>
-                  );
-                })}
-              </Svg>
+                    {isClose ? (
+                      /* When difference is under 0.5h, unify into a single guideline to prevent visual collision */
+                      <>
+                        <Line
+                          x1="0"
+                          y1={targetY}
+                          x2="128"
+                          y2={targetY}
+                          stroke={colors.brand}
+                          strokeWidth={1.2}
+                          strokeDasharray="3 3"
+                          strokeOpacity={0.65}
+                        />
+                        <SvgText
+                          x="132"
+                          y={targetY + 3}
+                          fill={colors.brand}
+                          fontSize="7.5"
+                          fontWeight="700"
+                        >
+                          Meta: {sleepGoal}h · Prom: {avgSleepHours}h
+                        </SvgText>
+                      </>
+                    ) : (
+                      /* Distinct separated guidelines */
+                      <>
+                        <Line
+                          x1="0"
+                          y1={targetY}
+                          x2="128"
+                          y2={targetY}
+                          stroke={colors.brand}
+                          strokeWidth={1.2}
+                          strokeDasharray="3 3"
+                          strokeOpacity={0.55}
+                        />
+                        <SvgText
+                          x="132"
+                          y={targetY + 3}
+                          fill={colors.brand}
+                          fontSize="7.5"
+                          fontWeight="700"
+                        >
+                          Meta: {sleepGoal}h
+                        </SvgText>
+
+                        <Line
+                          x1="0"
+                          y1={avgY}
+                          x2="128"
+                          y2={avgY}
+                          stroke="#64748B"
+                          strokeWidth={1}
+                          strokeDasharray="2 3"
+                          strokeOpacity={0.45}
+                        />
+                        <SvgText
+                          x="132"
+                          y={avgY >= targetY ? Math.max(avgY + 3, targetY + 12) : Math.min(avgY + 3, targetY - 6)}
+                          fill="#64748B"
+                          fontSize="7.5"
+                          fontWeight="600"
+                        >
+                          Prom: {avgSleepHours}h
+                        </SvgText>
+                      </>
+                    )}
+
+                    {/* 7 Daily Bars */}
+                    {weeklySleep.map((item, index) => {
+                      const barWidth = 11;
+                      const totalBarArea = 126;
+                      const spacing = (totalBarArea - barWidth * 7) / 6;
+                      const x = index * (barWidth + spacing);
+                      const height = Math.min(maxBarH, (item.hours / 10) * maxBarH);
+                      const y = baseY - height;
+                      const isToday = index === weeklySleep.length - 1;
+                      const isGoalReached = item.hours >= 7.8;
+                      const isNearGoal = item.hours >= 6.8;
+
+                      // Mental Health UX: Tonos orgánicos vivos y calmantes
+                      const barFill = isToday
+                        ? '#0D9488' // Hoy: Verde azulado principal
+                        : isGoalReached
+                        ? '#86A789' // Meta alcanzada: Verde salvia
+                        : isNearGoal
+                        ? '#93C5FD' // Descanso balanceado: Azul cielo suave
+                        : '#CBD5E1'; // Descanso ligero
+
+                      return (
+                        <React.Fragment key={item.day + index}>
+                          <Rect
+                            x={x}
+                            y={y}
+                            width={barWidth}
+                            height={height}
+                            rx={4}
+                            fill={barFill}
+                          />
+                          <SvgText
+                            x={x + barWidth / 2}
+                            y="102"
+                            fill={isToday ? '#0D9488' : '#64748B'}
+                            fontSize="10"
+                            fontWeight={isToday ? '700' : '600'}
+                            textAnchor="middle"
+                          >
+                            {item.day}
+                          </SvgText>
+                        </React.Fragment>
+                      );
+                    })}
+                  </Svg>
+                );
+              })()}
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -608,9 +739,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sleepTitleGroup: {
+    flex: 1,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginRight: 8,
+  },
+  sleepTitleTextWrap: {
+    flex: 1,
+    flexShrink: 1,
   },
   sleepIconCircle: {
     width: 36,
@@ -638,6 +776,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: Radius.pill,
   },
+  sleepQualityBadgeRow: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   sleepQualityBadgeText: {
     fontSize: 11,
     fontWeight: '700',
@@ -657,7 +801,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sleepLeftCol: {
-    width: '42%',
+    width: '38%',
     justifyContent: 'center',
   },
   sleepAverageSubLabel: {
@@ -703,7 +847,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   sleepChartCol: {
-    width: '54%',
+    width: '60%',
     alignItems: 'flex-end',
     justifyContent: 'center',
   },

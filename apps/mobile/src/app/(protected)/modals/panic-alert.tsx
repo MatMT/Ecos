@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
+  Animated,
   Linking,
   StyleSheet,
   Text,
@@ -11,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { enqueueSync } from '@/services/storage/local-db';
 import { authClient } from '@/services/api/auth-client';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
@@ -30,8 +31,18 @@ export default function PanicAlertModal() {
   const [countdown, setCountdown] = useState<number>(COUNTDOWN_SECONDS);
   const [isDispatched, setIsDispatched] = useState<boolean>(false);
   const [isCancelled, setIsCancelled] = useState<boolean>(false);
+  const [fadeAnim] = useState<Animated.Value>(() => new Animated.Value(0));
 
   const dispatchTriggeredRef = useRef<boolean>(false);
+
+  // Mental Health UX: Transición suave de 600ms para evitar el "efecto susto"
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
 
   const triggerEmergencyDispatch = useCallback(() => {
     if (dispatchTriggeredRef.current) return;
@@ -96,25 +107,26 @@ export default function PanicAlertModal() {
   const strokeDashoffset = CIRCUMFERENCE * (1 - countdown / COUNTDOWN_SECONDS);
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.container,
         {
+          opacity: fadeAnim,
           paddingTop: Math.max(insets.top, 20) + 12,
           paddingBottom: Math.max(insets.bottom, 20) + 12,
         },
       ]}
     >
       <View style={styles.header}>
-        <Text style={styles.badge}>ATENCIÓN PRIORITARIA</Text>
+        <Text style={styles.badge}>SOPORTE Y ACOMPAÑAMIENTO</Text>
       </View>
 
       {!isDispatched ? (
         <View style={styles.countdownSection}>
           <View style={styles.titleWrap}>
-            <Text style={styles.alertTitle}>Activación de Emergencia</Text>
+            <Text style={styles.alertTitle}>Estamos aquí contigo</Text>
             <Text style={styles.alertSubtitle}>
-              Enviando alerta crítica a su equipo de atención clínica en:
+              El sistema lo tiene bajo control, respira hondo. Si necesitas asistencia, notificaremos a tu equipo clínico en:
             </Text>
           </View>
 
@@ -122,7 +134,7 @@ export default function PanicAlertModal() {
           <View style={styles.justificationCard}>
             <View style={styles.justificationDot} />
             <Text style={styles.justificationText}>
-              Desacople Autonómico Detectado • Pulso: {bpm ?? '--'} BPM | Actividad: {activity ?? 0}%
+              Desacople fisiológico detectado • Pulso: {bpm ?? '--'} lpm | Nivel de estrés: {stress ?? '--'}%
             </Text>
           </View>
 
@@ -132,15 +144,15 @@ export default function PanicAlertModal() {
             onPress={triggerEmergencyDispatch}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Enviar alerta de emergencia inmediatamente"
-            accessibilityHint="Toque el círculo central para despachar la alerta sin esperar el contador"
+            accessibilityLabel="Solicitar apoyo clínico de inmediato"
+            accessibilityHint="Toque el círculo central para notificar a su terapeuta sin esperar el contador"
           >
             <Svg width={TIMER_SIZE} height={TIMER_SIZE} style={styles.svgTimer}>
               <Circle
                 cx={TIMER_SIZE / 2}
                 cy={TIMER_SIZE / 2}
                 r={RADIUS}
-                stroke="rgba(239, 68, 68, 0.2)"
+                stroke="rgba(200, 109, 94, 0.2)"
                 strokeWidth={STROKE_WIDTH}
                 fill="transparent"
               />
@@ -148,7 +160,7 @@ export default function PanicAlertModal() {
                 cx={TIMER_SIZE / 2}
                 cy={TIMER_SIZE / 2}
                 r={RADIUS}
-                stroke="#EF4444"
+                stroke="#C86D5E"
                 strokeWidth={STROKE_WIDTH}
                 fill="transparent"
                 strokeDasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
@@ -162,31 +174,36 @@ export default function PanicAlertModal() {
               <Text style={styles.countdownNumber}>{countdown}</Text>
               <Text style={styles.countdownUnit}>segundos</Text>
               <View style={styles.fastTrackBadge}>
-                <Text style={styles.fastTrackText}>⚡ Toque para enviar ya</Text>
+                <Text style={styles.fastTrackText}>Toque para notificar ya</Text>
               </View>
             </View>
           </TouchableOpacity>
 
-          {/* Enhanced High-Contrast Cancel Button for Motor Tremor Accessibility */}
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={handleCancel}
-            activeOpacity={0.85}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel="Cancelar alerta de emergencia"
-          >
-            <Text style={styles.cancelButtonText}>Fue un error, me encuentro bien</Text>
-          </TouchableOpacity>
+          {/* High-Contrast Reassuring Cancel Button */}
+          <View style={styles.cancelWrap}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={handleCancel}
+              activeOpacity={0.85}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Cancelar notificación de emergencia"
+            >
+              <Text style={styles.cancelButtonText}>Fue accidental, me encuentro bien</Text>
+            </TouchableOpacity>
+            <Text style={styles.cancelHint}>
+              Puedes cancelar en cualquier momento sin ninguna repercusión.
+            </Text>
+          </View>
         </View>
       ) : (
         <View style={styles.dispatchedSection}>
           <View style={styles.dispatchedBadge}>
-            <Text style={styles.dispatchedBadgeText}>ALERTA ENVIADA</Text>
+            <Text style={styles.dispatchedBadgeText}>APOYO NOTIFICADO</Text>
           </View>
-          <Text style={styles.alertTitle}>Su terapeuta ha sido notificado</Text>
+          <Text style={styles.alertTitle}>Tu equipo clínico está al tanto</Text>
           <Text style={styles.alertSubtitle}>
-            Mantenga la calma. Puede comunicarse de forma inmediata a través de las siguientes líneas de asistencia:
+            Mantén la calma y concéntrate en tu respiración. Puedes comunicarte directamente a través de las siguientes líneas de asistencia:
           </Text>
 
           <View style={styles.contactsList}>
@@ -227,7 +244,7 @@ export default function PanicAlertModal() {
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -243,11 +260,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   badge: {
-    backgroundColor: Colors.danger,
+    backgroundColor: '#C86D5E',
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 12,
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: Radius.large,
@@ -279,9 +296,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    backgroundColor: 'rgba(200, 109, 94, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderColor: 'rgba(200, 109, 94, 0.35)',
     borderRadius: Radius.medium,
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -291,12 +308,12 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#EF4444',
+    backgroundColor: '#C86D5E',
   },
   justificationText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FCA5A5',
+    color: '#E2A99E',
     textAlign: 'center',
   },
   countdownTouchArea: {
@@ -315,33 +332,33 @@ const styles = StyleSheet.create({
     width: TIMER_SIZE - 20,
     height: TIMER_SIZE - 20,
     borderRadius: (TIMER_SIZE - 20) / 2,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: 'rgba(200, 109, 94, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderColor: 'rgba(200, 109, 94, 0.4)',
   },
   countdownNumber: {
     fontSize: 54,
     fontWeight: '900',
-    color: '#EF4444',
+    color: '#C86D5E',
     lineHeight: 60,
   },
   countdownUnit: {
     fontSize: 12,
-    color: '#FCA5A5',
+    color: '#E2A99E',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginTop: -4,
   },
   fastTrackBadge: {
-    backgroundColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: 'rgba(200, 109, 94, 0.25)',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginTop: 6,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.6)',
+    borderColor: 'rgba(200, 109, 94, 0.5)',
   },
   fastTrackText: {
     fontSize: 10,
@@ -349,28 +366,32 @@ const styles = StyleSheet.create({
     color: '#FEE2E2',
     letterSpacing: 0.5,
   },
+  cancelWrap: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 8,
+  },
   cancelButton: {
     minHeight: 56,
     backgroundColor: '#1E293B',
-    borderWidth: 2,
-    borderColor: '#64748B',
+    borderWidth: 1.5,
+    borderColor: '#475569',
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: Radius.large,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
   },
   cancelButtonText: {
-    color: '#F8FAFC',
-    fontWeight: '700',
     fontSize: 16,
-    letterSpacing: 0.3,
+    fontWeight: '700',
+    color: '#F8FAFC',
+  },
+  cancelHint: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
   },
   dispatchedSection: {
     flex: 1,
@@ -379,15 +400,15 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   dispatchedBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: 'rgba(13, 148, 136, 0.2)',
     paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: Radius.large,
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: '#0D9488',
   },
   dispatchedBadgeText: {
-    color: '#10B981',
+    color: '#2DD4BF',
     fontWeight: 'bold',
     fontSize: 12,
     letterSpacing: 1,

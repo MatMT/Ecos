@@ -270,7 +270,7 @@ async function seedInstitution(
         userId: psychologist.id,
         professionalLicense: `[SEED]-${institutionKey.toUpperCase()}${i}`,
         specialty: SPECIALTIES[(i - 1) % SPECIALTIES.length],
-        phone: '0000-0000',
+        phone: '+503 7123-4567',
       },
     });
     // Mon-Fri 08:00-16:00, so /psychologists/:id/availability has something to show —
@@ -349,23 +349,61 @@ async function seedInstitution(
       },
     });
 
+    // 14 days of realistic biometric & sleep data
+    const sleepSchedule = [
+      7.5, 6.8, 8.2, 5.9, 7.4, 6.2, 8.0,
+      7.1, 6.6, 5.5, 7.8, 8.3, 6.5, 7.2,
+    ];
+    const stressPattern = [
+      0.25, 0.42, 0.30, 0.68, 0.35, 0.52, 0.20,
+      0.38, 0.60, 0.78, 0.22, 0.18, 0.45, 0.28,
+    ];
+
     let lastAnomalousRecordId: number | null = null;
-    for (let d = 5; d >= 1; d--) {
+    for (let d = 14; d >= 1; d--) {
+      const dayIndex = (d - 1) % sleepSchedule.length;
+      const baseSleep = sleepSchedule[dayIndex] + ((i * 0.3) % 0.8) - 0.4;
+      const sleepHours = Math.round(Math.max(4.5, Math.min(9.5, baseSleep)) * 10) / 10;
+      const baseStress = stressPattern[dayIndex];
       const isAnomalous = d === 2;
-      const record = await prisma.biometricRecord.create({
+
+      // Morning reading (records sleep duration from the night before)
+      const morningDate = new Date(daysAgo(d));
+      morningDate.setHours(8, 30, 0, 0);
+
+      const morningRecord = await prisma.biometricRecord.create({
         data: {
           deviceId: device.id,
-          avgHeartRate: isAnomalous ? 128 : 74 + i,
-          stressLevel: isAnomalous ? 0.87 : 0.32,
-          sleepQualityHours: 6.5,
-          bloodOxygen: 97,
-          systolicBloodPressure: 118,
-          diastolicBloodPressure: 76,
-          bodyTemperature: 36.6,
-          timestamp: daysAgo(d),
+          avgHeartRate: isAnomalous ? 128 : 68 + (d % 5) + i,
+          stressLevel: isAnomalous ? 0.87 : Math.round(baseStress * 100) / 100,
+          sleepQualityHours: sleepHours,
+          bloodOxygen: 97 + (d % 3),
+          systolicBloodPressure: isAnomalous ? 138 : 116 + (d % 6),
+          diastolicBloodPressure: isAnomalous ? 88 : 74 + (d % 4),
+          bodyTemperature: 36.5 + (d % 4) * 0.1,
+          timestamp: morningDate,
         },
       });
-      if (isAnomalous) lastAnomalousRecordId = record.id;
+
+      // Afternoon reading (daytime stress and heart rate)
+      const afternoonDate = new Date(daysAgo(d));
+      afternoonDate.setHours(15, 15, 0, 0);
+
+      await prisma.biometricRecord.create({
+        data: {
+          deviceId: device.id,
+          avgHeartRate: 76 + (d % 7) + i,
+          stressLevel: Math.round(Math.min(0.95, baseStress + 0.15) * 100) / 100,
+          sleepQualityHours: null,
+          bloodOxygen: 98,
+          systolicBloodPressure: 118 + (d % 5),
+          diastolicBloodPressure: 76 + (d % 3),
+          bodyTemperature: 36.6,
+          timestamp: afternoonDate,
+        },
+      });
+
+      if (isAnomalous) lastAnomalousRecordId = morningRecord.id;
     }
 
     const closedAlert = await prisma.alert.create({
@@ -403,37 +441,71 @@ async function seedInstitution(
       },
     });
 
-    // Offset by student index so two students sharing the same doctor (there are more
-    // students than psychologists per institution) never land on the exact same instant —
-    // remote_appointments_no_doctor_overlap now rejects that outright.
-    const pastDate = new Date(daysAgo(3).getTime() + i * 60 * 60 * 1000);
-    const pastDuration = 60;
-    const futureDate = new Date(daysFromNow(7).getTime() + i * 60 * 60 * 1000);
-    const futureDuration = 60;
+    // Offset appointments by student index to guarantee no overlapping doctor slots
+    const sessionDuration = 60;
+    const pastDate1 = new Date(daysAgo(3).getTime() + i * 2 * 60 * 60 * 1000);
+    const pastDate2 = new Date(daysAgo(10).getTime() + i * 2 * 60 * 60 * 1000);
+    const pastDate3 = new Date(daysAgo(17).getTime() + i * 2 * 60 * 60 * 1000);
+    const futureDate = new Date(daysFromNow(7).getTime() + i * 2 * 60 * 60 * 1000);
 
-    const completedAppointment = await prisma.appointment.create({
+    const completedAppt1 = await prisma.appointment.create({
       data: {
         studentId: profile.id,
         doctorId: assignedDoctor.id,
         sessionTitle: 'Sesión de seguimiento mensual',
         sessionType: 'Individual',
-        appointmentDate: pastDate,
-        endAt: new Date(pastDate.getTime() + pastDuration * 60 * 1000),
-        durationMinutes: pastDuration,
+        reason: 'Manejo de ansiedad ante evaluaciones',
+        appointmentDate: pastDate1,
+        endAt: new Date(pastDate1.getTime() + sessionDuration * 60 * 1000),
+        durationMinutes: sessionDuration,
         modality: 'in_person',
         createdById: admin.id,
         status: AppointmentStatus.completed,
       },
     });
+
+    const completedAppt2 = await prisma.appointment.create({
+      data: {
+        studentId: profile.id,
+        doctorId: assignedDoctor.id,
+        sessionTitle: 'Sesión de intervención intermedia',
+        sessionType: 'Individual',
+        reason: 'Exploración de disparadores emocionales',
+        appointmentDate: pastDate2,
+        endAt: new Date(pastDate2.getTime() + sessionDuration * 60 * 1000),
+        durationMinutes: sessionDuration,
+        modality: 'in_person',
+        createdById: admin.id,
+        status: AppointmentStatus.completed,
+      },
+    });
+
+    const completedAppt3 = await prisma.appointment.create({
+      data: {
+        studentId: profile.id,
+        doctorId: assignedDoctor.id,
+        sessionTitle: 'Sesión de evaluación y apertura',
+        sessionType: 'Individual',
+        reason: 'Evaluación inicial y encuadre terapéutico',
+        appointmentDate: pastDate3,
+        endAt: new Date(pastDate3.getTime() + sessionDuration * 60 * 1000),
+        durationMinutes: sessionDuration,
+        modality: 'in_person',
+        createdById: admin.id,
+        status: AppointmentStatus.completed,
+      },
+    });
+
     await prisma.appointment.create({
       data: {
         studentId: profile.id,
         doctorId: assignedDoctor.id,
         sessionTitle: 'Próxima sesión de seguimiento',
         sessionType: 'Individual',
+        reason: 'Seguimiento de metas terapéuticas y regulación emocional',
         appointmentDate: futureDate,
-        endAt: new Date(futureDate.getTime() + futureDuration * 60 * 1000),
-        durationMinutes: futureDuration,
+        endAt: new Date(futureDate.getTime() + sessionDuration * 60 * 1000),
+        durationMinutes: sessionDuration,
         modality: 'in_person',
         createdById: admin.id,
         status: AppointmentStatus.pending,
@@ -442,13 +514,13 @@ async function seedInstitution(
 
     await prisma.clinicalNote.create({
       data: {
-        appointmentId: completedAppointment.id,
+        appointmentId: completedAppt1.id,
         doctorId: assignedDoctor.id,
         studentId: profile.id,
         sessionDiagnosis: DIAGNOSES[(i - 1) % DIAGNOSES.length],
         observedEmotionalState: EmotionalState.calm,
         observations:
-          'El estudiante muestra progreso favorable desde la última sesión.',
+          'El estudiante muestra progreso favorable desde la última sesión. Refiere mejor conciliación del sueño.',
         aiAssistantAnalysis:
           'Sin señales de riesgo detectadas en el análisis de la conversación.',
         sessionSummary:
@@ -461,17 +533,53 @@ async function seedInstitution(
       },
     });
 
+    await prisma.clinicalNote.create({
+      data: {
+        appointmentId: completedAppt2.id,
+        doctorId: assignedDoctor.id,
+        studentId: profile.id,
+        sessionDiagnosis: DIAGNOSES[(i - 1) % DIAGNOSES.length],
+        observedEmotionalState: EmotionalState.anxious,
+        observations:
+          'Estudiante expone preocupación respecto a cargas evaluativas universitarias.',
+        sessionSummary:
+          'Se identificaron patrones de rumiación nocturna e impacto en el descanso.',
+        clinicalImpression: 'Nivel moderado de estrés situacional.',
+        interventions: 'Entrenamiento en higiene del sueño y diario de autorregistro.',
+        agreements: 'Registrar episodios de estrés en la app.',
+        followUpPlan: 'Sesión de seguimiento en dos semanas.',
+      },
+    });
+
+    await prisma.clinicalNote.create({
+      data: {
+        appointmentId: completedAppt3.id,
+        doctorId: assignedDoctor.id,
+        studentId: profile.id,
+        sessionDiagnosis: DIAGNOSES[(i - 1) % DIAGNOSES.length],
+        observedEmotionalState: EmotionalState.calm,
+        observations:
+          'Entrevista clínica de apertura. Establecimiento de la alianza terapéutica.',
+        sessionSummary:
+          'Apertura del expediente clínico y definición de objetivos del plan terapéutico.',
+        clinicalImpression: 'Buena disposición hacia el proceso clínico.',
+        interventions: 'Psicoeducación sobre fisiología del estrés y uso de la pulsera ECOS.',
+        agreements: 'Vincular dispositivo y portarlo durante actividades diarias.',
+        followUpPlan: 'Iniciar sesiones quincenales.',
+      },
+    });
+
     await prisma.clinicalRecord.create({
       data: {
         studentId: profile.id,
-        initialReason: 'Dificultades de concentración reportadas por el tutor.',
+        initialReason: 'Dificultades de concentración y regulación del estrés reportadas por el estudiante.',
         psychologicalHistory: 'Sin antecedentes psicológicos previos relevantes.',
         psychiatricHistory: 'Ninguno reportado.',
         relevantFamilyHistory: 'Sin antecedentes familiares relevantes.',
         previousTreatments: 'Ninguno.',
         currentMedication: 'Ninguno.',
         generalObservations:
-          'Estudiante colaborador, con buena disposición hacia el proceso terapéutico.',
+          'Estudiante colaborador, con excelente disposición hacia el proceso terapéutico.',
       },
     });
 
@@ -479,12 +587,13 @@ async function seedInstitution(
       data: {
         studentId: profile.id,
         therapistId: assignedDoctor.id,
-        title: 'Plan de manejo de ansiedad',
+        title: 'Plan de manejo de ansiedad y regulación del descanso',
         generalGoal:
-          'Reducir la frecuencia e intensidad de los episodios de ansiedad.',
+          'Reducir la frecuencia e intensidad de los episodios de estrés y consolidar hábitos saludables de sueño.',
         startsAt: daysAgo(30),
       },
     });
+
     await prisma.treatmentGoal.create({
       data: {
         planId: plan.id,
@@ -494,13 +603,50 @@ async function seedInstitution(
       },
     });
 
+    await prisma.treatmentGoal.create({
+      data: {
+        planId: plan.id,
+        studentId: profile.id,
+        description: 'Mantener una rutina de descanso regular con al menos 7 horas de sueño nocturno.',
+        status: 'in_progress',
+      },
+    });
+
+    await prisma.treatmentGoal.create({
+      data: {
+        planId: plan.id,
+        studentId: profile.id,
+        description: 'Registrar reflexiones en el diario emocional tras experimentar picos de tensión.',
+        status: 'in_progress',
+      },
+    });
+
+    await prisma.treatmentGoal.create({
+      data: {
+        planId: plan.id,
+        studentId: profile.id,
+        description: 'Identificar y listar disparadores de ansiedad académica antes de evaluaciones.',
+        status: 'completed',
+      },
+    });
+
     await prisma.studentActivity.create({
       data: {
         studentId: profile.id,
-        activityId: activities[i % activities.length].id,
+        activityId: activities[0].id,
         therapistId: assignedDoctor.id,
         origin: 'psychologist',
         dueAt: daysFromNow(3),
+      },
+    });
+
+    await prisma.studentActivity.create({
+      data: {
+        studentId: profile.id,
+        activityId: activities[1].id,
+        therapistId: assignedDoctor.id,
+        origin: 'psychologist',
+        dueAt: daysFromNow(6),
       },
     });
 
@@ -509,10 +655,21 @@ async function seedInstitution(
         studentId: profile.id,
         entryType: EntryType.personal_journal,
         userContent:
-          'Hoy me sentí un poco cansado, pero el día estuvo tranquilo.',
+          'Pude descansar mejor anoche y asistí a mis clases con mayor tranquilidad mental.',
         detectedAlertLevel: 'low',
       },
     });
+
+    await prisma.emotionalJournal.create({
+      data: {
+        studentId: profile.id,
+        entryType: EntryType.personal_journal,
+        userContent:
+          'Sentí un poco de agobio antes del laboratorio, pero apliqué la técnica de respiración guiada de la app.',
+        detectedAlertLevel: 'low',
+      },
+    });
+
     await prisma.emotionalJournal.create({
       data: {
         studentId: profile.id,
@@ -529,7 +686,7 @@ async function seedInstitution(
         studentId: profile.id,
         therapistId: assignedDoctor.id,
         contentType: 'journal_entry',
-        content: 'Hoy me sentí un poco cansado, pero el día estuvo tranquilo.',
+        content: 'Pude descansar mejor anoche y asistí a mis clases con mayor tranquilidad mental.',
       },
     });
   }

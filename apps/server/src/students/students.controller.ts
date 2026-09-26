@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,6 +23,7 @@ import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { StudentResponseDto } from './dto/student-response.dto';
+import { StudentMeResponseDto } from './dto/student-me-response.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -84,6 +86,30 @@ export class StudentsController {
     @Query('take', new DefaultValuePipe(20), ParseIntPipe) take: number,
   ) {
     return this.studentsService.findAll(skip, take);
+  }
+
+  @Get('me')
+  @UseGuards(RolesGuard)
+  @Roles(Role.student)
+  @ApiOperation({
+    summary: 'Get current authenticated student profile and clinical context',
+    description:
+      'Student-only. Resolves caller to their student profile, assigned therapist, next appointment, and active treatment plan.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Current student profile and context.',
+    type: StudentMeResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Student profile not found for this user.',
+  })
+  getMe(@CurrentUser() currentUser?: RequestUser) {
+    if (!currentUser?.id) {
+      throw new UnauthorizedException('Usuario no autenticado.');
+    }
+    return this.studentsService.getMe(currentUser.id);
   }
 
   @Get(':id')

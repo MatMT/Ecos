@@ -33,6 +33,8 @@ import {
   ZapIcon,
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
+import { useStudent } from '@/hooks/use-student';
+import { useTheme } from '@/context/theme-context';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import {
   listJournalEntries,
@@ -209,6 +211,8 @@ function renderEmotionIcon(key: string, size = 16, isSelected = false) {
 
 export default function ChatScreen() {
   const { user } = useAuth();
+  const { student } = useStudent();
+  const { colors } = useTheme();
   const { bpm, stress, isBleConnected, trafficState } = useBiometricMonitor();
 
   // Journal Entries State
@@ -274,45 +278,74 @@ export default function ChatScreen() {
     }
   };
 
-  const handleShareWithTherapist = (entry: LocalJournalEntry) => {
-    Alert.alert(
-      'Compartir con su terapeuta',
-      '¿Desea compartir esta reflexión con el Dr. Carlos Méndez? Esta acción creará una copia inmutable visible para su psicólogo en su expediente clínico.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Compartir',
-          onPress: async () => {
-            const snapshotId = `snap_${Date.now()}`;
-            try {
-              await markJournalEntryShared(entry.id, snapshotId);
+  // Share with Therapist State (Mental Health UX: Empowering granular modal)
+  const [entryToShare, setEntryToShare] = useState<LocalJournalEntry | null>(null);
+  const [shareIncludeBiometrics, setShareIncludeBiometrics] = useState<boolean>(true);
+  const [shareIncludeNarrative, setShareIncludeNarrative] = useState<boolean>(true);
 
-              const payload = {
-                therapistId: 1,
-                contentType: 'journal_entry',
-                sourceLocalId: entry.id,
-                content: `[Emoción: ${entry.primary_emotion}, Ánimo: ${entry.mood_score}/5, FC: ${entry.associated_bpm ?? '--'} bpm]\n${entry.narrative_text}`,
-              };
+  const handleOpenShareModal = (entry: LocalJournalEntry) => {
+    setEntryToShare(entry);
+    setShareIncludeBiometrics(true);
+    setShareIncludeNarrative(true);
+  };
 
-              authClient
-                .apiFetch('/api/v1/students/me/shared-content', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(payload),
-                })
-                .catch(() => {
-                  return enqueueSync('/api/v1/students/shared-content', payload);
-                });
+  const handleConfirmShare = async () => {
+    if (!entryToShare || !student?.id) {
+      Alert.alert(
+        'Atención',
+        'No se ha podido identificar su expediente de estudiante. Por favor, verifique su conexión e intente nuevamente.'
+      );
+      return;
+    }
 
-              await refreshJournal();
-              Alert.alert('Éxito', 'Su reflexión ha sido compartida confidencialmente con su terapeuta.');
-            } catch {
-              Alert.alert('Aviso', 'Se ha programado el envío para cuando se restablezca la conexión.');
-            }
-          },
-        },
-      ]
-    );
+    if (!shareIncludeBiometrics && !shareIncludeNarrative) {
+      Alert.alert('Atención', 'Por favor, seleccione al menos una opción para compartir con su terapeuta.');
+      return;
+    }
+
+    const snapshotId = `snap_${Date.now()}`;
+    try {
+      await markJournalEntryShared(entryToShare.id, snapshotId);
+
+      const parts: string[] = [];
+      if (shareIncludeBiometrics) {
+        parts.push(
+          `[Métricas fisiológicas: Emoción: ${entryToShare.primary_emotion}, Ánimo: ${entryToShare.mood_score}/5, FC: ${entryToShare.associated_bpm ?? '--'} bpm]`
+        );
+      }
+      if (shareIncludeNarrative) {
+        parts.push(entryToShare.narrative_text);
+      }
+
+      const payload = {
+        therapistId: student.assignedTherapist?.id,
+        contentType: 'journal_entry',
+        sourceLocalId: entryToShare.id,
+        content: parts.join('\n\n'),
+      };
+
+      const endpoint = `/api/v1/students/${student.id}/shared-content`;
+
+      authClient
+        .apiFetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        .catch(() => {
+          return enqueueSync(endpoint, payload);
+        });
+
+      await refreshJournal();
+      setEntryToShare(null);
+      Alert.alert(
+        'Nota preparada',
+        `Esta información se ha organizado para revisarla con ${student.assignedTherapist?.fullName || 'su psicólogo'} en su próxima sesión.`
+      );
+    } catch {
+      setEntryToShare(null);
+      Alert.alert('Aviso', 'Se ha programado el envío para cuando se restablezca la conexión.');
+    }
   };
 
   // Subtle Biometric Chip State
@@ -342,14 +375,16 @@ export default function ChatScreen() {
         detail: `Modo continuo · Lectura estimada: ${bpm ?? 72} bpm`,
       };
 
+  const displayName = student?.fullName || greetingNameFrom(user?.email);
+
   return (
-    <View style={styles.mainContainer}>
-      <CustomTopBar name={greetingNameFrom(user?.email)} />
+    <View style={[styles.mainContainer, { backgroundColor: colors.background }]}>
+      <CustomTopBar name={displayName} />
 
       {/* Screen Subheader */}
       <View style={styles.subHeader}>
         <View style={styles.subHeaderLeft}>
-          <Text style={styles.screenTitle}>Tu Espacio Personal</Text>
+          <Text style={[styles.screenTitle, { color: colors.text }]}>Tu Espacio Personal</Text>
           <View style={styles.privacyBadge}>
             <LockIcon size={12} color="#64748B" />
             <Text style={styles.privacyBadgeText}>
@@ -359,7 +394,7 @@ export default function ChatScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.newEntryButton}
+          style={[styles.newEntryButton, { backgroundColor: colors.brand }]}
           onPress={() => setShowNewEntryModal(true)}
           activeOpacity={0.85}
         >
@@ -371,19 +406,19 @@ export default function ChatScreen() {
       {/* Entries List or Clean Empty State */}
       {journalEntries.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <BookOpenIcon size={36} color={Colors.brand} />
+          <View style={[styles.emptyIconCircle, { backgroundColor: colors.brandLight }]}>
+            <BookOpenIcon size={36} color={colors.brand} />
           </View>
-          <Text style={styles.emptyTitle}>Aún no tienes entradas registradas</Text>
-          <Text style={styles.emptySubtitle}>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Aún no tienes entradas registradas</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
             Tómate un momento para expresar tus pensamientos y emociones del día con total privacidad.
           </Text>
           <TouchableOpacity
-            style={styles.emptyActionButton}
+            style={[styles.emptyActionButton, { backgroundColor: colors.brandLight, borderColor: colors.border }]}
             onPress={() => setShowNewEntryModal(true)}
             activeOpacity={0.85}
           >
-            <Text style={styles.emptyActionButtonText}>Escribir primera reflexión</Text>
+            <Text style={[styles.emptyActionButtonText, { color: colors.brand }]}>Escribir primera reflexión</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -397,20 +432,20 @@ export default function ChatScreen() {
             const isShared = item.is_shared_with_therapist === 1;
 
             return (
-              <View style={styles.entryCard}>
+              <View style={[styles.entryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.entryHeader}>
                   <View style={styles.entryEmotionTag}>
                     {renderEmotionIcon(item.primary_emotion, 15, true)}
-                    <Text style={styles.entryEmotionLabel}>
+                    <Text style={[styles.entryEmotionLabel, { color: colors.brand }]}>
                       {emotionObj?.label ?? item.primary_emotion}
                     </Text>
                     <Text style={styles.entryMoodDot}>·</Text>
                     {renderMoodIcon(item.mood_score, 17, true)}
-                    <Text style={styles.entryMoodScore}>
+                    <Text style={[styles.entryMoodScore, { color: colors.textSecondary }]}>
                       {moodObj?.label ?? `${item.mood_score}/5`}
                     </Text>
                   </View>
-                  <Text style={styles.entryDate}>
+                  <Text style={[styles.entryDate, { color: colors.textMuted }]}>
                     {new Date(item.created_at ?? '').toLocaleDateString('es-ES', {
                       day: '2-digit',
                       month: 'short',
@@ -418,35 +453,39 @@ export default function ChatScreen() {
                   </Text>
                 </View>
 
-                <Text style={styles.entryNarrative}>{item.narrative_text}</Text>
+                <Text style={[styles.entryNarrative, { color: colors.text }]}>{item.narrative_text}</Text>
 
                 {item.associated_bpm != null && (
-                  <View style={styles.entryBiometricStamp}>
-                    <WatchIcon size={12} color="#64748B" />
-                    <Text style={styles.entryBiometricText}>
+                  <View style={[styles.entryBiometricStamp, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <WatchIcon size={12} color={colors.textSecondary} />
+                    <Text style={[styles.entryBiometricText, { color: colors.textSecondary }]}>
                       ECOS BAND ·
                     </Text>
                     <HeartIcon size={11} color="#DC2626" />
-                    <Text style={styles.entryBiometricText}>
+                    <Text style={[styles.entryBiometricText, { color: colors.textSecondary }]}>
                       {item.associated_bpm} bpm
                       {item.associated_stress != null ? ` · ${item.associated_stress}% estrés` : ''}
                     </Text>
                   </View>
                 )}
 
-                <View style={styles.entryFooter}>
+                <View style={[styles.entryFooter, { borderColor: colors.borderSubtle }]}>
                   {isShared ? (
                     <View style={styles.sharedBadge}>
                       <CheckIcon size={12} color="#15803D" />
-                      <Text style={styles.sharedBadgeText}>Compartido con Dr. Méndez</Text>
+                      <Text style={styles.sharedBadgeText}>
+                        {student?.assignedTherapist?.fullName
+                          ? `Compartido con ${student.assignedTherapist.fullName}`
+                          : 'Compartido con terapeuta'}
+                      </Text>
                     </View>
                   ) : (
                     <TouchableOpacity
-                      style={styles.shareButton}
-                      onPress={() => handleShareWithTherapist(item)}
+                      style={[styles.shareButton, { backgroundColor: colors.surfaceSubtle }]}
+                      onPress={() => handleOpenShareModal(item)}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.shareButtonText}>Compartir con terapeuta</Text>
+                      <Text style={[styles.shareButtonText, { color: colors.brand }]}>Preparar para mi sesión</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -459,16 +498,16 @@ export default function ChatScreen() {
       {/* Modal de Entrada ("+ Escribir") */}
       <Modal visible={showNewEntryModal} animationType="slide" transparent>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
             {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nueva Reflexión</Text>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Nueva Reflexión</Text>
               <TouchableOpacity
-                style={styles.modalCloseButton}
+                style={[styles.modalCloseButton, { backgroundColor: colors.surfaceSubtle }]}
                 onPress={() => setShowNewEntryModal(false)}
                 activeOpacity={0.7}
               >
-                <CloseIcon size={18} color="#64748B" />
+                <CloseIcon size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -477,7 +516,7 @@ export default function ChatScreen() {
               showsVerticalScrollIndicator={false}
             >
               {/* Question 1: Mood Score */}
-              <Text style={styles.formSectionLabel}>¿Cómo te sientes en este momento?</Text>
+              <Text style={[styles.formSectionLabel, { color: colors.textSecondary }]}>¿Cómo te sientes en este momento?</Text>
               <View style={styles.moodSelectorRow}>
                 {MOOD_OPTIONS.map((opt) => {
                   const isSelected = newMoodScore === opt.score;
@@ -487,8 +526,8 @@ export default function ChatScreen() {
                       style={[
                         styles.moodOptionButton,
                         {
-                          backgroundColor: isSelected ? opt.bgActive : opt.bgLight,
-                          borderColor: isSelected ? opt.borderActive : opt.borderLight,
+                          backgroundColor: isSelected ? opt.bgActive : colors.surfaceSubtle,
+                          borderColor: isSelected ? opt.borderActive : colors.border,
                           borderWidth: isSelected ? 2 : 1,
                         },
                       ]}
@@ -502,7 +541,7 @@ export default function ChatScreen() {
                         style={[
                           styles.moodLabel,
                           {
-                            color: isSelected ? opt.colorActive : opt.color,
+                            color: isSelected ? opt.colorActive : colors.textSecondary,
                             fontWeight: isSelected ? '700' : '500',
                           },
                         ]}
@@ -515,7 +554,7 @@ export default function ChatScreen() {
               </View>
 
               {/* Question 2: Predominant Emotion */}
-              <Text style={styles.formSectionLabel}>Emoción predominante</Text>
+              <Text style={[styles.formSectionLabel, { color: colors.textSecondary }]}>Emoción predominante</Text>
               <View style={styles.emotionsWrap}>
                 {EMOTIONS.map((e) => {
                   const isSelected = newEmotion === e.key;
@@ -531,8 +570,8 @@ export default function ChatScreen() {
                               borderWidth: 1.5,
                             }
                           : {
-                              backgroundColor: '#F8FAFC',
-                              borderColor: '#E2E8F0',
+                              backgroundColor: colors.surfaceSubtle,
+                              borderColor: colors.border,
                               borderWidth: 1,
                             },
                       ]}
@@ -544,7 +583,7 @@ export default function ChatScreen() {
                         style={[
                           styles.emotionPillLabel,
                           {
-                            color: isSelected ? e.color : '#64748B',
+                            color: isSelected ? e.color : colors.textSecondary,
                             fontWeight: isSelected ? '700' : '500',
                           },
                         ]}
@@ -557,13 +596,20 @@ export default function ChatScreen() {
               </View>
 
               {/* Question 3: Narrative Text */}
-              <Text style={styles.formSectionLabel}>
+              <Text style={[styles.formSectionLabel, { color: colors.textSecondary }]}>
                 Escribe tus pensamientos o reflexiones
               </Text>
               <TextInput
-                style={styles.narrativeTextInput}
+                style={[
+                  styles.narrativeTextInput,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
                 placeholder="Hoy me sentí un poco abrumado cuando..."
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={colors.placeholder}
                 multiline
                 numberOfLines={5}
                 value={newNarrative}
@@ -597,20 +643,129 @@ export default function ChatScreen() {
 
               {/* Optional Subtle Tooltip */}
               {showBiometricTooltip && (
-                <View style={styles.tooltipCard}>
-                  <Text style={styles.tooltipText}>{biometricPillConfig.detail}</Text>
+                <View style={[styles.tooltipCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.tooltipText, { color: colors.textSecondary }]}>{biometricPillConfig.detail}</Text>
                 </View>
               )}
 
               {/* Save Action */}
               <TouchableOpacity
-                style={styles.saveEntryButton}
+                style={[styles.saveEntryButton, { backgroundColor: colors.brand }]}
                 onPress={handleSaveEntry}
                 activeOpacity={0.85}
               >
                 <Text style={styles.saveEntryButtonText}>Guardar en mi diario</Text>
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      {/* Modal de Preparación para la Sesión (Alianza Terapéutica & Mental Health UX) */}
+      <Modal visible={entryToShare !== null} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.shareModalCard, { backgroundColor: colors.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <View style={styles.modalHeaderTitleRow}>
+                <BookOpenIcon size={20} color={colors.brand} />
+                <Text style={[styles.shareModalTitle, { color: colors.text }]}>Preparar nota para tu sesión</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.modalCloseButton, { backgroundColor: colors.surfaceSubtle }]}
+                onPress={() => setEntryToShare(null)}
+                activeOpacity={0.7}
+              >
+                <CloseIcon size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.shareModalExplanation, { color: colors.textSecondary }]}>
+              Esta información se compartirá de forma confidencial con{' '}
+              <Text style={{ fontWeight: '700', color: colors.text }}>
+                {student?.assignedTherapist?.fullName || 'tu psicólogo'}
+              </Text>{' '}
+              para que puedan revisarla juntos en tu próxima consulta clínica.
+            </Text>
+
+            {/* Checkbox 1: Narrative */}
+            <TouchableOpacity
+              style={[
+                styles.shareCheckboxRow,
+                { backgroundColor: shareIncludeNarrative ? colors.brandLight : colors.surfaceSubtle, borderColor: shareIncludeNarrative ? colors.brand : colors.border },
+              ]}
+              onPress={() => setShareIncludeNarrative((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.checkboxBox,
+                  shareIncludeNarrative && { backgroundColor: colors.brand, borderColor: colors.brand },
+                ]}
+              >
+                {shareIncludeNarrative && <CheckIcon size={14} color="#FFFFFF" />}
+              </View>
+              <View style={styles.checkboxTextWrap}>
+                <Text style={[styles.checkboxTitle, { color: colors.text }]}>Incluir mi reflexión escrita</Text>
+                <Text style={[styles.checkboxSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                  &ldquo;{entryToShare?.narrative_text}&rdquo;
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Checkbox 2: Biometrics */}
+            <TouchableOpacity
+              style={[
+                styles.shareCheckboxRow,
+                { backgroundColor: shareIncludeBiometrics ? colors.brandLight : colors.surfaceSubtle, borderColor: shareIncludeBiometrics ? colors.brand : colors.border },
+              ]}
+              onPress={() => setShareIncludeBiometrics((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.checkboxBox,
+                  shareIncludeBiometrics && { backgroundColor: colors.brand, borderColor: colors.brand },
+                ]}
+              >
+                {shareIncludeBiometrics && <CheckIcon size={14} color="#FFFFFF" />}
+              </View>
+              <View style={styles.checkboxTextWrap}>
+                <Text style={[styles.checkboxTitle, { color: colors.text }]}>Incluir biometría registrada</Text>
+                <Text style={[styles.checkboxSub, { color: colors.textSecondary }]}>
+                  Frecuencia cardíaca ({entryToShare?.associated_bpm ?? '--'} bpm) y estado anímico ({entryToShare?.mood_score}/5).
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={[styles.privacyNoteBox, { backgroundColor: colors.brandLight }]}>
+              <LockIcon size={13} color={colors.brand} />
+              <Text style={[styles.privacyNoteText, { color: colors.brand }]}>
+                Tu privacidad es absoluta. Solo tú y tu terapeuta asignado tienen acceso a esta nota.
+              </Text>
+            </View>
+
+            {/* Actions */}
+            <TouchableOpacity
+              style={[
+                styles.shareConfirmButton,
+                { backgroundColor: colors.brand },
+                (!shareIncludeBiometrics && !shareIncludeNarrative) && styles.shareConfirmButtonDisabled,
+              ]}
+              onPress={handleConfirmShare}
+              disabled={!shareIncludeBiometrics && !shareIncludeNarrative}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.shareConfirmButtonText}>
+                Guardar y compartir con mi psicólogo
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.shareCancelButton}
+              onPress={() => setEntryToShare(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.shareCancelButtonText, { color: colors.textSecondary }]}>Mantener solo en mi diario</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -983,5 +1138,121 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  shareModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 36,
+  },
+  modalHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  shareModalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  shareModalExplanation: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 19,
+    marginVertical: 12,
+  },
+  shareCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    marginBottom: 10,
+    gap: 12,
+  },
+  shareCheckboxRowActive: {
+    borderColor: '#0D9488',
+    backgroundColor: '#F0FDFA',
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  checkboxBoxActive: {
+    backgroundColor: '#0D9488',
+    borderColor: '#0D9488',
+  },
+  checkboxTextWrap: {
+    flex: 1,
+  },
+  checkboxTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  checkboxSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  privacyNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDFA',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.small,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  privacyNoteText: {
+    fontSize: 11,
+    color: '#0F766E',
+    fontWeight: '500',
+    flex: 1,
+  },
+  shareConfirmButton: {
+    backgroundColor: '#0D9488',
+    paddingVertical: 14,
+    borderRadius: Radius.large,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#0D9488',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  shareConfirmButtonDisabled: {
+    backgroundColor: '#94A3B8',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  shareConfirmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  shareCancelButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  shareCancelButtonText: {
+    color: '#64748B',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });

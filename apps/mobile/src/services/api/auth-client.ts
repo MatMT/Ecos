@@ -53,6 +53,40 @@ function toStoredSession(body: AuthResponseBody): StoredSession {
   };
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const AUTH_REQUEST_TIMEOUT_MS = 8_000;
+const FAST_REFRESH_TIMEOUT_MS = 4_000;
+
+export const NETWORK_ERROR_MESSAGE =
+  'No fue posible conectar con el servidor. Verifique su conexión e intente nuevamente.';
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (init.signal) {
+    init.signal.addEventListener('abort', () => controller.abort());
+  }
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(NETWORK_ERROR_MESSAGE);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function parseErrorMessage(res: Response): Promise<string> {
   try {
     const body = await res.json();
@@ -65,11 +99,15 @@ async function parseErrorMessage(res: Response): Promise<string> {
 
 async function refresh(refreshToken: string): Promise<AuthResponseBody | null> {
   try {
-    const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
+    const res = await fetchWithTimeout(
+      `${API_URL}/api/v1/auth/refresh`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      },
+      FAST_REFRESH_TIMEOUT_MS,
+    );
     if (!res.ok) return null;
     return (await res.json()) as AuthResponseBody;
   } catch {
@@ -115,7 +153,7 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   if (!session) throw new Error('SESSION_EXPIRED');
 
   const doFetch = (accessToken: string) =>
-    fetch(`${API_URL}${path}`, {
+    fetchWithTimeout(`${API_URL}${path}`, {
       ...init,
       headers: { ...init.headers, Authorization: `Bearer ${accessToken}` },
     });
@@ -136,17 +174,18 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   return doFetch(next.accessToken);
 }
 
-const NETWORK_ERROR_MESSAGE =
-  'No fue posible conectar con el servidor. Verifique su conexión e intente nuevamente.';
-
 async function login(email: string, password: string): Promise<AuthUser> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
+    res = await fetchWithTimeout(
+      `${API_URL}/api/v1/auth/login`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      },
+      AUTH_REQUEST_TIMEOUT_MS,
+    );
   } catch {
     // fetch() throws a raw, English, implementation-specific error on network failure — never
     // surface that to the user directly.

@@ -10,6 +10,9 @@ export class BiometricTrendPointDto {
   @ApiPropertyOptional({ nullable: true })
   avgStressLevel!: number | null;
 
+  @ApiPropertyOptional({ nullable: true })
+  avgSleepQualityHours!: number | null;
+
   @ApiProperty({ description: 'Number of readings this point summarizes.' })
   sampleCount!: number;
 }

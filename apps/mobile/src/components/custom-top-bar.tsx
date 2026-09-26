@@ -4,6 +4,7 @@ import { useRouter, type Href } from 'expo-router';
 
 import BellIcon from '@/assets/bell.svg';
 import { Colors } from '@/constants/theme';
+import { useTheme } from '@/context/theme-context';
 
 export interface CustomTopBarProps {
   name: string;
@@ -12,20 +13,21 @@ export interface CustomTopBarProps {
 
 export default function CustomTopBar({ name, onNotificationsPress }: CustomTopBarProps) {
   const router = useRouter();
+  const { colors } = useTheme();
   const initial = name.trim().charAt(0).toUpperCase() || '?';
 
   const handlePress = onNotificationsPress ?? (() => router.push('/modals/alerts-history' as Href));
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <View style={styles.container}>
+    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: colors.surface }]}>
         <View style={styles.userInfo}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarInitial}>{initial}</Text>
+          <View style={[styles.avatar, { backgroundColor: colors.brand }]}>
+            <Text style={[styles.avatarInitial, { color: colors.surface }]}>{initial}</Text>
           </View>
           <View>
-            <Text style={styles.greeting}>Hola, {name}</Text>
-            <Text style={styles.brandName}>Ecos</Text>
+            <Text style={[styles.greeting, { color: colors.textSecondary }]}>Hola, {name}</Text>
+            <Text style={[styles.brandName, { color: colors.text }]}>Ecos</Text>
           </View>
         </View>
 

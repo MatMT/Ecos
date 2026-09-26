@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
+import { DevServerBanner } from '@/components/dev-server-banner';
 import { TextField } from '@/components/ui/text-field';
 import { Colors, Radius } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
@@ -29,6 +30,7 @@ export default function Login() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Image source={require('@/assets/logo_nexo_ecos.png')} style={styles.image} resizeMode="contain" />
       <View style={styles.card}>
+        <DevServerBanner />
         <TextField
           placeholder="Ingrese su correo electrónico"
           value={email}
