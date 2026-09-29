@@ -1,22 +1,5 @@
-import { useState, useEffect } from 'react';
-
-// TODO: Replace this dummy array with actual parsed JSON/CSV data from Xiaomi
-// (from /results) when we integrate real datasets for production testing.
-const DUMMY_DATA = [
-  // Normal resting
-  { time: 1707365580, bpm: 71, stress: 30, steps: 0 },
-  { time: 1707366180, bpm: 79, stress: 24, steps: 0 },
-  // Normal physical activity (High BPM, High Steps)
-  { time: 1707366840, bpm: 120, stress: 29, steps: 85 },
-  { time: 1707367380, bpm: 135, stress: 35, steps: 110 },
-  // Normal resting again
-  { time: 1707367440, bpm: 70, stress: 39, steps: 0 },
-  // Simulated Anomaly (Panic Attack): High BPM, High Stress, ZERO Steps
-  { time: 1707396300, bpm: 117, stress: 45, steps: 0 },
-  { time: 1707396360, bpm: 126, stress: 47, steps: 0 },
-  { time: 1707396420, bpm: 138, stress: 51, steps: 0 },
-  { time: 1707396480, bpm: 147, stress: 55, steps: 0 },
-];
+import { useState, useEffect, useRef } from 'react';
+import type { SimulationScenario } from '@/hooks/use-student';
 
 export interface BiometricData {
   bpm: number;
@@ -26,58 +9,131 @@ export interface BiometricData {
 
 export interface BiometricSimulationResult {
   currentData: BiometricData | null;
-  // A flattened array of 30 normalized values (10 readings x 3 features) ready for ExecuTorch
   modelInput: number[] | null;
 }
 
+interface ScenarioConfig {
+  targetBpm: number;
+  targetSteps: number;
+  baseStress: number;
+}
+
+const SCENARIO_CONFIGS: Record<SimulationScenario, ScenarioConfig> = {
+  resting: {
+    targetBpm: 72,
+    targetSteps: 0,
+    baseStress: 20,
+  },
+  work_stress: {
+    targetBpm: 94,
+    targetSteps: 8,
+    baseStress: 50,
+  },
+  panic_attack: {
+    targetBpm: 126,
+    targetSteps: 0,
+    baseStress: 80,
+  },
+  physical_exercise: {
+    targetBpm: 110,
+    targetSteps: 75,
+    baseStress: 32,
+  },
+};
+
 export function useBiometricSimulator(
   intervalMs: number = 1000,
-  enabled: boolean = true
+  enabled: boolean = true,
+  scenario: SimulationScenario = 'resting'
 ): BiometricSimulationResult {
   const [currentData, setCurrentData] = useState<BiometricData | null>(null);
   const [history, setHistory] = useState<BiometricData[]>([]);
-  const [index, setIndex] = useState(0);
+
+  // Persistent linear state across re-renders
+  const stateRef = useRef<{
+    currentBpm: number;
+    currentSteps: number;
+  }>({
+    currentBpm: 74,
+    currentSteps: 0,
+  });
 
   useEffect(() => {
     if (!enabled) {
       return;
     }
 
-    const timer = setInterval(() => {
-      if (index < DUMMY_DATA.length) {
-        const newData = {
-          bpm: DUMMY_DATA[index].bpm,
-          stress: DUMMY_DATA[index].stress,
-          steps: DUMMY_DATA[index].steps,
-        };
-        
-        setCurrentData(newData);
-        
-        // Maintain a rolling window of the last 10 readings
-        setHistory((prev) => {
-          const updated = [...prev, newData];
-          if (updated.length > 10) {
-            updated.shift();
-          }
-          return updated;
-        });
+    const config = SCENARIO_CONFIGS[scenario] ?? SCENARIO_CONFIGS.resting;
 
-        setIndex((prev) => (prev + 1) % DUMMY_DATA.length);
+    const timer = setInterval(() => {
+      const state = stateRef.current;
+
+      // 1. Smooth linear transition of BPM (max 1 BPM per step to eliminate erratic jumps)
+      if (state.currentBpm < config.targetBpm) {
+        state.currentBpm = Math.min(config.targetBpm, state.currentBpm + 1);
+      } else if (state.currentBpm > config.targetBpm) {
+        state.currentBpm = Math.max(config.targetBpm, state.currentBpm - 1);
+      } else {
+        // Natural physiological sinus rhythm micro-drift (±1 BPM fluctuation around target)
+        const jitter = Math.random() > 0.65 ? (Math.random() > 0.5 ? 1 : -1) : 0;
+        state.currentBpm = Math.max(60, Math.min(145, state.currentBpm + jitter));
       }
+
+      // 2. Smooth linear transition of physical movement (steps)
+      if (state.currentSteps < config.targetSteps) {
+        state.currentSteps = Math.min(config.targetSteps, state.currentSteps + 2);
+      } else if (state.currentSteps > config.targetSteps) {
+        state.currentSteps = Math.max(config.targetSteps, state.currentSteps - 2);
+      }
+
+      // 3. Dynamic autonomic stress computation
+      const isAutonomicDecoupled = state.currentBpm > 100 && state.currentSteps < 15;
+      let calculatedStress: number;
+      if (isAutonomicDecoupled) {
+        // High autonomic decoupling (Panic / Acute anxiety)
+        calculatedStress = Math.min(88, Math.round(55 + ((state.currentBpm - 100) / 26) * 30));
+      } else if (scenario === 'physical_exercise') {
+        // Healthy physiological exertion
+        calculatedStress = Math.min(42, Math.round(25 + (state.currentBpm / 150) * 15));
+      } else if (scenario === 'work_stress') {
+        // Moderate cognitive/academic load
+        calculatedStress = Math.min(60, Math.round(40 + (state.currentBpm - 80) * 0.8));
+      } else {
+        // Calm resting baseline
+        calculatedStress = Math.max(15, Math.min(28, Math.round(20 + (state.currentBpm - 70))));
+      }
+
+      const sample: BiometricData = {
+        bpm: state.currentBpm,
+        stress: calculatedStress,
+        steps: state.currentSteps,
+      };
+
+      setCurrentData(sample);
+
+      setHistory((prev) => {
+        const updated = [...prev, sample];
+        if (updated.length > 10) {
+          updated.shift();
+        }
+        return updated;
+      });
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [enabled, index, intervalMs]);
+  }, [enabled, intervalMs, scenario]);
 
-  // Compute normalized model input when we have exactly 10 readings
   let modelInput: number[] | null = null;
   if (history.length === 10) {
-    modelInput = history.flatMap(reading => [
+    modelInput = history.flatMap((reading) => [
       Math.min(reading.bpm / 220.0, 1.0),
       Math.min(reading.stress / 100.0, 1.0),
       Math.min(reading.steps / 200.0, 1.0),
     ]);
   }
 
-  return { currentData, modelInput };
+  return {
+    currentData: enabled ? currentData : null,
+    modelInput: enabled ? modelInput : null,
+  };
 }

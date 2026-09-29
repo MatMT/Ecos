@@ -412,6 +412,17 @@ export function BatteryIcon({ size = 15, color = '#15803D', strokeWidth = 2 }: I
   );
 }
 
+// 18b. Battery Charging Icon (Connected to power / AC adapter)
+export function BatteryChargingIcon({ size = 16, color = '#0284C7', strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="2" y="7" width="16" height="10" rx="2.5" stroke={color} strokeWidth={strokeWidth} />
+      <Line x1="20" y1="10" x2="20" y2="14" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Path d="M10.5 8.5L7 12.5H10.5L9.5 15.5L13.5 11.5H10L10.5 8.5Z" fill={color} />
+    </Svg>
+  );
+}
+
 // 19. LogOut / Sign Out Icon
 export function LogOutIcon({ size = 18, color = '#DC2626', strokeWidth = 2 }: IconProps) {
   return (

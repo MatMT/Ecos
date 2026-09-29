@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   Linking,
   ScrollView,
@@ -8,10 +8,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 
 import { Colors, Radius } from '@/constants/theme';
 import {
+  ActivityIcon,
+  BatteryChargingIcon,
   BatteryIcon,
   CalendarIcon,
   ChevronRightIcon,
@@ -23,18 +25,37 @@ import {
   WatchIcon,
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
-import { useStudent } from '@/hooks/use-student';
+import { useStudent, type SimulationScenario } from '@/hooks/use-student';
 import { useTheme } from '@/context/theme-context';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 
-function formatAppointmentDate(isoString: string | null | undefined): string {
+function getScenarioLabel(scenario: SimulationScenario | undefined): string {
+  switch (scenario) {
+    case 'work_stress':
+      return 'Tensión Laboral';
+    case 'panic_attack':
+      return 'Ataque de Pánico';
+    case 'physical_exercise':
+      return 'Ejercicio Físico';
+    case 'resting':
+    default:
+      return 'Reposo y Calma';
+  }
+}
+
+function formatAppointmentDate(isoString: string | null | undefined, status?: string | null): string {
   if (!isoString) return 'Sin sesiones programadas';
   try {
     const d = new Date(isoString);
     const dayName = d.toLocaleDateString('es-ES', { weekday: 'long' });
     const time = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-    return `Próxima sesión: ${capitalizedDay} ${time}`;
+    const statusTag = status === 'pending'
+      ? ' · Solicitada (Pendiente)'
+      : status === 'confirmed'
+      ? ' · Confirmada'
+      : '';
+    return `Próxima sesión: ${capitalizedDay} ${time}${statusTag}`;
   } catch {
     return 'Próxima sesión programada';
   }
@@ -57,9 +78,15 @@ function formatDiagnosis(diag: string | null | undefined): string {
 export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
-  const { student, displayName, preferences } = useStudent();
+  const { student, displayName, preferences, refreshStudent } = useStudent();
   const { colors } = useTheme();
-  const { isBleConnected } = useBiometricMonitor();
+  const { bpm, spo2, isBleConnected, isDemoMode, trafficState } = useBiometricMonitor();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshStudent();
+    }, [refreshStudent])
+  );
 
   const userInitial = displayName.charAt(0).toUpperCase();
   const institutionName = student?.institution?.name || 'Universidad Don Bosco';
@@ -123,7 +150,7 @@ export default function Profile() {
         <Text style={styles.sectionLabel}>PREFERENCIAS Y PERSONALIZACIÓN</Text>
         <TouchableOpacity
           style={[styles.settingsNavigationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => router.push('/settings')}
+          onPress={() => router.push('/settings' as Href)}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel="Ir a Ajustes y Preferencias"
@@ -224,18 +251,22 @@ export default function Profile() {
 
           <TouchableOpacity
             style={styles.appointmentRow}
-            onPress={() => router.push({ pathname: '/stats', params: { tab: 'sessions' } } as Href)}
+            onPress={() => router.push('/modals/appointment-request' as Href)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Solicitar o coordinar cita clínica con el terapeuta"
           >
             <CalendarIcon size={14} color="#0284C7" />
             <Text style={styles.appointmentText}>
-              {formatAppointmentDate(student?.nextAppointment?.appointmentDate)} · Ver agenda
+              {student?.nextAppointment?.appointmentDate
+                ? `${formatAppointmentDate(student.nextAppointment.appointmentDate, student.nextAppointment.status)} · Solicitar nueva cita`
+                : 'Solicitar cita clínica con su terapeuta'}
             </Text>
             <ChevronRightIcon size={14} color="#0284C7" />
           </TouchableOpacity>
         </View>
 
-        {/* NEXO BAND Hardware Card */}
+        {/* ECOS BAND Wearable Card */}
         <Text style={styles.sectionLabel}>DISPOSITIVO VINCULADO</Text>
         <View style={styles.infoCard}>
           <View style={styles.cardHeaderRow}>
@@ -243,58 +274,150 @@ export default function Profile() {
               <WatchIcon size={20} color="#4F46E5" />
             </View>
             <View style={styles.cardHeaderTextWrap}>
-              <Text style={styles.cardMainTitle}>NEXO BAND</Text>
+              <Text style={styles.cardMainTitle}>ECOS BAND</Text>
               <Text style={styles.cardSubTitle}>
-                {isBleConnected ? 'Pulsera Nexo · Bluetooth Activo' : 'Pulsera Nexo · Bluetooth Disponible'}
+                {isBleConnected
+                  ? 'Hardware Bluetooth · Enlace Activo'
+                  : isDemoMode
+                  ? `Simulación Activa · ${getScenarioLabel(preferences.simulationScenario)}`
+                  : 'Pulsera Desconectada · En espera de enlace'}
               </Text>
             </View>
             <View
               style={[
                 styles.connectionPill,
-                { backgroundColor: isBleConnected ? '#DCFCE7' : '#F1F5F9' },
+                {
+                  backgroundColor: isBleConnected
+                    ? '#DCFCE7'
+                    : isDemoMode
+                    ? '#E0F2FE'
+                    : '#F1F5F9',
+                },
               ]}
             >
               <View
                 style={[
                   styles.connectionDot,
-                  { backgroundColor: isBleConnected ? '#16A34A' : '#94A3B8' },
+                  {
+                    backgroundColor: isBleConnected
+                      ? '#16A34A'
+                      : isDemoMode
+                      ? '#0284C7'
+                      : '#94A3B8',
+                  },
                 ]}
               />
               <Text
                 style={[
                   styles.connectionPillText,
-                  { color: isBleConnected ? '#15803D' : '#64748B' },
+                  {
+                    color: isBleConnected
+                      ? '#15803D'
+                      : isDemoMode
+                      ? '#0369A1'
+                      : '#64748B',
+                  },
                 ]}
               >
-                {isBleConnected ? 'Conectado en vivo' : 'Sincronizado'}
+                {isBleConnected
+                  ? 'Conectado en vivo'
+                  : isDemoMode
+                  ? 'Modo Demo'
+                  : 'Sin conexión'}
               </Text>
             </View>
           </View>
 
           {/* Live hardware feedback row */}
           <View style={styles.deviceFeedbackRow}>
-            <View style={styles.feedbackItem}>
-              <BatteryIcon size={15} color="#15803D" />
-              <Text style={styles.feedbackText}>Batería: 85%</Text>
-            </View>
-            <View style={styles.feedbackItem}>
-              <WatchIcon size={14} color="#64748B" />
-              <Text style={styles.feedbackText}>Sensores calibrados</Text>
-            </View>
-            {!isBleConnected && (
-              <View style={styles.demoBadgeMuted}>
-                <Text style={styles.demoBadgeMutedText}>Modo Demo</Text>
-              </View>
+            {isBleConnected ? (
+              <>
+                <View style={styles.feedbackItem}>
+                  <BatteryChargingIcon size={16} color="#0D9488" />
+                  <Text style={styles.feedbackText}>
+                    Alimentación: Conectado a la corriente (100%)
+                  </Text>
+                </View>
+                <View style={styles.feedbackItem}>
+                  <ActivityIcon size={14} color="#0284C7" strokeWidth={2.2} />
+                  <Text style={styles.feedbackText}>
+                    {bpm ? `BPM: ${bpm}` : 'BPM: 74'} · {spo2 ? `SpO2: ${spo2}%` : 'SpO2: 98%'}
+                  </Text>
+                </View>
+                {trafficState === 'RED' ? (
+                  <View style={[styles.demoBadgeMuted, { backgroundColor: '#FEE2E2' }]}>
+                    <Text style={[styles.demoBadgeMutedText, { color: '#DC2626' }]}>
+                      Alerta Fisiológica
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.demoBadgeMuted}>
+                    <Text style={styles.demoBadgeMutedText}>Sensores Calibrados</Text>
+                  </View>
+                )}
+              </>
+            ) : isDemoMode ? (
+              <>
+                <View style={styles.feedbackItem}>
+                  <BatteryChargingIcon size={16} color="#0D9488" />
+                  <Text style={styles.feedbackText}>
+                    Alimentación: Simulación activa (100%)
+                  </Text>
+                </View>
+                <View style={styles.feedbackItem}>
+                  <ActivityIcon size={14} color="#0284C7" strokeWidth={2.2} />
+                  <Text style={styles.feedbackText}>
+                    {bpm ? `BPM: ${bpm}` : 'BPM: 74'} · {spo2 ? `SpO2: ${spo2}%` : 'SpO2: 98%'}
+                  </Text>
+                </View>
+                {trafficState === 'RED' ? (
+                  <View style={[styles.demoBadgeMuted, { backgroundColor: '#FEE2E2' }]}>
+                    <Text style={[styles.demoBadgeMutedText, { color: '#DC2626' }]}>
+                      Alerta Fisiológica
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.demoBadgeMuted}>
+                    <Text style={styles.demoBadgeMutedText}>
+                      {getScenarioLabel(preferences.simulationScenario)}
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              <>
+                <View style={styles.feedbackItem}>
+                  <BatteryIcon size={16} color="#94A3B8" />
+                  <Text style={[styles.feedbackText, { color: '#94A3B8' }]}>
+                    Batería: Sin conexión
+                  </Text>
+                </View>
+                <View style={styles.feedbackItem}>
+                  <ActivityIcon size={14} color="#94A3B8" strokeWidth={2.2} />
+                  <Text style={[styles.feedbackText, { color: '#94A3B8' }]}>
+                    BPM: -- · SpO2: --
+                  </Text>
+                </View>
+                <View style={styles.demoBadgeMuted}>
+                  <Text style={styles.demoBadgeMutedText}>Sin Datos</Text>
+                </View>
+              </>
             )}
           </View>
 
           <View style={styles.cardDivider} />
           <TouchableOpacity
             style={styles.prototypeActionBtn}
-            onPress={() => router.push('/esp32-prototype')}
+            onPress={() => router.push('/esp32-prototype' as Href)}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Administrar dispositivo Ecos Band y telemetría"
           >
-            <Text style={styles.prototypeActionBtnText}>Ver Diagnóstico de Sensores</Text>
+            <Text style={styles.prototypeActionBtnText}>
+              {isBleConnected || isDemoMode
+                ? 'Ver Diagnóstico y Métricas de Ecos Band'
+                : 'Buscar y Vincular Ecos Band'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -650,6 +773,29 @@ const styles = StyleSheet.create({
   connectionPillText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  demoSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  demoSwitchTextWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  demoSwitchLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  demoSwitchHint: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   deviceFeedbackRow: {
     flexDirection: 'row',

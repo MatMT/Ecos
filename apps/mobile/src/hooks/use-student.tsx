@@ -17,15 +17,23 @@ import {
   getSecureItem,
   setSecureItem,
 } from '@/services/api/secure-session-storage';
+import { syncDispatcher } from '@/services/sync/sync-dispatcher';
 
 export type VisualTheme = 'salvia' | 'niebla' | 'arena';
 export type CheckInFrequency = 'low' | 'moderate' | 'high';
+export type SimulationScenario =
+  | 'resting'
+  | 'work_stress'
+  | 'panic_attack'
+  | 'physical_exercise';
 
 export interface StudentPreferences {
   preferredName?: string;
   visualTheme: VisualTheme;
   checkInFrequency: CheckInFrequency;
   sleepGoalHours: number;
+  demoMode: boolean;
+  simulationScenario: SimulationScenario;
 }
 
 const PREFERENCES_KEY = 'ecos_student_preferences';
@@ -35,6 +43,8 @@ const DEFAULT_PREFERENCES: StudentPreferences = {
   visualTheme: 'salvia',
   checkInFrequency: 'moderate',
   sleepGoalHours: 8,
+  demoMode: false,
+  simulationScenario: 'resting',
 };
 
 function fallbackGreetingName(email: string | undefined): string {
@@ -54,6 +64,8 @@ interface StudentContextValue {
   visualTheme: VisualTheme;
   checkInFrequency: CheckInFrequency;
   sleepGoalHours: number;
+  demoMode: boolean;
+  simulationScenario: SimulationScenario;
   updatePreferences: (newPrefs: Partial<StudentPreferences>) => Promise<void>;
 }
 
@@ -151,6 +163,10 @@ export function StudentProvider({ children }: PropsWithChildren) {
     };
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    syncDispatcher.setActiveStudentId(student?.id ?? null);
+  }, [student?.id]);
+
   const currentStudent = isAuthenticated ? student : null;
   const currentIsLoading = isAuthenticated ? isLoading : false;
   const currentError = isAuthenticated ? error : null;
@@ -176,6 +192,8 @@ export function StudentProvider({ children }: PropsWithChildren) {
       visualTheme: preferences.visualTheme,
       checkInFrequency: preferences.checkInFrequency,
       sleepGoalHours: preferences.sleepGoalHours || 8,
+      demoMode: preferences.demoMode ?? false,
+      simulationScenario: preferences.simulationScenario ?? 'resting',
       updatePreferences,
     }),
     [currentStudent, currentIsLoading, currentError, refreshStudent, preferences, displayName, updatePreferences],

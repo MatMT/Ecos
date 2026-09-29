@@ -7,6 +7,7 @@ import { saveBiometricSample } from '@/services/storage/local-db';
 import { useBiometricSimulator } from '@/hooks/use-biometric-simulator';
 import { useEsp32Ble, type BleConnectionStatus } from '@/hooks/use-esp32-ble';
 import type { ClinicalTrafficState } from '@/services/ai/anomaly-evaluator';
+import { useStudent, type SimulationScenario } from '@/hooks/use-student';
 
 export interface BiometricMonitorResult {
   bpm: number | null;
@@ -15,6 +16,8 @@ export interface BiometricMonitorResult {
   spo2: number | null;
   analysis: ExecuTorchInferenceResult | null;
   isBleConnected: boolean;
+  isDemoMode: boolean;
+  simulationScenario: SimulationScenario;
   bleStatus: BleConnectionStatus;
   deviceName: string | null;
   hardwareAlert: boolean;
@@ -24,10 +27,17 @@ export interface BiometricMonitorResult {
   disconnectBle: () => Promise<void>;
 }
 
-export function useBiometricMonitor(): BiometricMonitorResult {
+export function useBiometricMonitor(overrideDemoMode?: boolean): BiometricMonitorResult {
+  const { preferences } = useStudent();
+  const isDemoMode = overrideDemoMode ?? preferences.demoMode ?? false;
+  const currentScenario = preferences.simulationScenario ?? 'resting';
+
   const ble = useEsp32Ble();
   const isBleConnected = ble.status === 'connected';
-  const simulator = useBiometricSimulator(1000, !isBleConnected);
+
+  // Simulator runs ONLY if Demo Mode is explicitly enabled AND physical BLE is not connected
+  const isSimulatorActive = !isBleConnected && isDemoMode;
+  const simulator = useBiometricSimulator(1000, isSimulatorActive, currentScenario);
 
   const [analysis, setAnalysis] = useState<ExecuTorchInferenceResult | null>(null);
   const [trafficState, setTrafficState] = useState<ClinicalTrafficState>('GREEN');
@@ -35,27 +45,39 @@ export function useBiometricMonitor(): BiometricMonitorResult {
   const rollingBufferRef = useRef<RollingBuffer>(new RollingBuffer(10));
   const lastSampleTimeRef = useRef<number>(0);
 
-  // Active data source selection: strictly prioritize physical BLE peripheral when connected
+  // Active data source: Real BLE peripheral prioritized. If disconnected & Demo Mode is ON, uses simulator.
+  const hasActiveDataSource = isBleConnected || isSimulatorActive;
+
   const rawBpm = isBleConnected
     ? (ble.bpm > 0 ? ble.bpm : 0)
-    : (simulator.currentData?.bpm ?? 72);
+    : isSimulatorActive
+    ? (simulator.currentData?.bpm ?? 74)
+    : 0;
+
   const rawActivity = isBleConnected
     ? ble.activityLevel
-    : (simulator.currentData?.steps != null ? Math.min(100, simulator.currentData.steps) : 0);
-  const rawSpo2 = isBleConnected ? ble.spo2 : 98;
+    : isSimulatorActive
+    ? (simulator.currentData?.steps != null ? Math.min(100, simulator.currentData.steps) : 0)
+    : 0;
+
+  const rawSpo2 = isBleConnected ? ble.spo2 : isSimulatorActive ? 98 : 0;
 
   // Dynamic autonomic stress computation
-  const calculatedStress = calculateStressLevel(rawBpm, rawActivity);
+  const calculatedStress = hasActiveDataSource ? calculateStressLevel(rawBpm, rawActivity) : null;
 
   useEffect(() => {
     void aiEngine.loadModel();
   }, []);
 
   useEffect(() => {
+    if (!hasActiveDataSource || rawBpm <= 0) {
+      return;
+    }
+
     let isCancelled = false;
 
     // If vitals normalize to calm resting levels, purge stale historical panic samples
-    if (rawBpm <= 85 && calculatedStress < 30) {
+    if (rawBpm <= 85 && (calculatedStress ?? 0) < 30) {
       const historicalSamples = rollingBufferRef.current.getSamples();
       const hasStalePanicSamples = historicalSamples.some((s) => s.bpm > 115);
       if (hasStalePanicSamples) {
@@ -68,19 +90,16 @@ export function useBiometricMonitor(): BiometricMonitorResult {
     rollingBufferRef.current.addSample({
       bpm: rawBpm,
       activity: rawActivity,
-      stress: calculatedStress,
+      stress: calculatedStress ?? 25,
     });
 
     const tensor = rollingBufferRef.current.getNormalizedTensor();
 
-    void aiEngine.analyzeTensor(tensor, rawBpm, rawActivity, calculatedStress).then((result) => {
+    void aiEngine.analyzeTensor(tensor, rawBpm, rawActivity, calculatedStress ?? 25).then((result) => {
       if (isCancelled) return;
       setAnalysis(result);
 
-      // Clinical Semaphore evaluation:
-      // 1. RED: Hardware panic alert flag (flags & 0x01) OR severe resting tachycardia (BPM > 115 & Act < 20%)
-      // 2. YELLOW: Mild resting elevation (BPM > 95 & Act < 30%)
-      // 3. GREEN: Baseline physiological balance or normalized calm resting zone (BPM <= 90)
+      // Clinical Semaphore evaluation
       const effectiveState: ClinicalTrafficState =
         (isBleConnected && ble.hardwareAlert) || (rawBpm > 115 && rawActivity < 20)
           ? 'RED'
@@ -100,11 +119,11 @@ export function useBiometricMonitor(): BiometricMonitorResult {
           bpm: rawBpm,
           activity: rawActivity,
           spo2: rawSpo2,
-          stress_level: calculatedStress,
+          stress_level: calculatedStress ?? 25,
           mse_error: result.mse,
           is_anomaly: result.isAnomaly ? 1 : 0,
         }).catch(() => {
-          // Non-critical local persistence error swallowed
+          // Non-critical local persistence error ignored
         });
       }
     });
@@ -112,20 +131,28 @@ export function useBiometricMonitor(): BiometricMonitorResult {
     return () => {
       isCancelled = true;
     };
-  }, [rawBpm, rawActivity, calculatedStress, rawSpo2, isBleConnected, ble.hardwareAlert]);
+  }, [hasActiveDataSource, rawBpm, rawActivity, calculatedStress, rawSpo2, isBleConnected, ble.hardwareAlert]);
 
   return {
-    bpm: rawBpm,
-    stress: calculatedStress,
-    activity: rawActivity,
-    spo2: rawSpo2,
-    analysis,
+    bpm: hasActiveDataSource && rawBpm > 0 ? rawBpm : null,
+    stress: hasActiveDataSource ? calculatedStress : null,
+    activity: hasActiveDataSource ? rawActivity : null,
+    spo2: hasActiveDataSource && rawSpo2 > 0 ? rawSpo2 : null,
+    analysis: hasActiveDataSource && rawBpm > 0 ? analysis : null,
     isBleConnected,
+    isDemoMode,
+    simulationScenario: currentScenario,
     bleStatus: ble.status,
-    deviceName: ble.connectedDeviceName,
-    hardwareAlert: ble.hardwareAlert,
-    sosPressed: ble.sosPressed,
-    trafficState,
+    deviceName: isBleConnected
+      ? (ble.connectedDeviceName || 'Ecos Band')
+      : isDemoMode
+      ? 'Ecos Band (Demo)'
+      : null,
+    hardwareAlert: isBleConnected
+      ? ble.hardwareAlert
+      : (hasActiveDataSource && rawBpm > 115 && rawActivity < 20),
+    sosPressed: isBleConnected ? ble.sosPressed : false,
+    trafficState: hasActiveDataSource && rawBpm > 0 ? trafficState : 'GREEN',
     connectBle: ble.startScanAndConnect,
     disconnectBle: ble.disconnect,
   };

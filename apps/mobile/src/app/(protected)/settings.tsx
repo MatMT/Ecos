@@ -5,6 +5,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -19,8 +20,14 @@ import {
   CheckIcon,
   LockIcon,
   ShieldCheckIcon,
+  WatchIcon,
 } from '@/components/ui/app-icons';
-import { useStudent, type CheckInFrequency, type VisualTheme } from '@/hooks/use-student';
+import {
+  useStudent,
+  type CheckInFrequency,
+  type SimulationScenario,
+  type VisualTheme,
+} from '@/hooks/use-student';
 import { useTheme } from '@/context/theme-context';
 
 export default function SettingsScreen() {
@@ -31,6 +38,8 @@ export default function SettingsScreen() {
   const [preferredName, setPreferredName] = useState<string>(preferences.preferredName || '');
   const [selectedTheme, setSelectedTheme] = useState<VisualTheme>(preferences.visualTheme);
   const [selectedFrequency, setSelectedFrequency] = useState<CheckInFrequency>(preferences.checkInFrequency);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(preferences.demoMode ?? false);
+  const [selectedScenario, setSelectedScenario] = useState<SimulationScenario>(preferences.simulationScenario ?? 'resting');
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   const handleSelectTheme = (theme: VisualTheme) => {
@@ -45,6 +54,8 @@ export default function SettingsScreen() {
         preferredName: preferredName.trim() || undefined,
         visualTheme: selectedTheme,
         checkInFrequency: selectedFrequency,
+        demoMode: isDemoMode,
+        simulationScenario: selectedScenario,
       });
       Alert.alert(
         'Preferencias guardadas',
@@ -245,7 +256,179 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Sección 4: Privacidad y Confidencialidad */}
+          {/* Sección 4: Modo Simulación y Escenarios (Ecos Band) */}
+          <View style={styles.card}>
+            <View style={styles.switchHeaderRow}>
+              <View style={styles.switchHeaderLeft}>
+                <View style={styles.scenarioIconCircle}>
+                  <WatchIcon size={20} color="#0D9488" />
+                </View>
+                <View style={styles.switchTextWrap}>
+                  <Text style={styles.cardSectionTitle}>Modo Simulación (Ecos Band)</Text>
+                  <Text style={styles.cardDescription}>
+                    Genera telemetría lineal realista cuando no disponga de una pulsera física enlazada.
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={isDemoMode}
+                onValueChange={(val) => {
+                  setIsDemoMode(val);
+                  void updatePreferences({ demoMode: val });
+                }}
+                trackColor={{ false: '#CBD5E1', true: colors.brand }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {isDemoMode && (
+              <View style={styles.scenariosContainer}>
+                <Text style={styles.scenariosSubheading}>SELECCIONE EL ESCENARIO FISIOLÓGICO</Text>
+
+                {/* Scenario 1: Reposo y Calma */}
+                <TouchableOpacity
+                  style={[
+                    styles.scenarioCard,
+                    selectedScenario === 'resting' && [
+                      styles.scenarioCardActive,
+                      { borderColor: colors.brand, backgroundColor: colors.brandLight },
+                    ],
+                  ]}
+                  onPress={() => {
+                    setSelectedScenario('resting');
+                    void updatePreferences({ simulationScenario: 'resting' });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.scenarioCardHeader}>
+                    <Text
+                      style={[
+                        styles.scenarioCardTitle,
+                        selectedScenario === 'resting' && { color: colors.brand },
+                      ]}
+                    >
+                      Reposo y Calma
+                    </Text>
+                    <View style={[styles.scenarioBadge, { backgroundColor: '#DCFCE7' }]}>
+                      <Text style={[styles.scenarioBadgeText, { color: '#15803D' }]}>
+                        68 - 74 BPM
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.scenarioCardDesc}>
+                    Frecuencia basal tranquila en reposo muscular con equilibrio autonómico estable.
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Scenario 2: Tensión Laboral */}
+                <TouchableOpacity
+                  style={[
+                    styles.scenarioCard,
+                    selectedScenario === 'work_stress' && [
+                      styles.scenarioCardActive,
+                      { borderColor: colors.brand, backgroundColor: colors.brandLight },
+                    ],
+                  ]}
+                  onPress={() => {
+                    setSelectedScenario('work_stress');
+                    void updatePreferences({ simulationScenario: 'work_stress' });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.scenarioCardHeader}>
+                    <Text
+                      style={[
+                        styles.scenarioCardTitle,
+                        selectedScenario === 'work_stress' && { color: colors.brand },
+                      ]}
+                    >
+                      Tensión Laboral / Académica
+                    </Text>
+                    <View style={[styles.scenarioBadge, { backgroundColor: '#FEF3C7' }]}>
+                      <Text style={[styles.scenarioBadgeText, { color: '#B45309' }]}>
+                        88 - 98 BPM
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.scenarioCardDesc}>
+                    Estrés cognitivo moderado prolongado con reducida movilidad corporal.
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Scenario 3: Ataque de Pánico */}
+                <TouchableOpacity
+                  style={[
+                    styles.scenarioCard,
+                    selectedScenario === 'panic_attack' && [
+                      styles.scenarioCardActive,
+                      { borderColor: '#DC2626', backgroundColor: '#FEE2E2' },
+                    ],
+                  ]}
+                  onPress={() => {
+                    setSelectedScenario('panic_attack');
+                    void updatePreferences({ simulationScenario: 'panic_attack' });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.scenarioCardHeader}>
+                    <Text
+                      style={[
+                        styles.scenarioCardTitle,
+                        selectedScenario === 'panic_attack' && { color: '#DC2626' },
+                      ]}
+                    >
+                      Ataque de Pánico / Desacople
+                    </Text>
+                    <View style={[styles.scenarioBadge, { backgroundColor: '#FEE2E2' }]}>
+                      <Text style={[styles.scenarioBadgeText, { color: '#DC2626' }]}>
+                        118 - 132 BPM
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.scenarioCardDesc}>
+                    Tensión autonómica aguda en reposo corporal: activa la alerta fisiológica en semáforo rojo.
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Scenario 4: Ejercicio Físico */}
+                <TouchableOpacity
+                  style={[
+                    styles.scenarioCard,
+                    selectedScenario === 'physical_exercise' && [
+                      styles.scenarioCardActive,
+                      { borderColor: colors.brand, backgroundColor: colors.brandLight },
+                    ],
+                  ]}
+                  onPress={() => {
+                    setSelectedScenario('physical_exercise');
+                    void updatePreferences({ simulationScenario: 'physical_exercise' });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.scenarioCardHeader}>
+                    <Text
+                      style={[
+                        styles.scenarioCardTitle,
+                        selectedScenario === 'physical_exercise' && { color: colors.brand },
+                      ]}
+                    >
+                      Ejercicio Físico / Caminata
+                    </Text>
+                    <View style={[styles.scenarioBadge, { backgroundColor: '#E0F2FE' }]}>
+                      <Text style={[styles.scenarioBadgeText, { color: '#0369A1' }]}>
+                        95 - 115 BPM
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.scenarioCardDesc}>
+                    Elevación cardiovascular por esfuerzo motor activo; adaptación fisiológica saludable.
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Sección 5: Privacidad y Confidencialidad */}
           <View style={styles.privacyBox}>
             <View style={styles.privacyHeaderRow}>
               <ShieldCheckIcon size={18} color="#10B981" />
@@ -420,6 +603,79 @@ const styles = StyleSheet.create({
   frequencyTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  switchHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  switchHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  scenarioIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  switchTextWrap: {
+    flex: 1,
+  },
+  scenariosContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    gap: 10,
+  },
+  scenariosSubheading: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  scenarioCard: {
+    padding: 12,
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  scenarioCardActive: {
+    backgroundColor: '#F0FDFA',
+  },
+  scenarioCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  scenarioCardTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#1E293B',
+    flex: 1,
+  },
+  scenarioBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radius.small,
+  },
+  scenarioBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  scenarioCardDesc: {
+    fontSize: 11.5,
+    color: '#64748B',
+    lineHeight: 16,
   },
   privacyBox: {
     backgroundColor: '#F0FDFA',
