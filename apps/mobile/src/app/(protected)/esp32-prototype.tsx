@@ -418,15 +418,17 @@ export default function Esp32PrototypeScreen() {
               <View style={styles.batteryLabelRow}>
                 <View style={styles.batteryLeftInfo}>
                   <BatteryChargingIcon size={16} color="#15803D" />
-                  <Text style={styles.batteryLabel}>Alimentación del dispositivo</Text>
+                  <Text style={styles.batteryLabel}>Alimentación</Text>
                 </View>
-                <Text style={styles.batteryPercent}>Conectado a la corriente (100%)</Text>
+                <View style={styles.batteryStatusPill}>
+                  <Text style={styles.batteryStatusPillText}>100% · Corriente</Text>
+                </View>
               </View>
               <View style={styles.batteryTrack}>
                 <View style={[styles.batteryFill, { width: '100%' }]} />
               </View>
               <Text style={styles.batterySubtext}>
-                Alimentación continua activa mediante conexión por cable.
+                Conectado a la corriente con alimentación continua activa.
               </Text>
             </View>
 
@@ -956,21 +958,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
+    gap: 8,
   },
   batteryLeftInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
   },
   batteryLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
   },
-  batteryPercent: {
-    fontSize: 13,
-    fontWeight: '800',
+  batteryStatusPill: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.small,
+  },
+  batteryStatusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
     color: '#15803D',
   },
   batteryTrack: {
