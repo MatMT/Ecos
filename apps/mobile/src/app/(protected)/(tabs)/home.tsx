@@ -305,7 +305,7 @@ export default function Home() {
         <Text style={styles.sectionHeaderLabel}>MONITOREO DE SUEÑO Y DESCANSO</Text>
         <TouchableOpacity
           style={[styles.sleepCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => router.push('/sleep-detail')}
+          onPress={() => router.push('/sleep-detail' as Href)}
           activeOpacity={0.88}
           accessibilityRole="button"
           accessibilityLabel="Ver detalle completo de descanso y sueño"
