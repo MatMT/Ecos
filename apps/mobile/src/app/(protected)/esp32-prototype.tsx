@@ -19,9 +19,11 @@ import {
 import { useStudent, type SimulationScenario } from '@/hooks/use-student';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import {
+  CalmCelebration,
   ConnectedHardwareCard,
   DiscoveredDeviceCard,
   SecondaryDevicesList,
+  SleepMonitoringCard,
   TechSpecsAccordion,
   TelemetryDashboard,
   UnpairConfirmModal,
@@ -130,11 +132,19 @@ export default function Esp32PrototypeScreen() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [showUnpairModal, setShowUnpairModal] = useState<boolean>(false);
   const [isUnpairing, setIsUnpairing] = useState<boolean>(false);
+  const [showCelebration, setShowCelebration] = useState<boolean>(false);
 
   const isScanning = status === 'scanning';
   const isConnecting = status === 'connecting';
   const isConnected = status === 'connected';
   const isDemoMode = !isConnected && Boolean(preferences.demoMode);
+
+  // Trigger Calm Celebration when newly connected
+  useEffect(() => {
+    if (isConnected) {
+      setShowCelebration(true);
+    }
+  }, [isConnected]);
 
   const isDataActive = isConnected || isDemoMode;
   const activeBpm = isConnected ? (bleBpm > 0 ? bleBpm : 74) : (monitorBpm ?? 74);
@@ -271,31 +281,36 @@ export default function Esp32PrototypeScreen() {
           />
         )}
 
-        {/* 3. HERO SECTION: Wearable Status & Radar Scan */}
-        <WearableHeroCard
-          isConnected={isConnected}
-          isConnecting={isConnecting}
-          isScanning={isScanning}
-          isDemoMode={isDemoMode}
-          bondedDeviceId={bondedDeviceId}
-          connectedDeviceName={connectedDeviceName}
-          primaryDeviceDetected={Boolean(primaryDevice)}
-          statusBadge={statusBadge}
-          waveAnim1={waveAnim1}
-          waveAnim2={waveAnim2}
-          waveAnim3={waveAnim3}
-          onStartScan={() => void startScanOnly()}
-          onStopScan={stopScan}
-          onReconnect={(deviceId) => void connectToDeviceId(deviceId)}
-          onOpenUnpairModal={() => setShowUnpairModal(true)}
-        />
-
-        {/* 4. RICH CONNECTED STATE DETAILS */}
-        {isConnected && (
-          <ConnectedHardwareCard connectedDeviceName={connectedDeviceName} />
+        {/* 3. HERO SECTION: Wearable Status & Radar Scan (Only when disconnected) */}
+        {!isConnected && (
+          <WearableHeroCard
+            isConnected={isConnected}
+            isConnecting={isConnecting}
+            isScanning={isScanning}
+            isDemoMode={isDemoMode}
+            bondedDeviceId={bondedDeviceId}
+            connectedDeviceName={connectedDeviceName}
+            primaryDeviceDetected={Boolean(primaryDevice)}
+            statusBadge={statusBadge}
+            waveAnim1={waveAnim1}
+            waveAnim2={waveAnim2}
+            waveAnim3={waveAnim3}
+            onStartScan={() => void startScanOnly()}
+            onStopScan={stopScan}
+            onReconnect={(deviceId) => void connectToDeviceId(deviceId)}
+            onOpenUnpairModal={() => setShowUnpairModal(true)}
+          />
         )}
 
-        {/* 5. DEMO MODE SCENARIO BANNER */}
+        {/* 4. ACTIVE CONNECTED STATE CARDS */}
+        {isConnected && (
+          <>
+            <ConnectedHardwareCard connectedDeviceName={connectedDeviceName} />
+            <SleepMonitoringCard />
+          </>
+        )}
+
+        {/* 5. DEMO MODE SCENARIO BANNER (Hidden when connected) */}
         {isDemoMode && !isConnected && !primaryDevice && (
           <View style={styles.demoCard}>
             <View style={styles.demoCardLeft}>
@@ -347,7 +362,28 @@ export default function Esp32PrototypeScreen() {
 
         {/* 8. PROGRESSIVE DISCLOSURE: COLLAPSIBLE TECHNICAL SPECIFICATIONS */}
         <TechSpecsAccordion />
+
+        {/* 9. DISCREET UNPAIR ACTION AT FOOTER (When connected) */}
+        {isConnected && (
+          <View style={styles.footerUnpairContainer}>
+            <TouchableOpacity
+              style={styles.footerUnpairButton}
+              onPress={() => setShowUnpairModal(true)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Desvincular pulsera"
+            >
+              <Text style={styles.footerUnpairText}>Desvincular pulsera</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
+
+      {/* CALM CELEBRATION OVERLAY */}
+      <CalmCelebration
+        active={showCelebration}
+        onFinish={() => setShowCelebration(false)}
+      />
 
       {/* 9. MODAL DE CONFIRMACIÓN PARA DESVINCULAR */}
       <UnpairConfirmModal
@@ -470,5 +506,20 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  footerUnpairContainer: {
+    paddingVertical: Spacing.four,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerUnpairButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: Radius.pill,
+  },
+  footerUnpairText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8',
   },
 });

@@ -10,6 +10,7 @@ import {
 import { BluetoothIcon, SignalIcon, WatchIcon } from '@/components/ui/app-icons';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import type { ScannedDevice } from '@/hooks/use-esp32-ble';
+import { SwipeToConnect } from './swipe-to-connect';
 
 export function getSignalQuality(rssi?: number | null): { label: string; color: string } {
   if (rssi == null) {
@@ -62,23 +63,14 @@ export function DiscoveredDeviceCard({
         </View>
       </View>
 
-      <TouchableOpacity
-        style={styles.connectBtn}
-        onPress={() => onConnect(device)}
-        disabled={isConnecting}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel="Vincular con la pulsera Ecos Band"
-      >
-        {isThisConnecting ? (
-          <View style={styles.btnRowLoading}>
-            <ActivityIndicator size="small" color="#FFFFFF" />
-            <Text style={styles.connectBtnText}>Enlazando...</Text>
-          </View>
-        ) : (
-          <Text style={styles.connectBtnText}>Vincular ahora</Text>
-        )}
-      </TouchableOpacity>
+      {/* Interactive Swipe to Connect Handshake Slider */}
+      <View style={styles.sliderContainer}>
+        <SwipeToConnect
+          onConfirm={() => onConnect(device)}
+          isConnecting={isThisConnecting}
+          disabled={isConnecting}
+        />
+      </View>
     </View>
   );
 }
@@ -195,6 +187,10 @@ const styles = StyleSheet.create({
   signalText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  sliderContainer: {
+    width: '100%',
+    paddingTop: 2,
   },
   connectBtn: {
     backgroundColor: '#0F766E',
