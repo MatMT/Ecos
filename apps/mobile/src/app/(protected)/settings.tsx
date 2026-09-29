@@ -290,7 +290,7 @@ export default function SettingsScreen() {
               <View style={styles.hardwareConnectedBanner}>
                 <View style={styles.hardwareConnectedDot} />
                 <Text style={styles.hardwareConnectedText}>
-                  Pulsera Ecos Band conectada en vivo. La simulación y los escenarios fisiológicos están deshabilitados mientras el dispositivo físico esté transmitiendo datos reales.
+                  Pulsera Ecos Band sincronizada. La simulación y los escenarios fisiológicos están deshabilitados mientras el dispositivo físico esté transmitiendo datos reales.
                 </Text>
               </View>
             )}

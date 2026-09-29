@@ -372,7 +372,7 @@ export default function Profile() {
                 ]}
               >
                 {isBleConnected
-                  ? 'Conectado en vivo'
+                  ? 'Sincronizado'
                   : isDemoMode
                   ? 'Modo Demo'
                   : 'Sin conexión'}
@@ -387,7 +387,7 @@ export default function Profile() {
                 <View style={styles.feedbackItem}>
                   <BatteryChargingIcon size={16} color="#0D9488" />
                   <Text style={styles.feedbackText}>
-                    Alimentación: Conectado a la corriente (100%)
+                    Cargando (100%)
                   </Text>
                 </View>
                 <View style={styles.feedbackItem}>
@@ -413,7 +413,7 @@ export default function Profile() {
                 <View style={styles.feedbackItem}>
                   <BatteryChargingIcon size={16} color="#0D9488" />
                   <Text style={styles.feedbackText}>
-                    Alimentación: Simulación activa (100%)
+                    Batería: Simulación (100%)
                   </Text>
                 </View>
                 <View style={styles.feedbackItem}>
@@ -543,7 +543,7 @@ export default function Profile() {
                     { color: isBleConnected ? '#15803D' : '#64748B' },
                   ]}
                 >
-                  {isBleConnected ? 'Enlace activo (1 Hz)' : 'Enlazada'}
+                  {isBleConnected ? 'Sincronizado (1 Hz)' : 'Enlazada'}
                 </Text>
               </View>
             </View>

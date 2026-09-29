@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -81,22 +82,23 @@ function getStatusBadgeInfo(
       dot: '#F59E0B',
     };
   }
+  if (status === 'scanning') {
+    return {
+      text: 'Buscando dispositivos...',
+      bg: '#FEF3C7',
+      color: '#92400E',
+      dot: '#F59E0B',
+    };
+  }
   if (isDemoMode) {
     return {
-      text: 'Modo Demostración Activo',
+      text: 'Modo Simulación Activo',
       bg: '#E0F2FE',
       color: '#0369A1',
       dot: '#0284C7',
     };
   }
   switch (status) {
-    case 'scanning':
-      return {
-        text: 'Buscando dispositivos...',
-        bg: '#FEF3C7',
-        color: '#92400E',
-        dot: '#F59E0B',
-      };
     case 'error':
       return {
         text: 'Sin conexión',
@@ -212,6 +214,19 @@ export default function Esp32PrototypeScreen() {
     }
   };
 
+  const [showUnpairModal, setShowUnpairModal] = useState<boolean>(false);
+  const [isUnpairing, setIsUnpairing] = useState<boolean>(false);
+
+  const handleExecuteUnpair = async () => {
+    setIsUnpairing(true);
+    try {
+      setShowUnpairModal(false);
+      await unpair();
+    } finally {
+      setIsUnpairing(false);
+    }
+  };
+
   const statusBadge = getStatusBadgeInfo(status, isDemoMode, Boolean(bondedDeviceId));
 
   // Filter out Ecos Band / primary device from generic list
@@ -257,7 +272,98 @@ export default function Esp32PrototypeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* HERO SECTION: Commercial Wearable Presentation */}
+        {/* 1. DISCOVERED PRIMARY DEVICE: ELEVATED AT VERY TOP */}
+        {!isConnected && !bondedDeviceId && primaryDevice && (
+          <View style={styles.discoveredPrimaryCard}>
+            <View style={styles.discoveredPrimaryHeader}>
+              <View style={styles.primaryDeviceIconBox}>
+                <WatchIcon size={24} color="#0F766E" />
+              </View>
+              <View style={styles.primaryDeviceInfo}>
+                <View style={styles.primaryNameRow}>
+                  <Text style={styles.primaryDeviceTitle}>Ecos Band</Text>
+                  <View style={styles.compatibleBadge}>
+                    <Text style={styles.compatibleBadgeText}>DISPOSITIVO OFICIAL</Text>
+                  </View>
+                </View>
+                <View style={styles.signalRow}>
+                  <SignalIcon
+                    size={14}
+                    color={getSignalQuality(primaryDevice.rssi).color}
+                  />
+                  <Text
+                    style={[
+                      styles.signalText,
+                      { color: getSignalQuality(primaryDevice.rssi).color },
+                    ]}
+                  >
+                    {getSignalQuality(primaryDevice.rssi).label}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.primaryConnectBtn}
+              onPress={() => void handleConnectDevice(primaryDevice)}
+              disabled={isConnecting}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Vincular con la pulsera Ecos Band"
+            >
+              {isConnecting && connectingId === primaryDevice.id ? (
+                <View style={styles.btnRowLoading}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Text style={styles.primaryConnectBtnText}>Enlazando...</Text>
+                </View>
+              ) : (
+                <Text style={styles.primaryConnectBtnText}>Vincular ahora</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 2. SECONDARY DISCOVERED DEVICES (IF ANY) */}
+        {!isConnected && !bondedDeviceId && secondaryDevices.length > 0 && (
+          <View style={styles.secondaryDevicesContainer}>
+            <Text style={styles.secondaryDevicesHeading}>
+              Otros dispositivos detectados ({secondaryDevices.length})
+            </Text>
+            {secondaryDevices.map((item) => {
+              const isThisConnecting = isConnecting && connectingId === item.id;
+              return (
+                <View key={item.id} style={styles.secondaryDeviceItem}>
+                  <View style={styles.secondaryDeviceLeft}>
+                    <BluetoothIcon size={16} color="#64748B" />
+                    <View style={styles.secondaryDeviceTextWrap}>
+                      <Text style={styles.secondaryDeviceName}>
+                        {item.name ?? 'Dispositivo BLE'}
+                      </Text>
+                      <Text style={styles.secondaryDeviceSub}>
+                        {item.rssi != null ? `${item.rssi} dBm · ` : ''}
+                        ID: {item.id.slice(0, 14)}...
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.secondaryConnectBtn}
+                    onPress={() => void handleConnectDevice(item)}
+                    disabled={isConnecting}
+                    activeOpacity={0.8}
+                  >
+                    {isThisConnecting ? (
+                      <ActivityIndicator size="small" color={Colors.brand} />
+                    ) : (
+                      <Text style={styles.secondaryConnectBtnText}>Conectar</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* 3. HERO SECTION: Wearable Status & Radar Scan */}
         <View style={styles.heroCard}>
           <View style={styles.radarContainer}>
             {/* Animated Radar Ripples */}
@@ -347,7 +453,13 @@ export default function Esp32PrototypeScreen() {
           </View>
 
           {/* Device Title & Status Pill */}
-          <Text style={styles.heroTitle}>Ecos Band</Text>
+          <Text style={styles.heroTitle}>
+            {isConnected
+              ? (connectedDeviceName ?? 'Ecos Band')
+              : isScanning && primaryDevice
+              ? 'Búsqueda activa'
+              : 'Ecos Band'}
+          </Text>
 
           <View style={[styles.statusBadge, { backgroundColor: statusBadge.bg }]}>
             <View
@@ -361,9 +473,11 @@ export default function Esp32PrototypeScreen() {
           {/* Friendly Guidance Copy */}
           <Text style={styles.heroSubtitle}>
             {isConnected
-              ? 'Tu pulsera está enlazada y transmitiendo datos biométricos en tiempo real.'
+              ? 'Tu pulsera está sincronizada y transmitiendo datos biométricos en tiempo real.'
               : isConnecting && bondedDeviceId
               ? 'Reconectando automáticamente con tu Ecos Band. Si reiniciaste el ESP32, se enlazará en unos segundos.'
+              : isScanning && primaryDevice
+              ? 'Dispositivo Ecos Band detectado arriba. Pulse «Vincular ahora» para iniciar la conexión, o detenga el escaneo.'
               : isScanning
               ? 'Buscando tu pulsera Ecos Band... Mantenla a menos de 1 metro de tu teléfono.'
               : isConnecting
@@ -375,19 +489,19 @@ export default function Esp32PrototypeScreen() {
               : 'Asegúrate de que tu pulsera esté encendida y cerca de tu teléfono para sincronizar tu ritmo y descanso.'}
           </Text>
 
-          {/* Primary Action Button */}
+          {/* Action Button: Placed cleanly at bottom of card */}
           <View style={styles.heroActionContainer}>
             {isConnected ? (
               <Button
                 label="Desvincular pulsera"
                 variant="danger"
-                onPress={() => void unpair()}
+                onPress={() => setShowUnpairModal(true)}
               />
             ) : isConnecting && bondedDeviceId ? (
               <Button
                 label="Desvincular pulsera"
                 variant="danger"
-                onPress={() => void unpair()}
+                onPress={() => setShowUnpairModal(true)}
               />
             ) : isScanning ? (
               <Button
@@ -405,7 +519,7 @@ export default function Esp32PrototypeScreen() {
                 />
                 <TouchableOpacity
                   style={styles.unpairLinkBtn}
-                  onPress={() => void unpair()}
+                  onPress={() => setShowUnpairModal(true)}
                   activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityLabel="Desvincular pulsera actual"
@@ -440,7 +554,7 @@ export default function Esp32PrototypeScreen() {
                 </Text>
               </View>
               <View style={styles.liveTag}>
-                <Text style={styles.liveTagText}>En vivo</Text>
+                <Text style={styles.liveTagText}>Sincronizado</Text>
               </View>
             </View>
 
@@ -449,17 +563,17 @@ export default function Esp32PrototypeScreen() {
               <View style={styles.batteryLabelRow}>
                 <View style={styles.batteryLeftInfo}>
                   <BatteryChargingIcon size={16} color="#15803D" />
-                  <Text style={styles.batteryLabel}>Alimentación</Text>
+                  <Text style={styles.batteryLabel}>Batería</Text>
                 </View>
                 <View style={styles.batteryStatusPill}>
-                  <Text style={styles.batteryStatusPillText}>100% · Corriente</Text>
+                  <Text style={styles.batteryStatusPillText}>100% · Cargando</Text>
                 </View>
               </View>
               <View style={styles.batteryTrack}>
                 <View style={[styles.batteryFill, { width: '100%' }]} />
               </View>
               <Text style={styles.batterySubtext}>
-                Conectado a la corriente con alimentación continua activa.
+                Cargando · 100%
               </Text>
             </View>
 
@@ -488,7 +602,7 @@ export default function Esp32PrototypeScreen() {
         )}
 
         {/* DEMO MODE SCENARIO BANNER */}
-        {isDemoMode && !isConnected && (
+        {isDemoMode && !isConnected && !primaryDevice && (
           <View style={styles.demoCard}>
             <View style={styles.demoCardLeft}>
               <Text style={styles.demoCardLabel}>Escenario de simulación:</Text>
@@ -521,97 +635,6 @@ export default function Esp32PrototypeScreen() {
                 Abrir Ajustes de Bluetooth
               </Text>
             </TouchableOpacity>
-          </View>
-        )}
-
-        {/* STATE 3: FOUND COMPATIBLE DEVICE (ELEVATED HERO CARD) */}
-        {!isConnected && !bondedDeviceId && primaryDevice && (
-          <View style={styles.discoveredPrimaryCard}>
-            <View style={styles.discoveredPrimaryHeader}>
-              <View style={styles.primaryDeviceIconBox}>
-                <WatchIcon size={22} color="#0F766E" />
-              </View>
-              <View style={styles.primaryDeviceInfo}>
-                <View style={styles.primaryNameRow}>
-                  <Text style={styles.primaryDeviceTitle}>Ecos Band</Text>
-                  <View style={styles.compatibleBadge}>
-                    <Text style={styles.compatibleBadgeText}>DISPOSITIVO OFICIAL</Text>
-                  </View>
-                </View>
-                <View style={styles.signalRow}>
-                  <SignalIcon
-                    size={14}
-                    color={getSignalQuality(primaryDevice.rssi).color}
-                  />
-                  <Text
-                    style={[
-                      styles.signalText,
-                      { color: getSignalQuality(primaryDevice.rssi).color },
-                    ]}
-                  >
-                    {getSignalQuality(primaryDevice.rssi).label}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.primaryConnectBtn}
-              onPress={() => void handleConnectDevice(primaryDevice)}
-              disabled={isConnecting}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Vincular con la pulsera Ecos Band"
-            >
-              {isConnecting && connectingId === primaryDevice.id ? (
-                <View style={styles.btnRowLoading}>
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                  <Text style={styles.primaryConnectBtnText}>Enlazando...</Text>
-                </View>
-              ) : (
-                <Text style={styles.primaryConnectBtnText}>Vincular ahora</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* SECONDARY DISCOVERED DEVICES (IF ANY) */}
-        {!isConnected && !bondedDeviceId && secondaryDevices.length > 0 && (
-          <View style={styles.secondaryDevicesContainer}>
-            <Text style={styles.secondaryDevicesHeading}>
-              Otros dispositivos detectados ({secondaryDevices.length})
-            </Text>
-            {secondaryDevices.map((item) => {
-              const isThisConnecting = isConnecting && connectingId === item.id;
-              return (
-                <View key={item.id} style={styles.secondaryDeviceItem}>
-                  <View style={styles.secondaryDeviceLeft}>
-                    <BluetoothIcon size={16} color="#64748B" />
-                    <View style={styles.secondaryDeviceTextWrap}>
-                      <Text style={styles.secondaryDeviceName}>
-                        {item.name ?? 'Dispositivo BLE'}
-                      </Text>
-                      <Text style={styles.secondaryDeviceSub}>
-                        {item.rssi != null ? `${item.rssi} dBm · ` : ''}
-                        ID: {item.id.slice(0, 14)}...
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.secondaryConnectBtn}
-                    onPress={() => void handleConnectDevice(item)}
-                    disabled={isConnecting}
-                    activeOpacity={0.8}
-                  >
-                    {isThisConnecting ? (
-                      <ActivityIndicator size="small" color={Colors.brand} />
-                    ) : (
-                      <Text style={styles.secondaryConnectBtnText}>Conectar</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
           </View>
         )}
 
@@ -787,6 +810,57 @@ export default function Esp32PrototypeScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Modal de Confirmación para Desvincular Pulsera */}
+      <Modal
+        visible={showUnpairModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isUnpairing) setShowUnpairModal(false);
+        }}
+      >
+        <View style={styles.unpairModalOverlay}>
+          <View style={styles.unpairModalCard}>
+            <View style={styles.unpairModalIconCircle}>
+              <WatchIcon size={26} color="#DC2626" strokeWidth={2} />
+            </View>
+
+            <Text style={styles.unpairModalTitle}>¿Desvincular Ecos Band?</Text>
+            <Text style={styles.unpairModalSubtitle}>
+              Se interrumpirá la sincronización del dispositivo
+            </Text>
+
+            <Text style={styles.unpairModalBody}>
+              El dispositivo dejará de sincronizarse con este teléfono y se eliminará el enlace seguro almacenado. Podrá volver a vincular la pulsera en cualquier momento desde esta pantalla.
+            </Text>
+
+            <View style={styles.unpairModalActions}>
+              <TouchableOpacity
+                style={styles.confirmUnpairBtn}
+                onPress={() => void handleExecuteUnpair()}
+                disabled={isUnpairing}
+                activeOpacity={0.8}
+              >
+                {isUnpairing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmUnpairBtnText}>Desvincular pulsera</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelUnpairBtn}
+                onPress={() => setShowUnpairModal(false)}
+                disabled={isUnpairing}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelUnpairBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1446,5 +1520,88 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.text,
     lineHeight: 16,
+  },
+
+  /* UNPAIR CONFIRMATION MODAL */
+  unpairModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  unpairModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.large,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  unpairModalIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  unpairModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  unpairModalSubtitle: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#DC2626',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  unpairModalBody: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  unpairModalActions: {
+    width: '100%',
+    gap: 10,
+  },
+  confirmUnpairBtn: {
+    backgroundColor: '#DC2626',
+    borderRadius: Radius.medium,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  confirmUnpairBtnText: {
+    fontSize: 14.5,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  cancelUnpairBtn: {
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelUnpairBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
   },
 });

@@ -231,7 +231,7 @@ export default function Home() {
               <Text style={styles.accordionSubtitle}>
                 {isBleConnected
                   ? showMetrics
-                    ? 'Telemetría en vivo desde ESP32'
+                    ? 'Telemetría sincronizada desde ESP32'
                     : 'Pulso y actividad en tiempo real'
                   : showMetrics
                   ? '4 lecturas sincronizadas'
