@@ -1,14 +1,18 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { BatteryChargingIcon, BluetoothIcon } from '@/components/ui/app-icons';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 
 export interface ConnectedHardwareCardProps {
   connectedDeviceName?: string | null;
+  onUnpair?: () => void;
 }
 
-export function ConnectedHardwareCard({ connectedDeviceName }: ConnectedHardwareCardProps) {
+export function ConnectedHardwareCard({
+  connectedDeviceName,
+  onUnpair,
+}: ConnectedHardwareCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
@@ -68,6 +72,19 @@ export function ConnectedHardwareCard({ connectedDeviceName }: ConnectedHardware
           </Text>
         </View>
       </View>
+
+      {/* Disconnect/Unpair button within hardware card */}
+      {onUnpair && (
+        <TouchableOpacity
+          style={styles.unpairBtn}
+          onPress={onUnpair}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Desvincular pulsera"
+        >
+          <Text style={styles.unpairBtnText}>Desvincular pulsera</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -183,5 +200,20 @@ const styles = StyleSheet.create({
   sensorText: {
     fontSize: 12,
     color: Colors.textSecondary,
+  },
+  unpairBtn: {
+    marginTop: 6,
+    paddingVertical: 10,
+    borderRadius: Radius.medium,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unpairBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#DC2626',
   },
 });

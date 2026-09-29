@@ -75,57 +75,152 @@ export function DiscoveredDeviceCard({
   );
 }
 
-export interface SecondaryDevicesListProps {
+export interface DiscoveredDevicesSectionProps {
   devices: ScannedDevice[];
+  selectedDevice: ScannedDevice | null;
+  onSelectDevice: (device: ScannedDevice) => void;
   isConnecting: boolean;
   connectingId: string | null;
   onConnect: (device: ScannedDevice) => void;
 }
 
-export function SecondaryDevicesList({
+export function DiscoveredDevicesSection({
   devices,
+  selectedDevice,
+  onSelectDevice,
   isConnecting,
   connectingId,
   onConnect,
-}: SecondaryDevicesListProps) {
+}: DiscoveredDevicesSectionProps) {
   if (devices.length === 0) return null;
 
+  const activeDevice = selectedDevice ?? devices[0];
+  const isThisConnecting = isConnecting && connectingId === activeDevice?.id;
+  const activeSignal = getSignalQuality(activeDevice?.rssi);
+
   return (
-    <View style={styles.secondaryContainer}>
-      <Text style={styles.secondaryHeading}>
-        Otros dispositivos detectados ({devices.length})
-      </Text>
-      {devices.map((item) => {
-        const isThisConnecting = isConnecting && connectingId === item.id;
-        return (
-          <View key={item.id} style={styles.secondaryItem}>
-            <View style={styles.secondaryLeft}>
-              <BluetoothIcon size={16} color="#64748B" />
-              <View style={styles.secondaryTextWrap}>
-                <Text style={styles.secondaryName}>
-                  {item.name ?? 'Dispositivo BLE'}
-                </Text>
-                <Text style={styles.secondarySub}>
-                  {item.rssi != null ? `${item.rssi} dBm · ` : ''}
-                  ID: {item.id.slice(0, 14)}...
-                </Text>
-              </View>
-            </View>
+    <View style={styles.sectionCard}>
+      {/* Header */}
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionHeading}>
+          Dispositivos detectados ({devices.length})
+        </Text>
+        <Text style={styles.sectionHint}>
+          Toca una pulsera para seleccionarla
+        </Text>
+      </View>
+
+      {/* List of Discovered Devices */}
+      <View style={styles.devicesList}>
+        {devices.map((item) => {
+          const isSelected = activeDevice?.id === item.id;
+          const signal = getSignalQuality(item.rssi);
+          const isOfficial =
+            item.isCompatible ||
+            item.name?.toLowerCase().includes('ecos') ||
+            item.name?.toLowerCase().includes('band');
+
+          return (
             <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={() => onConnect(item)}
-              disabled={isConnecting}
-              activeOpacity={0.8}
+              key={item.id}
+              style={[
+                styles.deviceSelectRow,
+                isSelected && styles.deviceSelectRowActive,
+              ]}
+              onPress={() => onSelectDevice(item)}
+              activeOpacity={0.75}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: isSelected }}
             >
-              {isThisConnecting ? (
-                <ActivityIndicator size="small" color={Colors.brand} />
-              ) : (
-                <Text style={styles.secondaryBtnText}>Conectar</Text>
-              )}
+              <View style={styles.deviceRowLeft}>
+                <View
+                  style={[
+                    styles.deviceIconWrap,
+                    isSelected && styles.deviceIconWrapActive,
+                  ]}
+                >
+                  {isOfficial ? (
+                    <WatchIcon
+                      size={20}
+                      color={isSelected ? '#0F766E' : '#64748B'}
+                    />
+                  ) : (
+                    <BluetoothIcon
+                      size={18}
+                      color={isSelected ? '#0F766E' : '#64748B'}
+                    />
+                  )}
+                </View>
+
+                <View style={styles.deviceTextCol}>
+                  <View style={styles.nameRow}>
+                    <Text
+                      style={[
+                        styles.deviceItemName,
+                        isSelected && styles.deviceItemNameActive,
+                      ]}
+                    >
+                      {item.name ?? 'Ecos Band'}
+                    </Text>
+                    {isOfficial && (
+                      <View style={styles.compatibleBadge}>
+                        <Text style={styles.compatibleBadgeText}>OFICIAL</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.signalRow}>
+                    <SignalIcon size={12} color={signal.color} />
+                    <Text style={[styles.signalText, { color: signal.color }]}>
+                      {signal.label}
+                    </Text>
+                    <Text style={styles.idSubtext}>
+                      · ID: {item.id.slice(0, 10)}...
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Selection Radio Circle */}
+              <View
+                style={[
+                  styles.radioOuter,
+                  isSelected && styles.radioOuterActive,
+                ]}
+              >
+                {isSelected && <View style={styles.radioInner} />}
+              </View>
             </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Handshake & Slider for the Selected Device */}
+      {activeDevice && (
+        <View style={styles.handshakeBox}>
+          <View style={styles.handshakeHeader}>
+            <View style={styles.handshakeInfoCol}>
+              <Text style={styles.handshakeTag}>Pulsera seleccionada:</Text>
+              <Text style={styles.handshakeDeviceName}>
+                {activeDevice.name ?? 'Ecos Band'}
+              </Text>
+              <Text style={styles.handshakeSignalText}>
+                {activeSignal.label}
+              </Text>
+            </View>
+            <View style={styles.readyBadge}>
+              <Text style={styles.readyBadgeText}>LISTA PARA ENLAZAR</Text>
+            </View>
           </View>
-        );
-      })}
+
+          <View style={styles.sliderContainer}>
+            <SwipeToConnect
+              onConfirm={() => onConnect(activeDevice)}
+              isConnecting={isThisConnecting}
+              disabled={isConnecting}
+            />
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -266,5 +361,147 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#334155',
+  },
+  sectionCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.large,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  sectionHeaderRow: {
+    gap: 2,
+  },
+  sectionHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.2,
+  },
+  sectionHint: {
+    fontSize: 11.5,
+    color: Colors.textSecondary,
+  },
+  devicesList: {
+    gap: 8,
+  },
+  deviceSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.three,
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  deviceSelectRowActive: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  deviceRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    flex: 1,
+  },
+  deviceIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.small,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deviceIconWrapActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  deviceTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  deviceItemName: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  deviceItemNameActive: {
+    color: '#14532D',
+    fontWeight: '700',
+  },
+  idSubtext: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOuterActive: {
+    borderColor: '#10B981',
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#10B981',
+  },
+  handshakeBox: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    padding: Spacing.three,
+    gap: Spacing.two,
+    marginTop: 2,
+  },
+  handshakeHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  handshakeInfoCol: {
+    gap: 2,
+    flex: 1,
+  },
+  handshakeTag: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0F766E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  handshakeDeviceName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#14532D',
+  },
+  handshakeSignalText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  readyBadge: {
+    backgroundColor: '#166534',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.small,
+  },
+  readyBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
 });

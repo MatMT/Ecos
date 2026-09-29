@@ -54,7 +54,7 @@ export function WearableHeroCard({
       return 'Reconectando automáticamente con tu Ecos Band. Si reiniciaste el ESP32, se enlazará en unos segundos.';
     }
     if (isScanning && primaryDeviceDetected) {
-      return 'Dispositivo Ecos Band detectado arriba. Pulse «Vincular ahora» para iniciar la conexión, o detenga el escaneo.';
+      return 'Dispositivos detectados en el listado inferior. Selecciona tu pulsera y desliza para vincular.';
     }
     if (isScanning) {
       return 'Buscando tu pulsera Ecos Band... Mantenla a menos de 1 metro de tu teléfono.';

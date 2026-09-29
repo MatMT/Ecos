@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Animated,
   ScrollView,
@@ -21,8 +21,7 @@ import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import {
   CalmCelebration,
   ConnectedHardwareCard,
-  DiscoveredDeviceCard,
-  SecondaryDevicesList,
+  DiscoveredDevicesSection,
   SleepMonitoringCard,
   TechSpecsAccordion,
   TelemetryDashboard,
@@ -130,6 +129,7 @@ export default function Esp32PrototypeScreen() {
   } = useEsp32Ble();
 
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [showUnpairModal, setShowUnpairModal] = useState<boolean>(false);
   const [isUnpairing, setIsUnpairing] = useState<boolean>(false);
   const [showCelebration, setShowCelebration] = useState<boolean>(false);
@@ -139,12 +139,7 @@ export default function Esp32PrototypeScreen() {
   const isConnected = status === 'connected';
   const isDemoMode = !isConnected && Boolean(preferences.demoMode);
 
-  // Trigger Calm Celebration when newly connected
-  useEffect(() => {
-    if (isConnected) {
-      setShowCelebration(true);
-    }
-  }, [isConnected]);
+
 
   const isDataActive = isConnected || isDemoMode;
   const activeBpm = isConnected ? (bleBpm > 0 ? bleBpm : 74) : (monitorBpm ?? 74);
@@ -197,10 +192,18 @@ export default function Esp32PrototypeScreen() {
     }
   }, [isScanning, waveAnim1, waveAnim2, waveAnim3]);
 
+  const handleCelebrationFinish = useCallback(() => {
+    setShowCelebration(false);
+  }, []);
+
   const handleConnectDevice = async (device: ScannedDevice) => {
     setConnectingId(device.id);
     try {
       await connectToDeviceId(device.id);
+      // Instant transition into celebration as soon as device is connected
+      setShowCelebration(true);
+    } catch {
+      // Keep celebration inactive on connection errors
     } finally {
       setConnectingId(null);
     }
@@ -218,17 +221,17 @@ export default function Esp32PrototypeScreen() {
 
   const statusBadge = getStatusBadgeInfo(status, isDemoMode, Boolean(bondedDeviceId));
 
-  // Filter out Ecos Band / primary device from generic list
-  const primaryDevice = discoveredDevices.find(
-    (item) =>
-      item.isCompatible ||
-      item.name?.toLowerCase().includes('ecos') ||
-      item.name?.toLowerCase().includes('band')
-  );
-
-  const secondaryDevices = discoveredDevices.filter(
-    (item) => item.id !== primaryDevice?.id
-  );
+  // Auto-select preferred device (first compatible or first discovered device)
+  const selectedDevice =
+    discoveredDevices.find((d) => d.id === selectedDeviceId) ??
+    discoveredDevices.find(
+      (d) =>
+        d.isCompatible ||
+        d.name?.toLowerCase().includes('ecos') ||
+        d.name?.toLowerCase().includes('band')
+    ) ??
+    discoveredDevices[0] ??
+    null;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -261,27 +264,7 @@ export default function Esp32PrototypeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. DISCOVERED PRIMARY DEVICE: ELEVATED AT VERY TOP */}
-        {!isConnected && !bondedDeviceId && primaryDevice && (
-          <DiscoveredDeviceCard
-            device={primaryDevice}
-            isConnecting={isConnecting}
-            connectingId={connectingId}
-            onConnect={(device) => void handleConnectDevice(device)}
-          />
-        )}
-
-        {/* 2. SECONDARY DISCOVERED DEVICES (IF ANY) */}
-        {!isConnected && !bondedDeviceId && secondaryDevices.length > 0 && (
-          <SecondaryDevicesList
-            devices={secondaryDevices}
-            isConnecting={isConnecting}
-            connectingId={connectingId}
-            onConnect={(device) => void handleConnectDevice(device)}
-          />
-        )}
-
-        {/* 3. HERO SECTION: Wearable Status & Radar Scan (Only when disconnected) */}
+        {/* 1. HERO SECTION: Wearable Status & Radar Scan (Always visible when disconnected) */}
         {!isConnected && (
           <WearableHeroCard
             isConnected={isConnected}
@@ -290,7 +273,7 @@ export default function Esp32PrototypeScreen() {
             isDemoMode={isDemoMode}
             bondedDeviceId={bondedDeviceId}
             connectedDeviceName={connectedDeviceName}
-            primaryDeviceDetected={Boolean(primaryDevice)}
+            primaryDeviceDetected={discoveredDevices.length > 0}
             statusBadge={statusBadge}
             waveAnim1={waveAnim1}
             waveAnim2={waveAnim2}
@@ -302,16 +285,31 @@ export default function Esp32PrototypeScreen() {
           />
         )}
 
+        {/* 2. DISCOVERED DEVICES SECTION: Multi-device List + Selected Band Handshake Slider */}
+        {!isConnected && !bondedDeviceId && discoveredDevices.length > 0 && (
+          <DiscoveredDevicesSection
+            devices={discoveredDevices}
+            selectedDevice={selectedDevice}
+            onSelectDevice={(device) => setSelectedDeviceId(device.id)}
+            isConnecting={isConnecting}
+            connectingId={connectingId}
+            onConnect={(device) => void handleConnectDevice(device)}
+          />
+        )}
+
         {/* 4. ACTIVE CONNECTED STATE CARDS */}
         {isConnected && (
           <>
-            <ConnectedHardwareCard connectedDeviceName={connectedDeviceName} />
+            <ConnectedHardwareCard
+              connectedDeviceName={connectedDeviceName}
+              onUnpair={() => setShowUnpairModal(true)}
+            />
             <SleepMonitoringCard />
           </>
         )}
 
-        {/* 5. DEMO MODE SCENARIO BANNER (Hidden when connected) */}
-        {isDemoMode && !isConnected && !primaryDevice && (
+        {/* 5. DEMO MODE SCENARIO BANNER (Hidden when connected or when devices are detected) */}
+        {isDemoMode && !isConnected && discoveredDevices.length === 0 && (
           <View style={styles.demoCard}>
             <View style={styles.demoCardLeft}>
               <Text style={styles.demoCardLabel}>Escenario de simulación:</Text>
@@ -382,7 +380,7 @@ export default function Esp32PrototypeScreen() {
       {/* CALM CELEBRATION OVERLAY */}
       <CalmCelebration
         active={showCelebration}
-        onFinish={() => setShowCelebration(false)}
+        onFinish={handleCelebrationFinish}
       />
 
       {/* 9. MODAL DE CONFIRMACIÓN PARA DESVINCULAR */}
@@ -521,5 +519,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#94A3B8',
+  },
+  scanningNoticeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+  },
+  scanningNoticeText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  stopScanTextBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: Radius.small,
+    backgroundColor: '#F1F5F9',
+  },
+  stopScanTextBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#64748B',
   },
 });

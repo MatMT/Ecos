@@ -29,7 +29,7 @@ export interface SwipeToConnectProps {
 
 const BUTTON_SIZE = 52;
 const TRACK_HEIGHT = 60;
-const HAPTIC_STEP_INTERVAL = 30; // Triggers haptic every 30px dragged
+const HAPTIC_STEP_INTERVAL = 16; // Rich granular vibration every 16px dragged
 
 export function SwipeToConnect({
   onConfirm,
@@ -41,46 +41,79 @@ export function SwipeToConnect({
   );
   const [isCompleted, setIsCompleted] = useState(false);
 
-  const maxTranslate = Math.max(0, trackWidth - BUTTON_SIZE - 8);
+  const maxTranslateShared = useSharedValue(
+    Math.max(0, trackWidth - BUTTON_SIZE - 8)
+  );
   const translateX = useSharedValue(0);
   const isDragging = useSharedValue(false);
-  const lastHapticPx = useSharedValue(0);
+  const detent1Fired = useSharedValue(false);
+  const detent2Fired = useSharedValue(false);
+
+  // Prime/warm up native haptic engine immediately on mount so the very first touch has zero engine startup latency
+  React.useEffect(() => {
+    void Haptics.selectionAsync();
+  }, []);
+
+  React.useEffect(() => {
+    maxTranslateShared.value = Math.max(0, trackWidth - BUTTON_SIZE - 8);
+  }, [trackWidth, maxTranslateShared]);
 
   const triggerStepHaptic = () => {
     void Haptics.selectionAsync();
   };
 
   const triggerSuccessHaptic = () => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
   };
 
   const notifyConfirm = () => {
     setIsCompleted(true);
     triggerSuccessHaptic();
+    // Immediate handshake transition - zero artificial delay
     onConfirm();
   };
 
   const panGesture = Gesture.Pan()
     .enabled(!disabled && !isConnecting && !isCompleted)
-    .onStart(() => {
+    .activeOffsetX([-3, 3]) // Instantly claims gesture from parent ScrollView
+    .failOffsetY([-20, 20]) // Tolerates natural thumb curvature without failing
+    .onBegin(() => {
       isDragging.value = true;
-      lastHapticPx.value = 0;
+      detent1Fired.value = false;
+      detent2Fired.value = false;
+    })
+    .onStart(() => {
+      detent1Fired.value = false;
+      detent2Fired.value = false;
     })
     .onUpdate((event) => {
-      const clampedX = Math.max(0, Math.min(event.translationX, maxTranslate));
+      'worklet';
+      const maxT = maxTranslateShared.value;
+      const clampedX = Math.max(0, Math.min(event.translationX, maxT));
       translateX.value = clampedX;
 
-      // Incremental haptic tick
-      if (Math.abs(clampedX - lastHapticPx.value) >= HAPTIC_STEP_INTERVAL) {
-        lastHapticPx.value = clampedX;
+      // Clean milestone physical detents (35% and 70%) - avoids flooding JS bridge
+      if (clampedX >= maxT * 0.35 && !detent1Fired.value) {
+        detent1Fired.value = true;
         runOnJS(triggerStepHaptic)();
+      } else if (clampedX < maxT * 0.35 && detent1Fired.value) {
+        detent1Fired.value = false;
+      }
+
+      if (clampedX >= maxT * 0.7 && !detent2Fired.value) {
+        detent2Fired.value = true;
+        runOnJS(triggerStepHaptic)();
+      } else if (clampedX < maxT * 0.7 && detent2Fired.value) {
+        detent2Fired.value = false;
       }
     })
     .onEnd(() => {
+      'worklet';
       isDragging.value = false;
-      // If dragged at least 88% of track, complete
-      if (translateX.value >= maxTranslate * 0.88) {
-        translateX.value = withSpring(maxTranslate, { damping: 18, stiffness: 200 });
+      const maxT = maxTranslateShared.value;
+      // If dragged at least 85% of track, complete
+      if (translateX.value >= maxT * 0.85) {
+        translateX.value = withSpring(maxT, { damping: 18, stiffness: 220 });
         runOnJS(notifyConfirm)();
       } else {
         // Snap back
@@ -101,7 +134,8 @@ export function SwipeToConnect({
   });
 
   const textGuideStyle = useAnimatedStyle(() => {
-    const opacity = maxTranslate > 0 ? 1 - (translateX.value / maxTranslate) * 1.5 : 1;
+    const maxT = maxTranslateShared.value;
+    const opacity = maxT > 0 ? 1 - (translateX.value / maxT) * 1.5 : 1;
     return {
       opacity: Math.max(0, opacity),
     };
