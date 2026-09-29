@@ -36,7 +36,7 @@ export default function SplashScreen() {
   return (
     <View style={styles.container}>
       <Animated.Image
-        source={require('@/assets/logo_nexo_ecos.png')}
+        source={require('@/assets/logo_ecos.png')}
         style={[styles.logo, animatedStyle]}
         resizeMode="contain"
       />

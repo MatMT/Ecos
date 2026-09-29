@@ -34,7 +34,7 @@ export default function Login() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Image source={require('@/assets/logo_nexo_ecos.png')} style={styles.image} resizeMode="contain" />
+      <Image source={require('@/assets/logo_ecos.png')} style={styles.image} resizeMode="contain" />
       <View style={styles.card}>
         <DevServerBanner forceShow={isNetworkError} />
         <TextField
