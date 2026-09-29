@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,6 +23,7 @@ import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
+import { RequestAppointmentDto } from './dto/request-appointment.dto';
 import { AppointmentResponseDto } from './dto/appointment-response.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -65,6 +67,39 @@ export class AppointmentsController {
     @CurrentUser() currentUser?: RequestUser,
   ) {
     return this.appointmentsService.create(dto, currentUser?.id ?? null);
+  }
+
+  @Post('request')
+  @UseGuards(RolesGuard)
+  @Roles(Role.student)
+  @ApiOperation({
+    summary: 'Request an appointment as a patient',
+    description:
+      'Creates a pending appointment request for the authenticated student with their assigned therapist.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Appointment requested successfully.',
+    type: AppointmentResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid therapist or student does not have an assigned therapist.',
+  })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Slot conflicts with an existing pending or confirmed appointment.',
+  })
+  request(
+    @Body() dto: RequestAppointmentDto,
+    @CurrentUser() currentUser?: RequestUser,
+  ) {
+    if (!currentUser?.id) {
+      throw new UnauthorizedException('Usuario no autenticado.');
+    }
+    return this.appointmentsService.requestAppointment(dto, currentUser.id);
   }
 
   @Get()

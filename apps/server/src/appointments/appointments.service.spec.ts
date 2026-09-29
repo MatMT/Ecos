@@ -15,6 +15,7 @@ describe('AppointmentsService', () => {
     appointment: {
       create: jest.Mock;
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       update: jest.Mock;
       findMany: jest.Mock;
     };
@@ -35,6 +36,7 @@ describe('AppointmentsService', () => {
       appointment: {
         create: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
         findMany: jest.fn(),
       },
@@ -211,6 +213,78 @@ describe('AppointmentsService', () => {
         service.reschedule(1, { appointmentDate: '2030-06-04T14:00:00.000Z' }),
       ).rejects.toThrow(ConflictException);
       expect(tx.appointment.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('requestAppointment', () => {
+    const studentUserId = 'student-user-uuid';
+    const requestDto = {
+      appointmentDate: '2030-07-10T15:00:00.000Z',
+      modality: 'virtual',
+      reason: 'Consulta sobre estrés académico',
+    };
+
+    beforeEach(() => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: STUDENT_ID,
+        userId: studentUserId,
+        assignedDoctorId: DOCTOR_ID,
+        user: { institutionId: 5 },
+      });
+      tx.user.findUnique.mockResolvedValue({
+        id: DOCTOR_ID,
+        role: Role.psychologist,
+        institutionId: 5,
+      });
+      tx.psychologistProfile.findUnique.mockResolvedValue({
+        defaultSessionMinutes: 50,
+      });
+      tx.appointment.findFirst.mockResolvedValue(null);
+      tx.appointment.create.mockResolvedValue({
+        id: 10,
+        status: AppointmentStatus.pending,
+      });
+    });
+
+    it('creates a pending appointment request for the authenticated student', async () => {
+      const result = await service.requestAppointment(
+        requestDto,
+        studentUserId,
+      );
+
+      expect(tx.appointment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          studentId: STUDENT_ID,
+          doctorId: DOCTOR_ID,
+          modality: 'virtual',
+          reason: 'Consulta sobre estrés académico',
+          status: AppointmentStatus.pending,
+          createdById: studentUserId,
+        }) as unknown,
+      });
+      expect(result).toEqual({ id: 10, status: AppointmentStatus.pending });
+    });
+
+    it('throws ConflictException when a conflicting appointment exists', async () => {
+      tx.appointment.findFirst.mockResolvedValue({ id: 99 });
+
+      await expect(
+        service.requestAppointment(requestDto, studentUserId),
+      ).rejects.toThrow(ConflictException);
+      expect(tx.appointment.create).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException if student has no assigned therapist', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: STUDENT_ID,
+        userId: studentUserId,
+        assignedDoctorId: null,
+        user: { institutionId: 5 },
+      });
+
+      await expect(
+        service.requestAppointment(requestDto, studentUserId),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

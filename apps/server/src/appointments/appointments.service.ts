@@ -11,6 +11,7 @@ import { SchedulesService } from '../schedules/schedules.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
+import { RequestAppointmentDto } from './dto/request-appointment.dto';
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_TIMEZONE = 'America/El_Salvador';
@@ -99,6 +100,84 @@ export class AppointmentsService {
           durationMinutes,
           modality: dto.modality,
           reason: dto.reason,
+          createdById: currentUserId,
+          status: AppointmentStatus.pending,
+        },
+      });
+    });
+  }
+
+  requestAppointment(dto: RequestAppointmentDto, currentUserId: string) {
+    return this.prisma.withRls(async (tx) => {
+      const student = await tx.studentProfile.findUnique({
+        where: { userId: currentUserId },
+        include: { user: true, assignedDoctor: true },
+      });
+
+      if (!student) {
+        throw new NotFoundException(
+          'No se ha encontrado el perfil de estudiante para este usuario.',
+        );
+      }
+
+      const doctorId = dto.doctorId ?? student.assignedDoctorId;
+      if (!doctorId) {
+        throw new BadRequestException(
+          'No cuenta con un terapeuta asignado para coordinar la cita.',
+        );
+      }
+
+      const doctor = await tx.user.findUnique({ where: { id: doctorId } });
+      if (!doctor || doctor.role !== Role.psychologist) {
+        throw new BadRequestException('El terapeuta asignado no es válido.');
+      }
+      if (doctor.institutionId !== student.user.institutionId) {
+        throw new BadRequestException(
+          'El terapeuta y el paciente deben pertenecer a la misma institución.',
+        );
+      }
+
+      const appointmentDate = this.parseFutureDate(
+        dto.appointmentDate,
+        'La fecha de la cita debe ser una fecha futura válida.',
+      );
+
+      const profile = await tx.psychologistProfile.findUnique({
+        where: { userId: doctorId },
+      });
+      const durationMinutes = profile?.defaultSessionMinutes ?? 50;
+      const endAt = new Date(
+        appointmentDate.getTime() + durationMinutes * 60_000,
+      );
+
+      const conflict = await tx.appointment.findFirst({
+        where: {
+          OR: [{ studentId: student.id }, { doctorId }],
+          status: {
+            in: [AppointmentStatus.pending, AppointmentStatus.confirmed],
+          },
+          appointmentDate: { lt: endAt },
+          endAt: { gt: appointmentDate },
+        },
+      });
+
+      if (conflict) {
+        throw new ConflictException(
+          'El horario solicitado no se encuentra disponible debido a un conflicto de agenda.',
+        );
+      }
+
+      return tx.appointment.create({
+        data: {
+          studentId: student.id,
+          doctorId,
+          sessionTitle: 'Solicitud de Sesión de Acompañamiento',
+          sessionType: 'Seguimiento',
+          appointmentDate,
+          endAt,
+          durationMinutes,
+          modality: dto.modality,
+          reason: dto.reason ?? 'Solicitud iniciada por el paciente',
           createdById: currentUserId,
           status: AppointmentStatus.pending,
         },

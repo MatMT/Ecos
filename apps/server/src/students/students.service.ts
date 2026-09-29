@@ -153,8 +153,8 @@ export class StudentsService {
                 profile.assignedDoctor.psychologistProfile?.specialty ?? null,
               phone: profile.assignedDoctor.psychologistProfile?.phone ?? null,
               professionalLicense:
-                profile.assignedDoctor.psychologistProfile?.professionalLicense ??
-                null,
+                profile.assignedDoctor.psychologistProfile
+                  ?.professionalLicense ?? null,
             }
           : null,
         nextAppointment: nextAppointment
