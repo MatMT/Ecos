@@ -525,7 +525,7 @@ export default function Esp32PrototypeScreen() {
         )}
 
         {/* STATE 3: FOUND COMPATIBLE DEVICE (ELEVATED HERO CARD) */}
-        {!isConnected && primaryDevice && (
+        {!isConnected && !bondedDeviceId && primaryDevice && (
           <View style={styles.discoveredPrimaryCard}>
             <View style={styles.discoveredPrimaryHeader}>
               <View style={styles.primaryDeviceIconBox}>
@@ -576,7 +576,7 @@ export default function Esp32PrototypeScreen() {
         )}
 
         {/* SECONDARY DISCOVERED DEVICES (IF ANY) */}
-        {!isConnected && secondaryDevices.length > 0 && (
+        {!isConnected && !bondedDeviceId && secondaryDevices.length > 0 && (
           <View style={styles.secondaryDevicesContainer}>
             <Text style={styles.secondaryDevicesHeading}>
               Otros dispositivos detectados ({secondaryDevices.length})

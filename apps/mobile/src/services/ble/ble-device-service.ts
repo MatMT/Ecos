@@ -265,7 +265,6 @@ export class BleDeviceService {
       return;
     }
 
-    // Reset map and immediately pull any peripherals already paired/connected in iOS CoreBluetooth
     this.discoveredDevicesMap.clear();
 
     void this.manager
@@ -366,6 +365,10 @@ export class BleDeviceService {
       clearTimeout(this.scanTimeoutTimer);
       this.scanTimeoutTimer = null;
     }
+    if (this.autoReconnectScanTimer) {
+      clearTimeout(this.autoReconnectScanTimer);
+      this.autoReconnectScanTimer = null;
+    }
     if (this.manager) {
       try {
         this.manager.stopDeviceScan();
@@ -461,23 +464,9 @@ export class BleDeviceService {
     }
   }
 
-  public async connect(
-    device: Device,
-    onDisconnected: (error: Error | null) => void
-  ): Promise<Device> {
-    const connectedDevice = await device.connect();
-    await connectedDevice.discoverAllServicesAndCharacteristics();
-
-    connectedDevice.onDisconnected((error) => {
-      onDisconnected(error);
-    });
-
-    return connectedDevice;
-  }
-
   /**
    * Internal handler invoked whenever connection is established and characteristics are discovered.
-   * Persists bonding into SecureStore and binds disconnection recovery.
+   * Persists bonding into SecureStore, cleans up scan artifacts, and binds disconnection recovery.
    */
   private async handleDeviceConnected(connected: Device, name: string): Promise<void> {
     if (this.reconnectTimer) {
@@ -494,6 +483,7 @@ export class BleDeviceService {
     this.bondedDeviceName = name;
     this.isManualDisconnect = false;
     this.isReconnecting = false;
+    this.discoveredDevicesMap.clear();
 
     // Persist paired device into SecureStore
     await setSecureItem(
@@ -532,6 +522,7 @@ export class BleDeviceService {
       bondedDeviceId: connected.id,
       bondedDeviceName: name,
       isReconnecting: false,
+      discoveredDevices: [],
       errorMessage: null,
     });
 
@@ -541,7 +532,7 @@ export class BleDeviceService {
   /**
    * Schedules an automatic reconnection attempt with exponential/periodic polling.
    */
-  private scheduleAutoReconnect(delayMs = 3000): void {
+  private scheduleAutoReconnect(delayMs = 2500): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
     }
@@ -554,7 +545,7 @@ export class BleDeviceService {
   }
 
   /**
-   * Attempts automatic reconnection to previously paired hardware.
+   * Attempts automatic reconnection to previously paired hardware using targeted scan.
    */
   public async attemptReconnect(): Promise<void> {
     if (!this.bondedDeviceId || this.isManualDisconnect || this.activeDevice) {
@@ -585,22 +576,26 @@ export class BleDeviceService {
       await this.waitForAdapterReady();
       if (!this.manager) return;
 
-      // 1. Try direct connection if peripheral is already recognized by OS / advertising
+      // 1. Check if device is already connected at OS level
       try {
-        const connected = await this.manager.connectToDevice(this.bondedDeviceId, {
-          timeout: 4000,
-        });
-        await connected.discoverAllServicesAndCharacteristics();
-        await this.handleDeviceConnected(
-          connected,
-          connected.name || this.bondedDeviceName || BLE_CONFIG.deviceName
-        );
-        return;
+        const isConn = await this.manager.isDeviceConnected(this.bondedDeviceId);
+        if (isConn) {
+          const knownDevices = await this.manager.devices([this.bondedDeviceId]);
+          if (knownDevices.length > 0) {
+            const dev = knownDevices[0];
+            await dev.discoverAllServicesAndCharacteristics();
+            await this.handleDeviceConnected(
+              dev,
+              dev.name || this.bondedDeviceName || BLE_CONFIG.deviceName
+            );
+            return;
+          }
+        }
       } catch {
-        // Direct connect timed out (ESP32 is rebooting or advertising afresh)
+        // Proceed to targeted scan
       }
 
-      // 2. Perform quick targeted scan for 5 seconds
+      // 2. Perform targeted scan to detect peripheral advertising
       this.startBondedTargetedScan();
     } catch {
       this.scheduleAutoReconnect(3000);
@@ -610,7 +605,7 @@ export class BleDeviceService {
   }
 
   /**
-   * Runs a targeted scan to locate the bonded peripheral when direct connection times out.
+   * Runs a targeted scan to locate the bonded peripheral and connects once advertised.
    */
   private startBondedTargetedScan(): void {
     if (!this.manager || !this.bondedDeviceId || this.isManualDisconnect || this.activeDevice) {
@@ -619,6 +614,13 @@ export class BleDeviceService {
 
     if (this.autoReconnectScanTimer) {
       clearTimeout(this.autoReconnectScanTimer);
+      this.autoReconnectScanTimer = null;
+    }
+
+    try {
+      this.manager.stopDeviceScan();
+    } catch {
+      // Handled
     }
 
     this.manager.startDeviceScan(null, null, async (error, device) => {
@@ -630,13 +632,14 @@ export class BleDeviceService {
         rawName === BLE_CONFIG.deviceName ||
         rawName.startsWith('Ecos-Band') ||
         rawName.startsWith('Nexo-Band') ||
-        rawName === this.bondedDeviceName;
+        (this.bondedDeviceName != null && rawName === this.bondedDeviceName);
 
       if (isTargetId || isTargetName) {
         if (this.autoReconnectScanTimer) {
           clearTimeout(this.autoReconnectScanTimer);
           this.autoReconnectScanTimer = null;
         }
+
         try {
           this.manager?.stopDeviceScan();
         } catch {
@@ -651,7 +654,12 @@ export class BleDeviceService {
             rawName.length > 0 ? rawName : (this.bondedDeviceName || BLE_CONFIG.deviceName)
           );
         } catch {
-          this.scheduleAutoReconnect(3000);
+          try {
+            await device.cancelConnection();
+          } catch {
+            // Handled
+          }
+          this.scheduleAutoReconnect(2500);
         }
       }
     });
@@ -665,9 +673,9 @@ export class BleDeviceService {
       this.autoReconnectScanTimer = null;
 
       if (!this.activeDevice && this.bondedDeviceId && !this.isManualDisconnect) {
-        this.scheduleAutoReconnect(3000);
+        this.scheduleAutoReconnect(2500);
       }
-    }, 5000);
+    }, 6000);
   }
 
   /**
@@ -701,6 +709,7 @@ export class BleDeviceService {
       bondedDeviceId: null,
       bondedDeviceName: null,
       isReconnecting: false,
+      discoveredDevices: [],
       errorMessage: null,
     });
   }
@@ -787,22 +796,8 @@ export class BleDeviceService {
         this.updateState({ status: 'connecting' });
 
         try {
-          const connected = await this.connect(device, () => {
-            this.cleanupSubscription();
-            this.activeDevice = null;
-            const shouldAutoReconnect = Boolean(this.bondedDeviceId && !this.isManualDisconnect);
-            this.updateState({
-              status: shouldAutoReconnect ? 'connecting' : 'disconnected',
-              connectedDeviceName: null,
-              isReconnecting: shouldAutoReconnect,
-              errorMessage: this.isManualDisconnect
-                ? null
-                : 'Se ha interrumpido la conexión. Reconectando automáticamente...',
-            });
-            if (shouldAutoReconnect) {
-              this.scheduleAutoReconnect(2000);
-            }
-          });
+          const connected = await device.connect();
+          await connected.discoverAllServicesAndCharacteristics();
 
           await this.handleDeviceConnected(
             connected,
@@ -845,6 +840,7 @@ export class BleDeviceService {
         const estimatedAdc = Math.round((parsedBpm / 190) * BLE_CONFIG.maxAdcValue);
 
         this.updateState({
+          status: 'connected',
           bpm: parsedBpm,
           activityLevel: parsedActivity,
           spo2: parsedSpo2,
@@ -865,6 +861,7 @@ export class BleDeviceService {
           const calculatedPercentage = Math.round((clampedValue / BLE_CONFIG.maxAdcValue) * 100);
           const mappedBpm = Math.round(45 + (clampedValue / BLE_CONFIG.maxAdcValue) * (190 - 45));
           this.updateState({
+            status: 'connected',
             bpm: mappedBpm,
             activityLevel: calculatedPercentage,
             rawAdcValue: clampedValue,
