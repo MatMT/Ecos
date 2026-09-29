@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
 import { authClient, type AuthUser } from '@/services/api/auth-client';
+import { BleDeviceService } from '@/services/ble/ble-device-service';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -56,6 +57,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
       },
       logout: async () => {
+        try {
+          await BleDeviceService.getInstance().disconnectSession();
+        } catch {
+          // Ignored: BLE teardown must not block session revocation
+        }
         await authClient.logout();
         setUser(null);
       },

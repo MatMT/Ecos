@@ -1,6 +1,9 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +20,7 @@ import {
   BatteryIcon,
   CalendarIcon,
   ChevronRightIcon,
+  CloseIcon,
   LogOutIcon,
   MessageSquareIcon,
   PhoneIcon,
@@ -28,6 +32,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useStudent, type SimulationScenario } from '@/hooks/use-student';
 import { useTheme } from '@/context/theme-context';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
+import { useEsp32Ble } from '@/hooks/use-esp32-ble';
 
 function getScenarioLabel(scenario: SimulationScenario | undefined): string {
   switch (scenario) {
@@ -81,6 +86,53 @@ export default function Profile() {
   const { student, displayName, preferences, refreshStudent } = useStudent();
   const { colors } = useTheme();
   const { bpm, spo2, isBleConnected, isDemoMode, trafficState } = useBiometricMonitor();
+  const { bondedDeviceId, bondedDeviceName, unpair } = useEsp32Ble();
+
+  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+  const hasBondedBand = Boolean(bondedDeviceId) || isBleConnected;
+
+  const handleLogoutPress = () => {
+    if (hasBondedBand) {
+      setShowLogoutModal(true);
+    } else {
+      Alert.alert(
+        'Cerrar Sesión',
+        '¿Está seguro de que desea cerrar su sesión actual en este dispositivo?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Cerrar Sesión',
+            style: 'destructive',
+            onPress: () => {
+              void logout();
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const handleOnlyLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      setShowLogoutModal(false);
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const handleUnpairAndLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await unpair();
+      setShowLogoutModal(false);
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -425,7 +477,8 @@ export default function Profile() {
         <View style={styles.accountSection}>
           <TouchableOpacity
             style={styles.logoutButton}
-            onPress={() => void logout()}
+            onPress={handleLogoutPress}
+            disabled={isLoggingOut}
             activeOpacity={0.8}
           >
             <LogOutIcon size={18} color="#DC2626" />
@@ -436,6 +489,111 @@ export default function Profile() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Modal de Confirmación de Cierre de Sesión y Gestión de Ecos Band */}
+      <Modal
+        visible={showLogoutModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isLoggingOut) setShowLogoutModal(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.logoutModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalIconCircle}>
+                <WatchIcon size={22} color="#0D9488" strokeWidth={2.2} />
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                style={styles.modalCloseButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <CloseIcon size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalTitle}>Cierre de Sesión</Text>
+            <Text style={styles.modalSubtitle}>
+              ¿Desea mantener enlazada su pulsera Ecos Band?
+            </Text>
+
+            <Text style={styles.modalBody}>
+              Por privacidad y seguridad clínica, la telemetría biométrica se desconectará de inmediato. Puede conservar la vinculación para su próxima sesión o desvincular el dispositivo de este teléfono.
+            </Text>
+
+            <View style={styles.bandStatusBox}>
+              <View style={styles.bandStatusLeft}>
+                <View style={isBleConnected ? styles.bandDotActive : styles.bandDotInactive} />
+                <Text style={styles.bandNameText} numberOfLines={1}>
+                  {bondedDeviceName || 'Ecos-Band-ESP32'}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.bandStatusBadge,
+                  { backgroundColor: isBleConnected ? '#DCFCE7' : '#F1F5F9' },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.bandStatusBadgeText,
+                    { color: isBleConnected ? '#15803D' : '#64748B' },
+                  ]}
+                >
+                  {isBleConnected ? 'Enlace activo (1 Hz)' : 'Enlazada'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.modalActionButtons}>
+              {/* Opción 1: Solo cerrar sesión */}
+              <TouchableOpacity
+                style={styles.keepBondButton}
+                onPress={() => void handleOnlyLogout()}
+                disabled={isLoggingOut}
+                activeOpacity={0.85}
+              >
+                {isLoggingOut ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Text style={styles.keepBondButtonText}>Solo cerrar sesión</Text>
+                    <Text style={styles.keepBondSubtext}>
+                      Conserva la pulsera vinculada para su próximo ingreso
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Opción 2: Desvincular y salir */}
+              <TouchableOpacity
+                style={styles.unpairButton}
+                onPress={() => void handleUnpairAndLogout()}
+                disabled={isLoggingOut}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.unpairButtonText}>Desvincular pulsera y salir</Text>
+                <Text style={styles.unpairSubtext}>
+                  Elimina el registro de hardware de este teléfono
+                </Text>
+              </TouchableOpacity>
+
+              {/* Cancelar */}
+              <TouchableOpacity
+                style={styles.cancelLogoutButton}
+                onPress={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelLogoutText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -867,5 +1025,163 @@ const styles = StyleSheet.create({
   appVersionText: {
     fontSize: 12,
     color: '#94A3B8',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  logoutModalCard: {
+    width: '100%',
+    maxWidth: 390,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.large,
+    padding: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 8,
+  },
+  modalBody: {
+    fontSize: 12.5,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  bandStatusBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.medium,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 18,
+  },
+  bandStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  bandDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#16A34A',
+  },
+  bandDotInactive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#94A3B8',
+  },
+  bandNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  bandStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.small,
+  },
+  bandStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  modalActionButtons: {
+    gap: 10,
+  },
+  keepBondButton: {
+    backgroundColor: '#0D9488',
+    borderRadius: Radius.medium,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0D9488',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  keepBondButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  keepBondSubtext: {
+    fontSize: 11,
+    color: '#CCFBF1',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  unpairButton: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: Radius.medium,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unpairButtonText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  unpairSubtext: {
+    fontSize: 11,
+    color: '#991B1B',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  cancelLogoutButton: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  cancelLogoutText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#64748B',
   },
 });

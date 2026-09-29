@@ -15,6 +15,8 @@ export interface UseEsp32BleResult extends BleTelemetryState {
   stopScan: () => void;
   connectToDeviceId: (deviceId: string) => Promise<void>;
   disconnect: () => Promise<void>;
+  disconnectSession: () => Promise<void>;
+  resumeBondedConnection: () => void;
   unpair: () => Promise<void>;
   openSettings: () => Promise<void>;
 }
@@ -24,6 +26,7 @@ export function useEsp32Ble(): UseEsp32BleResult {
   const [state, setState] = useState<BleTelemetryState>(bleService.getState());
 
   useEffect(() => {
+    bleService.resumeBondedConnection();
     void bleService.initBondedState();
     const unsubscribe = bleService.subscribe((updatedState) => {
       setState(updatedState);
@@ -58,6 +61,14 @@ export function useEsp32Ble(): UseEsp32BleResult {
     await bleService.unpair();
   }, [bleService]);
 
+  const disconnectSession = useCallback(async () => {
+    await bleService.disconnectSession();
+  }, [bleService]);
+
+  const resumeBondedConnection = useCallback(() => {
+    bleService.resumeBondedConnection();
+  }, [bleService]);
+
   const openSettings = useCallback(async () => {
     try {
       await Linking.openSettings();
@@ -73,6 +84,8 @@ export function useEsp32Ble(): UseEsp32BleResult {
     stopScan,
     connectToDeviceId,
     disconnect,
+    disconnectSession,
+    resumeBondedConnection,
     unpair,
     openSettings,
   };

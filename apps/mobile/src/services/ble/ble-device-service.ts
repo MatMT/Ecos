@@ -705,6 +705,12 @@ export class BleDeviceService {
 
     this.updateState({
       status: 'idle',
+      bpm: 0,
+      activityLevel: 0,
+      spo2: 0,
+      flags: 0,
+      hardwareAlert: false,
+      sosPressed: false,
       connectedDeviceName: null,
       bondedDeviceId: null,
       bondedDeviceName: null,
@@ -712,6 +718,53 @@ export class BleDeviceService {
       discoveredDevices: [],
       errorMessage: null,
     });
+  }
+
+  /**
+   * Disconnects the active BLE session without wiping the persistent bond in SecureStore.
+   * Prevents background auto-reconnect loops while the session is logged out.
+   */
+  public async disconnectSession(): Promise<void> {
+    this.isManualDisconnect = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.autoReconnectScanTimer) {
+      clearTimeout(this.autoReconnectScanTimer);
+      this.autoReconnectScanTimer = null;
+    }
+
+    await this.disconnectCurrent();
+
+    this.updateState({
+      status: 'disconnected',
+      bpm: 0,
+      activityLevel: 0,
+      spo2: 0,
+      flags: 0,
+      hardwareAlert: false,
+      sosPressed: false,
+      connectedDeviceName: null,
+      isReconnecting: false,
+      discoveredDevices: [],
+      errorMessage: null,
+    });
+  }
+
+  /**
+   * Resumes connection to a bonded device when an authenticated session is restored.
+   */
+  public resumeBondedConnection(): void {
+    this.isManualDisconnect = false;
+    if (
+      this.bondedDeviceId &&
+      !this.activeDevice &&
+      this.state.status !== 'connected' &&
+      this.state.status !== 'connecting'
+    ) {
+      void this.attemptReconnect();
+    }
   }
 
   public monitorBinaryCharacteristic(
