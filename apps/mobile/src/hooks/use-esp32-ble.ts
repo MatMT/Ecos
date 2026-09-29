@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { Linking } from 'react-native';
 import {
   BleDeviceService,
+  formatBleErrorMessage,
   type BleConnectionStatus,
   type BleTelemetryState,
   type ScannedDevice,
 } from '@/services/ble/ble-device-service';
 
+export { formatBleErrorMessage };
 export type { BleConnectionStatus, BleTelemetryState, ScannedDevice };
 
 export interface UseEsp32BleResult extends BleTelemetryState {

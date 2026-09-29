@@ -60,6 +60,42 @@ export interface PairedBandRecord {
 
 const PAIRED_BAND_KEY = 'ecos_paired_band_device';
 
+export function formatBleErrorMessage(error: unknown): string {
+  if (!error) {
+    return 'Ha ocurrido un inconveniente con el adaptador Bluetooth.';
+  }
+  const raw = error instanceof Error ? error.message : String(error);
+  const lower = raw.toLowerCase();
+
+  if (lower.includes('powered off') || lower.includes('poweredoff')) {
+    return 'El Bluetooth se encuentra desactivado. Por favor, actívelo en los ajustes de su dispositivo.';
+  }
+  if (lower.includes('unauthorized') || lower.includes('permission')) {
+    return 'No se han otorgado los permisos necesarios para la comunicación por Bluetooth.';
+  }
+  if (lower.includes('unsupported')) {
+    return 'El hardware Bluetooth Low Energy no es compatible con este dispositivo.';
+  }
+  if (lower.includes('location')) {
+    return 'Los servicios de ubicación se encuentran desactivados o sin permisos requeridos.';
+  }
+  if (lower.includes('disconnected') || lower.includes('was disconnected')) {
+    return 'El dispositivo se ha desconectado.';
+  }
+  if (lower.includes('timeout') || lower.includes('timed out')) {
+    return 'Se agotó el tiempo de espera para la conexión con el dispositivo.';
+  }
+  if (
+    lower.includes('cannot start') ||
+    lower.includes('failed to start') ||
+    lower.includes('scan')
+  ) {
+    return 'No fue posible iniciar la búsqueda de dispositivos Bluetooth.';
+  }
+
+  return raw;
+}
+
 export class BleDeviceService {
   private static instance: BleDeviceService | null = null;
   private manager: BleManager | null = null;
@@ -217,7 +253,13 @@ export class BleDeviceService {
       if (currentState === 'PoweredOn') {
         return;
       }
-    } catch {
+      if (currentState === 'PoweredOff') {
+        throw new Error('El Bluetooth se encuentra desactivado. Por favor, actívelo en los ajustes de su dispositivo.');
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Bluetooth')) {
+        throw err;
+      }
       // Ignored and proceed to state change listener
     }
 
@@ -229,6 +271,12 @@ export class BleDeviceService {
             resolved = true;
             subscription.remove();
             resolve();
+          }
+        } else if (adapterState === 'PoweredOff') {
+          if (!resolved) {
+            resolved = true;
+            subscription.remove();
+            reject(new Error('El Bluetooth se encuentra desactivado. Por favor, actívelo en los ajustes de su dispositivo.'));
           }
         } else if (adapterState === 'Unauthorized') {
           if (!resolved) {
@@ -334,7 +382,8 @@ export class BleDeviceService {
         return;
       }
 
-      const displayName = rawName.length > 0 ? rawName : (hasMatchingService ? BLE_CONFIG.deviceName : null);
+      const normalizedName = rawName.replace(/^Nexo[-_ ]?/i, 'Ecos-');
+      const displayName = normalizedName.length > 0 ? normalizedName : (hasMatchingService ? BLE_CONFIG.deviceName : null);
       if (!displayName || displayName.startsWith('Dispositivo BLE')) {
         return;
       }
@@ -415,7 +464,7 @@ export class BleDeviceService {
     } catch (err) {
       this.updateState({
         status: 'error',
-        errorMessage: err instanceof Error ? err.message : 'Error al verificar el estado de Bluetooth.',
+        errorMessage: formatBleErrorMessage(err),
       });
       return;
     }
@@ -438,7 +487,7 @@ export class BleDeviceService {
       (err) => {
         this.updateState({
           status: 'error',
-          errorMessage: err.message,
+          errorMessage: formatBleErrorMessage(err),
         });
       }
     );
@@ -465,7 +514,7 @@ export class BleDeviceService {
     } catch (err) {
       this.updateState({
         status: 'error',
-        errorMessage: err instanceof Error ? err.message : 'No fue posible establecer la conexión con el dispositivo.',
+        errorMessage: formatBleErrorMessage(err),
       });
     }
   }
@@ -655,9 +704,10 @@ export class BleDeviceService {
         try {
           const connected = await device.connect();
           await connected.discoverAllServicesAndCharacteristics();
+          const cleanName = (rawName.length > 0 ? rawName : (this.bondedDeviceName || BLE_CONFIG.deviceName)).replace(/^Nexo[-_ ]?/i, 'Ecos-');
           await this.handleDeviceConnected(
             connected,
-            rawName.length > 0 ? rawName : (this.bondedDeviceName || BLE_CONFIG.deviceName)
+            cleanName
           );
         } catch {
           try {
@@ -823,7 +873,7 @@ export class BleDeviceService {
     } catch (err) {
       this.updateState({
         status: 'error',
-        errorMessage: err instanceof Error ? err.message : 'Error al verificar el estado de Bluetooth.',
+        errorMessage: formatBleErrorMessage(err),
       });
       return;
     }
@@ -858,14 +908,15 @@ export class BleDeviceService {
           const connected = await device.connect();
           await connected.discoverAllServicesAndCharacteristics();
 
+          const targetName = (connected.name ?? BLE_CONFIG.deviceName).replace(/^Nexo[-_ ]?/i, 'Ecos-');
           await this.handleDeviceConnected(
             connected,
-            connected.name ?? BLE_CONFIG.deviceName
+            targetName
           );
         } catch (err) {
           this.updateState({
             status: 'error',
-            errorMessage: err instanceof Error ? err.message : 'Error al conectar con el dispositivo.',
+            errorMessage: formatBleErrorMessage(err),
           });
         }
       },
@@ -876,7 +927,7 @@ export class BleDeviceService {
         }
         this.updateState({
           status: 'error',
-          errorMessage: err.message,
+          errorMessage: formatBleErrorMessage(err),
         });
       }
     );

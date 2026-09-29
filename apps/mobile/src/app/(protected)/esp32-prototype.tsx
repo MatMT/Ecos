@@ -13,6 +13,7 @@ import { useRouter, type Href } from 'expo-router';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import {
   useEsp32Ble,
+  formatBleErrorMessage,
   type BleConnectionStatus,
   type ScannedDevice,
 } from '@/hooks/use-esp32-ble';
@@ -332,7 +333,7 @@ export default function Esp32PrototypeScreen() {
         {/* 6. HARDWARE ERROR ALERT */}
         {errorMessage && (
           <View style={styles.errorCard}>
-            <Text style={styles.errorText}>{errorMessage}</Text>
+            <Text style={styles.errorText}>{formatBleErrorMessage(errorMessage)}</Text>
             <TouchableOpacity
               style={styles.settingsButton}
               onPress={() => void openSettings()}
