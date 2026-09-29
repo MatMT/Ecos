@@ -62,7 +62,8 @@ function getSignalQuality(rssi?: number | null): { label: string; color: string 
 
 function getStatusBadgeInfo(
   status: BleConnectionStatus,
-  isDemoMode: boolean
+  isDemoMode: boolean,
+  hasBonded?: boolean
 ): { text: string; bg: string; color: string; dot: string } {
   if (status === 'connected') {
     return {
@@ -70,6 +71,14 @@ function getStatusBadgeInfo(
       bg: '#DCFCE7',
       color: '#15803D',
       dot: '#16A34A',
+    };
+  }
+  if (status === 'connecting') {
+    return {
+      text: hasBonded ? 'Reconectando automáticamente...' : 'Enlazando pulsera...',
+      bg: '#FEF3C7',
+      color: '#92400E',
+      dot: '#F59E0B',
     };
   }
   if (isDemoMode) {
@@ -88,13 +97,6 @@ function getStatusBadgeInfo(
         color: '#92400E',
         dot: '#F59E0B',
       };
-    case 'connecting':
-      return {
-        text: 'Enlazando pulsera...',
-        bg: '#FEF3C7',
-        color: '#92400E',
-        dot: '#F59E0B',
-      };
     case 'error':
       return {
         text: 'Sin conexión',
@@ -106,7 +108,7 @@ function getStatusBadgeInfo(
     case 'disconnected':
     default:
       return {
-        text: 'Lista para enlazar',
+        text: hasBonded ? 'Esperando señal de ESP32...' : 'Lista para enlazar',
         bg: '#F1F5F9',
         color: '#64748B',
         dot: '#94A3B8',
@@ -134,10 +136,11 @@ export default function Esp32PrototypeScreen() {
     connectedDeviceName,
     errorMessage,
     discoveredDevices,
+    bondedDeviceId,
     startScanOnly,
     stopScan,
     connectToDeviceId,
-    disconnect,
+    unpair,
     openSettings,
   } = useEsp32Ble();
 
@@ -209,7 +212,7 @@ export default function Esp32PrototypeScreen() {
     }
   };
 
-  const statusBadge = getStatusBadgeInfo(status, isDemoMode);
+  const statusBadge = getStatusBadgeInfo(status, isDemoMode, Boolean(bondedDeviceId));
 
   // Filter out Ecos Band / primary device from generic list
   const primaryDevice = discoveredDevices.find(
@@ -359,10 +362,14 @@ export default function Esp32PrototypeScreen() {
           <Text style={styles.heroSubtitle}>
             {isConnected
               ? 'Tu pulsera está enlazada y transmitiendo datos biométricos en tiempo real.'
+              : isConnecting && bondedDeviceId
+              ? 'Reconectando automáticamente con tu Ecos Band. Si reiniciaste el ESP32, se enlazará en unos segundos.'
               : isScanning
               ? 'Buscando tu pulsera Ecos Band... Mantenla a menos de 1 metro de tu teléfono.'
               : isConnecting
               ? 'Sincronizando canales seguros con la pulsera...'
+              : bondedDeviceId
+              ? 'Pulsera previamente enlazada. Se conectará automáticamente al detectar la señal de tu ESP32.'
               : isDemoMode
               ? 'Transmitiendo telemetría continua bajo simulación fisiológica.'
               : 'Asegúrate de que tu pulsera esté encendida y cerca de tu teléfono para sincronizar tu ritmo y descanso.'}
@@ -374,7 +381,13 @@ export default function Esp32PrototypeScreen() {
               <Button
                 label="Desvincular pulsera"
                 variant="danger"
-                onPress={() => void disconnect()}
+                onPress={() => void unpair()}
+              />
+            ) : isConnecting && bondedDeviceId ? (
+              <Button
+                label="Desvincular pulsera"
+                variant="danger"
+                onPress={() => void unpair()}
               />
             ) : isScanning ? (
               <Button
@@ -382,6 +395,24 @@ export default function Esp32PrototypeScreen() {
                 variant="danger"
                 onPress={stopScan}
               />
+            ) : bondedDeviceId ? (
+              <View style={styles.bondedActionCol}>
+                <Button
+                  label="Reconectar ahora"
+                  variant="primary"
+                  disabled={isConnecting}
+                  onPress={() => void connectToDeviceId(bondedDeviceId)}
+                />
+                <TouchableOpacity
+                  style={styles.unpairLinkBtn}
+                  onPress={() => void unpair()}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Desvincular pulsera actual"
+                >
+                  <Text style={styles.unpairLinkBtnText}>Desvincular pulsera</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <Button
                 label="Buscar mi Ecos Band"
@@ -899,6 +930,19 @@ const styles = StyleSheet.create({
   heroActionContainer: {
     width: '100%',
     paddingTop: Spacing.two,
+  },
+  bondedActionCol: {
+    width: '100%',
+    gap: 8,
+  },
+  unpairLinkBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  unpairLinkBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.danger,
   },
 
   /* CONNECTED CARD */

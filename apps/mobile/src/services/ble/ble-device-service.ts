@@ -3,6 +3,11 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { Buffer } from 'buffer';
 
 import { BLE_CONFIG } from '@/constants/ble';
+import {
+  deleteSecureItem,
+  getSecureItem,
+  setSecureItem,
+} from '@/services/api/secure-session-storage';
 
 export type BleConnectionStatus =
   | 'idle'
@@ -35,6 +40,9 @@ export interface BleTelemetryState {
   connectedDeviceName: string | null;
   errorMessage: string | null;
   discoveredDevices: ScannedDevice[];
+  bondedDeviceId: string | null;
+  bondedDeviceName: string | null;
+  isReconnecting: boolean;
 }
 
 export interface BleScanOptions {
@@ -43,6 +51,14 @@ export interface BleScanOptions {
   deviceName?: string;
   deviceNames?: string[];
 }
+
+export interface PairedBandRecord {
+  id: string;
+  name: string;
+  pairedAt: string;
+}
+
+const PAIRED_BAND_KEY = 'ecos_paired_band_device';
 
 export class BleDeviceService {
   private static instance: BleDeviceService | null = null;
@@ -63,6 +79,9 @@ export class BleDeviceService {
     connectedDeviceName: null,
     errorMessage: null,
     discoveredDevices: [],
+    bondedDeviceId: null,
+    bondedDeviceName: null,
+    isReconnecting: false,
   };
 
   private listeners = new Set<(state: BleTelemetryState) => void>();
@@ -71,6 +90,14 @@ export class BleDeviceService {
   private scanTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private discoveredDevicesMap = new Map<string, ScannedDevice>();
 
+  private bondedDeviceId: string | null = null;
+  private bondedDeviceName: string | null = null;
+  private isManualDisconnect: boolean = false;
+  private isReconnecting: boolean = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoReconnectScanTimer: ReturnType<typeof setTimeout> | null = null;
+  private isInitialized: boolean = false;
+
   private constructor() {
     try {
       if (Platform.OS === 'web') {
@@ -78,6 +105,16 @@ export class BleDeviceService {
         return;
       }
       this.manager = new BleManager();
+      this.manager.onStateChange((adapterState) => {
+        if (
+          adapterState === 'PoweredOn' &&
+          this.bondedDeviceId &&
+          !this.activeDevice &&
+          !this.isManualDisconnect
+        ) {
+          void this.attemptReconnect();
+        }
+      });
     } catch {
       this.manager = null;
     }
@@ -110,6 +147,37 @@ export class BleDeviceService {
     this.state = { ...this.state, ...partial };
     for (const fn of this.listeners) {
       fn(this.state);
+    }
+  }
+
+  /**
+   * Initializes paired bond record from SecureStore and attempts auto-reconnect if present.
+   */
+  public async initBondedState(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+    this.isInitialized = true;
+
+    try {
+      const raw = await getSecureItem(PAIRED_BAND_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as PairedBandRecord;
+        if (parsed?.id) {
+          this.bondedDeviceId = parsed.id;
+          this.bondedDeviceName = parsed.name || BLE_CONFIG.deviceName;
+          this.updateState({
+            bondedDeviceId: this.bondedDeviceId,
+            bondedDeviceName: this.bondedDeviceName,
+          });
+
+          if (!this.activeDevice && !this.isManualDisconnect) {
+            void this.attemptReconnect();
+          }
+        }
+      }
+    } catch {
+      // Non-critical local load error ignored
     }
   }
 
@@ -155,20 +223,20 @@ export class BleDeviceService {
 
     return new Promise<void>((resolve, reject) => {
       let resolved = false;
-      const subscription = this.manager!.onStateChange((state) => {
-        if (state === 'PoweredOn') {
+      const subscription = this.manager!.onStateChange((adapterState) => {
+        if (adapterState === 'PoweredOn') {
           if (!resolved) {
             resolved = true;
             subscription.remove();
             resolve();
           }
-        } else if (state === 'Unauthorized') {
+        } else if (adapterState === 'Unauthorized') {
           if (!resolved) {
             resolved = true;
             subscription.remove();
             reject(new Error('Permiso de Bluetooth no otorgado. Por favor, habilite el acceso a Bluetooth en los Ajustes de su dispositivo.'));
           }
-        } else if (state === 'Unsupported') {
+        } else if (adapterState === 'Unsupported') {
           if (!resolved) {
             resolved = true;
             subscription.remove();
@@ -242,15 +310,9 @@ export class BleDeviceService {
         return;
       }
 
-      console.log(
-        `[BLE FOUND] id=${device.id} name=${device.name} localName=${device.localName} uuids=${JSON.stringify(device.serviceUUIDs)} rssi=${device.rssi}`
-      );
-
-      // Prioritize live advertisement localName over system cached name
       const rawName = (device.localName?.trim() || device.name?.trim() || '');
       const serviceUUIDs = device.serviceUUIDs ?? [];
 
-      // 1. Check for Heart Rate / Ecos Telemetry Service UUID (180D)
       const hasMatchingService = serviceUUIDs.some((uuid) => {
         const u = uuid.toLowerCase();
         return (
@@ -260,7 +322,6 @@ export class BleDeviceService {
         );
       });
 
-      // 2. Check for recognized ecosystem device name prefix
       const hasEcosystemName =
         rawName.length > 0 &&
         !rawName.startsWith('Dispositivo BLE') &&
@@ -270,7 +331,6 @@ export class BleDeviceService {
           (options.deviceNames &&
             options.deviceNames.some((n) => rawName.toLowerCase().includes(n.toLowerCase()))));
 
-      // 3. STRICT FILTER: Discard nameless beacons, generic OS accessories, and non-ecosystem devices
       if (!hasMatchingService && !hasEcosystemName) {
         return;
       }
@@ -288,7 +348,6 @@ export class BleDeviceService {
         isCompatible: true,
       });
 
-      // Priority sort: Ecos-Band-ESP32 first, followed by strongest signal strength (RSSI)
       const sortedList = Array.from(this.discoveredDevicesMap.values()).sort((a, b) => {
         const aIsTarget = a.name === BLE_CONFIG.deviceName || a.name?.startsWith('Ecos-Band');
         const bIsTarget = b.name === BLE_CONFIG.deviceName || b.name?.startsWith('Ecos-Band');
@@ -388,29 +447,12 @@ export class BleDeviceService {
       const connected = await this.manager.connectToDevice(deviceId);
       await connected.discoverAllServicesAndCharacteristics();
 
-      connected.onDisconnected(() => {
-        this.cleanupSubscription();
-        this.activeDevice = null;
-        this.updateState({
-          status: 'disconnected',
-          connectedDeviceName: null,
-          errorMessage: 'Se ha interrumpido la conexión con el dispositivo ESP32.',
-        });
-      });
-
-      this.activeDevice = connected;
       const targetName =
         connected.name ??
         this.discoveredDevicesMap.get(deviceId)?.name ??
         BLE_CONFIG.deviceName;
 
-      this.updateState({
-        status: 'connected',
-        connectedDeviceName: targetName,
-        errorMessage: null,
-      });
-
-      await this.setupTelemetrySubscription(connected);
+      await this.handleDeviceConnected(connected, targetName);
     } catch (err) {
       this.updateState({
         status: 'error',
@@ -431,6 +473,236 @@ export class BleDeviceService {
     });
 
     return connectedDevice;
+  }
+
+  /**
+   * Internal handler invoked whenever connection is established and characteristics are discovered.
+   * Persists bonding into SecureStore and binds disconnection recovery.
+   */
+  private async handleDeviceConnected(connected: Device, name: string): Promise<void> {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.autoReconnectScanTimer) {
+      clearTimeout(this.autoReconnectScanTimer);
+      this.autoReconnectScanTimer = null;
+    }
+
+    this.activeDevice = connected;
+    this.bondedDeviceId = connected.id;
+    this.bondedDeviceName = name;
+    this.isManualDisconnect = false;
+    this.isReconnecting = false;
+
+    // Persist paired device into SecureStore
+    await setSecureItem(
+      PAIRED_BAND_KEY,
+      JSON.stringify({
+        id: connected.id,
+        name,
+        pairedAt: new Date().toISOString(),
+      })
+    );
+
+    // Register hardware disconnection listener for automatic reconnection recovery
+    connected.onDisconnected(() => {
+      this.cleanupSubscription();
+      this.activeDevice = null;
+
+      const shouldAutoReconnect = Boolean(this.bondedDeviceId && !this.isManualDisconnect);
+
+      this.updateState({
+        status: shouldAutoReconnect ? 'connecting' : 'disconnected',
+        connectedDeviceName: null,
+        isReconnecting: shouldAutoReconnect,
+        errorMessage: this.isManualDisconnect
+          ? null
+          : 'Se ha interrumpido la conexión. Reconectando automáticamente...',
+      });
+
+      if (shouldAutoReconnect) {
+        this.scheduleAutoReconnect(2000);
+      }
+    });
+
+    this.updateState({
+      status: 'connected',
+      connectedDeviceName: name,
+      bondedDeviceId: connected.id,
+      bondedDeviceName: name,
+      isReconnecting: false,
+      errorMessage: null,
+    });
+
+    await this.setupTelemetrySubscription(connected);
+  }
+
+  /**
+   * Schedules an automatic reconnection attempt with exponential/periodic polling.
+   */
+  private scheduleAutoReconnect(delayMs = 3000): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+    if (!this.bondedDeviceId || this.isManualDisconnect || this.activeDevice) {
+      return;
+    }
+    this.reconnectTimer = setTimeout(() => {
+      void this.attemptReconnect();
+    }, delayMs);
+  }
+
+  /**
+   * Attempts automatic reconnection to previously paired hardware.
+   */
+  public async attemptReconnect(): Promise<void> {
+    if (!this.bondedDeviceId || this.isManualDisconnect || this.activeDevice) {
+      return;
+    }
+
+    if (this.isReconnecting) {
+      return;
+    }
+    this.isReconnecting = true;
+
+    this.updateState({
+      status: 'connecting',
+      isReconnecting: true,
+      errorMessage: null,
+    });
+
+    try {
+      if (!this.isAvailable()) {
+        return;
+      }
+
+      const hasPermission = await this.requestPermissions();
+      if (!hasPermission) {
+        return;
+      }
+
+      await this.waitForAdapterReady();
+      if (!this.manager) return;
+
+      // 1. Try direct connection if peripheral is already recognized by OS / advertising
+      try {
+        const connected = await this.manager.connectToDevice(this.bondedDeviceId, {
+          timeout: 4000,
+        });
+        await connected.discoverAllServicesAndCharacteristics();
+        await this.handleDeviceConnected(
+          connected,
+          connected.name || this.bondedDeviceName || BLE_CONFIG.deviceName
+        );
+        return;
+      } catch {
+        // Direct connect timed out (ESP32 is rebooting or advertising afresh)
+      }
+
+      // 2. Perform quick targeted scan for 5 seconds
+      this.startBondedTargetedScan();
+    } catch {
+      this.scheduleAutoReconnect(3000);
+    } finally {
+      this.isReconnecting = false;
+    }
+  }
+
+  /**
+   * Runs a targeted scan to locate the bonded peripheral when direct connection times out.
+   */
+  private startBondedTargetedScan(): void {
+    if (!this.manager || !this.bondedDeviceId || this.isManualDisconnect || this.activeDevice) {
+      return;
+    }
+
+    if (this.autoReconnectScanTimer) {
+      clearTimeout(this.autoReconnectScanTimer);
+    }
+
+    this.manager.startDeviceScan(null, null, async (error, device) => {
+      if (error || !device) return;
+
+      const rawName = (device.localName?.trim() || device.name?.trim() || '');
+      const isTargetId = device.id === this.bondedDeviceId;
+      const isTargetName =
+        rawName === BLE_CONFIG.deviceName ||
+        rawName.startsWith('Ecos-Band') ||
+        rawName.startsWith('Nexo-Band') ||
+        rawName === this.bondedDeviceName;
+
+      if (isTargetId || isTargetName) {
+        if (this.autoReconnectScanTimer) {
+          clearTimeout(this.autoReconnectScanTimer);
+          this.autoReconnectScanTimer = null;
+        }
+        try {
+          this.manager?.stopDeviceScan();
+        } catch {
+          // Handled
+        }
+
+        try {
+          const connected = await device.connect();
+          await connected.discoverAllServicesAndCharacteristics();
+          await this.handleDeviceConnected(
+            connected,
+            rawName.length > 0 ? rawName : (this.bondedDeviceName || BLE_CONFIG.deviceName)
+          );
+        } catch {
+          this.scheduleAutoReconnect(3000);
+        }
+      }
+    });
+
+    this.autoReconnectScanTimer = setTimeout(() => {
+      try {
+        this.manager?.stopDeviceScan();
+      } catch {
+        // Handled
+      }
+      this.autoReconnectScanTimer = null;
+
+      if (!this.activeDevice && this.bondedDeviceId && !this.isManualDisconnect) {
+        this.scheduleAutoReconnect(3000);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Explicitly unpairs the current hardware, wiping persistent bond and releasing connection.
+   */
+  public async unpair(): Promise<void> {
+    this.isManualDisconnect = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.autoReconnectScanTimer) {
+      clearTimeout(this.autoReconnectScanTimer);
+      this.autoReconnectScanTimer = null;
+    }
+
+    this.bondedDeviceId = null;
+    this.bondedDeviceName = null;
+
+    try {
+      await deleteSecureItem(PAIRED_BAND_KEY);
+    } catch {
+      // Handled
+    }
+
+    await this.disconnectCurrent();
+
+    this.updateState({
+      status: 'idle',
+      connectedDeviceName: null,
+      bondedDeviceId: null,
+      bondedDeviceName: null,
+      isReconnecting: false,
+      errorMessage: null,
+    });
   }
 
   public monitorBinaryCharacteristic(
@@ -518,21 +790,24 @@ export class BleDeviceService {
           const connected = await this.connect(device, () => {
             this.cleanupSubscription();
             this.activeDevice = null;
+            const shouldAutoReconnect = Boolean(this.bondedDeviceId && !this.isManualDisconnect);
             this.updateState({
-              status: 'disconnected',
+              status: shouldAutoReconnect ? 'connecting' : 'disconnected',
               connectedDeviceName: null,
-              errorMessage: 'Se ha interrumpido la conexión con el dispositivo ESP32.',
+              isReconnecting: shouldAutoReconnect,
+              errorMessage: this.isManualDisconnect
+                ? null
+                : 'Se ha interrumpido la conexión. Reconectando automáticamente...',
             });
+            if (shouldAutoReconnect) {
+              this.scheduleAutoReconnect(2000);
+            }
           });
 
-          this.activeDevice = connected;
-          this.updateState({
-            status: 'connected',
-            connectedDeviceName: connected.name ?? BLE_CONFIG.deviceName,
-            errorMessage: null,
-          });
-
-          await this.setupTelemetrySubscription(connected);
+          await this.handleDeviceConnected(
+            connected,
+            connected.name ?? BLE_CONFIG.deviceName
+          );
         } catch (err) {
           this.updateState({
             status: 'error',
@@ -718,7 +993,7 @@ export class BleDeviceService {
     }
 
     this.updateState({
-      status: 'disconnected',
+      status: this.bondedDeviceId && !this.isManualDisconnect ? 'connecting' : 'disconnected',
       connectedDeviceName: null,
     });
   }
