@@ -10,6 +10,7 @@ export class SyncDispatcher {
   private static instance: SyncDispatcher | null = null;
   private isProcessing = false;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private activeStudentId: number | null = null;
 
   private constructor() {}
 
@@ -20,12 +21,22 @@ export class SyncDispatcher {
     return SyncDispatcher.instance;
   }
 
+  public setActiveStudentId(studentId: number | null): void {
+    this.activeStudentId = studentId;
+    if (studentId) {
+      void this.aggregateAndSyncHourlySummary(studentId);
+    }
+  }
+
   public startPeriodicSync(intervalMs = 30000): void {
     if (this.timer) {
       clearInterval(this.timer);
     }
     this.timer = setInterval(() => {
       void this.drainQueue();
+      if (this.activeStudentId) {
+        void this.aggregateAndSyncHourlySummary(this.activeStudentId);
+      }
     }, intervalMs);
 
     // Initial immediate sync
@@ -60,11 +71,16 @@ export class SyncDispatcher {
 
         try {
           const payload = JSON.parse(item.payload);
-          await authClient.apiFetch(item.endpoint, {
+          const res = await authClient.apiFetch(item.endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
+
+          if (!res.ok) {
+            const errData = (await res.json().catch(() => null)) as { message?: string } | null;
+            throw new Error(errData?.message || `HTTP ${res.status}`);
+          }
 
           await dequeueSyncItem(item.id);
         } catch (error) {
@@ -118,10 +134,21 @@ export class SyncDispatcher {
       }
 
       const summary = rows[0];
+
+      // Format ISO 8601 timestamps cleanly
+      const formatIso = (dbTime: string): string => {
+        try {
+          const parsed = new Date(dbTime.includes('T') ? dbTime : dbTime.replace(' ', 'T') + 'Z');
+          return isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+        } catch {
+          return new Date().toISOString();
+        }
+      };
+
       const payload = {
         studentId,
-        windowStart: summary.earliest_time,
-        windowEnd: summary.latest_time,
+        windowStart: formatIso(summary.earliest_time),
+        windowEnd: formatIso(summary.latest_time),
         averageHeartRate: Math.round(summary.avg_bpm),
         maxHeartRate: summary.max_bpm,
         averageStress: Number(summary.avg_stress.toFixed(1)),
@@ -131,19 +158,21 @@ export class SyncDispatcher {
       };
 
       try {
-        await authClient.apiFetch('/api/v1/biometrics/summary', {
+        const res = await authClient.apiFetch('/api/v1/biometrics/summary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
 
-        // Mark as synced locally
-        await db.runAsync(
-          `UPDATE local_biometric_samples
-           SET synced_to_summary = 1
-           WHERE timestamp >= ? AND timestamp <= ?;`,
-          [summary.earliest_time, summary.latest_time]
-        );
+        if (res.ok) {
+          // Mark as synced locally
+          await db.runAsync(
+            `UPDATE local_biometric_samples
+             SET synced_to_summary = 1
+             WHERE timestamp >= ? AND timestamp <= ?;`,
+            [summary.earliest_time, summary.latest_time]
+          );
+        }
       } catch {
         // Enqueue if offline
       }

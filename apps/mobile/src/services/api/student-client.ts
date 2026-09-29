@@ -90,4 +90,27 @@ export const studentClient = {
     }
     return res.json() as Promise<AppointmentItem[]>;
   },
+
+  async requestAppointment(input: RequestAppointmentInput): Promise<AppointmentItem> {
+    const res = await authClient.apiFetch('/api/v1/appointments/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const errorData = (await res.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(
+        errorData?.message ||
+          'Ha ocurrido un error en el procesamiento de la solicitud. Por favor, intente nuevamente.'
+      );
+    }
+    return res.json() as Promise<AppointmentItem>;
+  },
 };
+
+export interface RequestAppointmentInput {
+  doctorId?: string;
+  appointmentDate: string;
+  modality: 'in_person' | 'virtual';
+  reason?: string;
+}
