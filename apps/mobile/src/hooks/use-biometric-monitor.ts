@@ -140,12 +140,12 @@ export function useBiometricMonitor(overrideDemoMode?: boolean): BiometricMonito
     spo2: hasActiveDataSource && rawSpo2 > 0 ? rawSpo2 : null,
     analysis: hasActiveDataSource && rawBpm > 0 ? analysis : null,
     isBleConnected,
-    isDemoMode,
+    isDemoMode: isSimulatorActive,
     simulationScenario: currentScenario,
     bleStatus: ble.status,
     deviceName: isBleConnected
       ? (ble.connectedDeviceName || 'Ecos Band')
-      : isDemoMode
+      : isSimulatorActive
       ? 'Ecos Band (Demo)'
       : null,
     hardwareAlert: isBleConnected

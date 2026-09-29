@@ -150,7 +150,7 @@ export default function Esp32PrototypeScreen() {
   const isScanning = status === 'scanning';
   const isConnecting = status === 'connecting';
   const isConnected = status === 'connected';
-  const isDemoMode = preferences.demoMode;
+  const isDemoMode = !isConnected && Boolean(preferences.demoMode);
 
   const isDataActive = isConnected || isDemoMode;
   const activeBpm = isConnected ? (bleBpm > 0 ? bleBpm : 74) : (monitorBpm ?? 74);

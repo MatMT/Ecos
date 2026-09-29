@@ -28,12 +28,15 @@ import {
   type SimulationScenario,
   type VisualTheme,
 } from '@/hooks/use-student';
+import { useEsp32Ble } from '@/hooks/use-esp32-ble';
 import { useTheme } from '@/context/theme-context';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { preferences, updatePreferences } = useStudent();
   const { colors, setTheme } = useTheme();
+  const { status: bleStatus } = useEsp32Ble();
+  const isHardwareConnected = bleStatus === 'connected';
 
   const [preferredName, setPreferredName] = useState<string>(preferences.preferredName || '');
   const [selectedTheme, setSelectedTheme] = useState<VisualTheme>(preferences.visualTheme);
@@ -54,7 +57,7 @@ export default function SettingsScreen() {
         preferredName: preferredName.trim() || undefined,
         visualTheme: selectedTheme,
         checkInFrequency: selectedFrequency,
-        demoMode: isDemoMode,
+        demoMode: isHardwareConnected ? false : isDemoMode,
         simulationScenario: selectedScenario,
       });
       Alert.alert(
@@ -271,8 +274,10 @@ export default function SettingsScreen() {
                 </View>
               </View>
               <Switch
-                value={isDemoMode}
+                value={isHardwareConnected ? false : isDemoMode}
+                disabled={isHardwareConnected}
                 onValueChange={(val) => {
+                  if (isHardwareConnected) return;
                   setIsDemoMode(val);
                   void updatePreferences({ demoMode: val });
                 }}
@@ -281,7 +286,16 @@ export default function SettingsScreen() {
               />
             </View>
 
-            {isDemoMode && (
+            {isHardwareConnected && (
+              <View style={styles.hardwareConnectedBanner}>
+                <View style={styles.hardwareConnectedDot} />
+                <Text style={styles.hardwareConnectedText}>
+                  Pulsera Ecos Band conectada en vivo. La simulación y los escenarios fisiológicos están deshabilitados mientras el dispositivo físico esté transmitiendo datos reales.
+                </Text>
+              </View>
+            )}
+
+            {isDemoMode && !isHardwareConnected && (
               <View style={styles.scenariosContainer}>
                 <Text style={styles.scenariosSubheading}>SELECCIONE EL ESCENARIO FISIOLÓGICO</Text>
 
@@ -626,6 +640,30 @@ const styles = StyleSheet.create({
   },
   switchTextWrap: {
     flex: 1,
+  },
+  hardwareConnectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: Radius.medium,
+    padding: 12,
+    marginTop: 14,
+  },
+  hardwareConnectedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#16A34A',
+  },
+  hardwareConnectedText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#15803D',
+    lineHeight: 17,
+    fontWeight: '500',
   },
   scenariosContainer: {
     marginTop: 16,
