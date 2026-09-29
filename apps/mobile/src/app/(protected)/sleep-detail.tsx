@@ -32,6 +32,12 @@ import { useStudent } from '@/hooks/use-student';
 import { useEsp32Ble } from '@/hooks/use-esp32-ble';
 import { useTheme } from '@/context/theme-context';
 import { studentClient } from '@/services/api/student-client';
+import {
+  getSecureItem,
+  setSecureItem,
+} from '@/services/api/secure-session-storage';
+
+const DEMO_SLEEP_KEY_PREFIX = 'ecos_demo_sleep_hours_';
 
 interface DailySleepRecord {
   dayName: string;
@@ -118,6 +124,20 @@ export default function SleepDetailScreen() {
   // Demo mode sleep input state (when band is not connected)
   const [todaySleepInput, setTodaySleepInput] = useState<string>('7.5');
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
+  const [isPersistedFeedback, setIsPersistedFeedback] = useState<boolean>(false);
+
+  // Load persisted demo sleep for student if available
+  useEffect(() => {
+    if (!student?.id) return;
+    const storageKey = `${DEMO_SLEEP_KEY_PREFIX}${student.id}`;
+    getSecureItem(storageKey)
+      .then((savedVal) => {
+        if (savedVal) {
+          setTodaySleepInput(savedVal);
+        }
+      })
+      .catch(() => {});
+  }, [student?.id]);
 
   useEffect(() => {
     if (!student?.id) return;
@@ -165,10 +185,8 @@ export default function SleepDetailScreen() {
     setTodaySleepInput(val);
     const parsed = parseFloat(val);
     if (!isNaN(parsed) && parsed > 0 && parsed <= 24) {
-      const todayIso = new Date().toISOString().slice(0, 10);
       setWeeklyRecords((prev) =>
         prev.map((rec) => {
-          // If today exists in list, update it
           const isTodayRecord = rec.dateStr === new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
           if (isTodayRecord) {
             return { ...rec, hours: Number(parsed.toFixed(1)) };
@@ -176,6 +194,22 @@ export default function SleepDetailScreen() {
           return rec;
         })
       );
+    }
+  };
+
+  const handlePersistSimulation = async () => {
+    if (!student?.id) return;
+    const parsed = parseFloat(todaySleepInput);
+    if (isNaN(parsed) || parsed <= 0 || parsed > 24) return;
+
+    try {
+      const storageKey = `${DEMO_SLEEP_KEY_PREFIX}${student.id}`;
+      await setSecureItem(storageKey, String(parsed));
+
+      setIsPersistedFeedback(true);
+      setTimeout(() => setIsPersistedFeedback(false), 2500);
+    } catch {
+      // Ignored
     }
   };
 
@@ -358,6 +392,26 @@ export default function SleepDetailScreen() {
                   <Text style={[styles.customInputSuffix, { color: colors.textSecondary }]}>hrs</Text>
                 </View>
               </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.persistButton,
+                  { backgroundColor: isPersistedFeedback ? '#16A34A' : colors.brand },
+                ]}
+                onPress={handlePersistSimulation}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Guardar simulación de horas de descanso"
+              >
+                {isPersistedFeedback ? (
+                  <>
+                    <CheckIcon size={14} color="#FFFFFF" strokeWidth={2.5} />
+                    <Text style={styles.persistButtonText}>Simulación guardada</Text>
+                  </>
+                ) : (
+                  <Text style={styles.persistButtonText}>Guardar simulación</Text>
+                )}
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -934,6 +988,21 @@ const styles = StyleSheet.create({
   modalCloseButtonText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  persistButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    marginTop: 4,
+  },
+  persistButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
     fontWeight: '700',
   },
 });
