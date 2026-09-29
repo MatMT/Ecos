@@ -98,6 +98,54 @@ export function DiscoveredDevicesSection({
   const isThisConnecting = isConnecting && connectingId === activeDevice?.id;
   const activeSignal = getSignalQuality(activeDevice?.rssi);
 
+  // When only 1 device is discovered: Show direct handshake card (NO redundant selection list or radio buttons)
+  if (devices.length === 1) {
+    const isOfficial =
+      activeDevice.isCompatible ||
+      activeDevice.name?.toLowerCase().includes('ecos') ||
+      activeDevice.name?.toLowerCase().includes('band');
+
+    return (
+      <View style={styles.primaryCard}>
+        <View style={styles.primaryHeader}>
+          <View style={styles.primaryIconBox}>
+            <WatchIcon size={24} color="#0F766E" />
+          </View>
+          <View style={styles.primaryInfo}>
+            <View style={styles.primaryNameRow}>
+              <Text style={styles.primaryTitle}>
+                {activeDevice.name ?? 'Ecos Band'}
+              </Text>
+              {isOfficial && (
+                <View style={styles.compatibleBadge}>
+                  <Text style={styles.compatibleBadgeText}>DISPOSITIVO OFICIAL</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.signalRow}>
+              <SignalIcon size={14} color={activeSignal.color} />
+              <Text style={[styles.signalText, { color: activeSignal.color }]}>
+                {activeSignal.label}
+              </Text>
+              <Text style={styles.idSubtext}>
+                · ID: {activeDevice.id.slice(0, 10)}...
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.sliderContainer}>
+          <SwipeToConnect
+            onConfirm={() => onConnect(activeDevice)}
+            isConnecting={isThisConnecting}
+            disabled={isConnecting}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  // When multiple devices are discovered (> 1): Show selection list so user can choose WHICH band to connect to
   return (
     <View style={styles.sectionCard}>
       {/* Header */}
@@ -106,7 +154,7 @@ export function DiscoveredDevicesSection({
           Dispositivos detectados ({devices.length})
         </Text>
         <Text style={styles.sectionHint}>
-          Toca una pulsera para seleccionarla
+          Selecciona la pulsera que deseas vincular
         </Text>
       </View>
 

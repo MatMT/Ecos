@@ -360,7 +360,7 @@ export class BleDeviceService {
     });
   }
 
-  public stopScan(): void {
+  public stopScan(clearDiscovered = true): void {
     if (this.scanTimeoutTimer) {
       clearTimeout(this.scanTimeoutTimer);
       this.scanTimeoutTimer = null;
@@ -376,7 +376,13 @@ export class BleDeviceService {
         // Handled
       }
     }
-    if (this.state.status === 'scanning') {
+    if (clearDiscovered) {
+      this.discoveredDevicesMap.clear();
+      this.updateState({
+        status: this.state.status === 'scanning' ? 'idle' : this.state.status,
+        discoveredDevices: [],
+      });
+    } else if (this.state.status === 'scanning') {
       this.updateState({ status: 'idle' });
     }
   }
@@ -439,7 +445,7 @@ export class BleDeviceService {
   }
 
   public async connectToDeviceId(deviceId: string): Promise<void> {
-    this.stopScan();
+    this.stopScan(false);
     this.updateState({ status: 'connecting', errorMessage: null });
 
     try {

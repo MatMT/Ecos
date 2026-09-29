@@ -264,7 +264,19 @@ export default function Esp32PrototypeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. HERO SECTION: Wearable Status & Radar Scan (Always visible when disconnected) */}
+        {/* 1. DISCOVERED DEVICES: Elevated above search card when devices are found */}
+        {!isConnected && !bondedDeviceId && discoveredDevices.length > 0 && (
+          <DiscoveredDevicesSection
+            devices={discoveredDevices}
+            selectedDevice={selectedDevice}
+            onSelectDevice={(device) => setSelectedDeviceId(device.id)}
+            isConnecting={isConnecting}
+            connectingId={connectingId}
+            onConnect={(device) => void handleConnectDevice(device)}
+          />
+        )}
+
+        {/* 2. HERO SECTION: Wearable Status & Radar Scan (Rendered below discovered devices) */}
         {!isConnected && (
           <WearableHeroCard
             isConnected={isConnected}
@@ -282,18 +294,6 @@ export default function Esp32PrototypeScreen() {
             onStopScan={stopScan}
             onReconnect={(deviceId) => void connectToDeviceId(deviceId)}
             onOpenUnpairModal={() => setShowUnpairModal(true)}
-          />
-        )}
-
-        {/* 2. DISCOVERED DEVICES SECTION: Multi-device List + Selected Band Handshake Slider */}
-        {!isConnected && !bondedDeviceId && discoveredDevices.length > 0 && (
-          <DiscoveredDevicesSection
-            devices={discoveredDevices}
-            selectedDevice={selectedDevice}
-            onSelectDevice={(device) => setSelectedDeviceId(device.id)}
-            isConnecting={isConnecting}
-            connectingId={connectingId}
-            onConnect={(device) => void handleConnectDevice(device)}
           />
         )}
 
