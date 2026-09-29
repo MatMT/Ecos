@@ -583,3 +583,31 @@ export function CheckCircle2Icon({ size = 18, color = '#059669', strokeWidth = 2
   );
 }
 
+// 33. Bluetooth Icon
+export function BluetoothIcon({ size = 20, color = '#0D9488', strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 34. Signal Icon
+export function SignalIcon({ size = 18, color = '#15803D', strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M2 20h2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Path d="M7 20v-4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Path d="M12 20v-8" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Path d="M17 20v-12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Path d="M22 20V4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
