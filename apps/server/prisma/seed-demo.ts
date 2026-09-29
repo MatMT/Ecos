@@ -349,18 +349,12 @@ async function seedInstitution(
       },
     });
 
-    // 14 days of realistic biometric & sleep data
-    const sleepSchedule = [
-      7.5, 6.8, 8.2, 5.9, 7.4, 6.2, 8.0,
-      7.1, 6.6, 5.5, 7.8, 8.3, 6.5, 7.2,
-    ];
-    const stressPattern = [
-      0.25, 0.42, 0.30, 0.68, 0.35, 0.52, 0.20,
-      0.38, 0.60, 0.78, 0.22, 0.18, 0.45, 0.28,
-    ];
+    // 7 days of realistic biometric & sleep data (last week, excluding today)
+    const sleepSchedule = [7.5, 6.8, 8.2, 5.9, 7.4, 6.2, 8.0];
+    const stressPattern = [0.25, 0.42, 0.30, 0.68, 0.35, 0.52, 0.20];
 
     let lastAnomalousRecordId: number | null = null;
-    for (let d = 14; d >= 1; d--) {
+    for (let d = 7; d >= 1; d--) {
       const dayIndex = (d - 1) % sleepSchedule.length;
       const baseSleep = sleepSchedule[dayIndex] + ((i * 0.3) % 0.8) - 0.4;
       const sleepHours = Math.round(Math.max(4.5, Math.min(9.5, baseSleep)) * 10) / 10;
