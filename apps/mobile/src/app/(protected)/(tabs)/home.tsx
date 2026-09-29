@@ -225,10 +225,25 @@ export default function Home() {
               <WatchIcon size={20} color="#475569" />
             </View>
             <View style={styles.accordionTextContainer}>
-              <Text style={styles.accordionTitle}>
-                ECOS BAND · {trafficState === 'RED' ? 'Ritmo acelerado' : trafficState === 'YELLOW' ? 'Atención preventiva' : 'Fisiología en balance'}
+              <Text style={styles.accordionTitle}>ECOS BAND</Text>
+              <Text
+                style={[
+                  styles.accordionStatus,
+                  trafficState === 'RED'
+                    ? styles.statusTextRed
+                    : trafficState === 'YELLOW'
+                    ? styles.statusTextYellow
+                    : styles.statusTextGreen,
+                ]}
+                numberOfLines={1}
+              >
+                {trafficState === 'RED'
+                  ? 'Ritmo acelerado'
+                  : trafficState === 'YELLOW'
+                  ? 'Atención preventiva'
+                  : 'Fisiología en balance'}
               </Text>
-              <Text style={styles.accordionSubtitle}>
+              <Text style={styles.accordionSubtitle} numberOfLines={1}>
                 {isBleConnected
                   ? showMetrics
                     ? 'Telemetría sincronizada desde ESP32'
@@ -690,10 +705,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text,
   },
-  accordionSubtitle: {
+  accordionStatus: {
     fontSize: 12,
-    color: Colors.textSecondary,
+    fontWeight: '600',
     marginTop: 2,
+  },
+  statusTextGreen: {
+    color: '#0F766E',
+  },
+  statusTextYellow: {
+    color: '#D97706',
+  },
+  statusTextRed: {
+    color: '#DC2626',
+  },
+  accordionSubtitle: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 1,
   },
   accordionChevronBadge: {
     backgroundColor: '#F8FAFC',
