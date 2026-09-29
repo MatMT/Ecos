@@ -413,18 +413,21 @@ export default function Esp32PrototypeScreen() {
               </View>
             </View>
 
-            {/* Battery Level Visual Progress Bar */}
+            {/* Battery / Power Supply Status */}
             <View style={styles.batterySection}>
               <View style={styles.batteryLabelRow}>
                 <View style={styles.batteryLeftInfo}>
                   <BatteryChargingIcon size={16} color="#15803D" />
-                  <Text style={styles.batteryLabel}>Batería del dispositivo</Text>
+                  <Text style={styles.batteryLabel}>Alimentación del dispositivo</Text>
                 </View>
-                <Text style={styles.batteryPercent}>85%</Text>
+                <Text style={styles.batteryPercent}>Conectado a la corriente (100%)</Text>
               </View>
               <View style={styles.batteryTrack}>
-                <View style={[styles.batteryFill, { width: '85%' }]} />
+                <View style={[styles.batteryFill, { width: '100%' }]} />
               </View>
+              <Text style={styles.batterySubtext}>
+                Alimentación continua activa mediante conexión por cable.
+              </Text>
             </View>
 
             {/* Sensors Status */}
@@ -980,6 +983,11 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#16A34A',
     borderRadius: 4,
+  },
+  batterySubtext: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 6,
   },
   sensorStatusBox: {
     paddingTop: 10,
