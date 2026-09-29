@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
+  Animated,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,154 +8,328 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 
-import { Button } from '@/components/ui/button';
-import { WatchIcon } from '@/components/ui/app-icons';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import {
   useEsp32Ble,
   type BleConnectionStatus,
   type ScannedDevice,
 } from '@/hooks/use-esp32-ble';
+import { useStudent, type SimulationScenario } from '@/hooks/use-student';
+import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
+import {
+  CalmCelebration,
+  ConnectedHardwareCard,
+  DiscoveredDevicesSection,
+  SleepMonitoringCard,
+  TechSpecsAccordion,
+  TelemetryDashboard,
+  UnpairConfirmModal,
+  WearableHeroCard,
+} from '@/components/ecos-band';
 
-function getStatusLabel(status: BleConnectionStatus): string {
-  switch (status) {
-    case 'idle':
-      return 'Listo para sincronizar';
-    case 'scanning':
-      return 'Buscando dispositivos Bluetooth...';
-    case 'connecting':
-      return 'Estableciendo conexión...';
-    case 'connected':
-      return 'Dispositivo conectado en vivo';
-    case 'disconnected':
-      return 'Dispositivo desconectado';
-    case 'error':
-      return 'Error de comunicación';
+function getScenarioLabel(scenario: SimulationScenario | undefined): string {
+  switch (scenario) {
+    case 'work_stress':
+      return 'Tensión Laboral / Académica';
+    case 'panic_attack':
+      return 'Ataque de Pánico / Desacople';
+    case 'physical_exercise':
+      return 'Ejercicio Físico / Caminata';
+    case 'resting':
+    default:
+      return 'Reposo y Calma';
   }
 }
 
-function getStatusColor(status: BleConnectionStatus): string {
+function getStatusBadgeInfo(
+  status: BleConnectionStatus,
+  isDemoMode: boolean,
+  hasBonded?: boolean
+): { text: string; bg: string; color: string; dot: string } {
+  if (status === 'connected') {
+    return {
+      text: 'Sincronizada',
+      bg: '#DCFCE7',
+      color: '#15803D',
+      dot: '#16A34A',
+    };
+  }
+  if (status === 'connecting') {
+    return {
+      text: hasBonded ? 'Reconectando automáticamente...' : 'Enlazando pulsera...',
+      bg: '#FEF3C7',
+      color: '#92400E',
+      dot: '#F59E0B',
+    };
+  }
+  if (status === 'scanning') {
+    return {
+      text: 'Buscando dispositivos...',
+      bg: '#FEF3C7',
+      color: '#92400E',
+      dot: '#F59E0B',
+    };
+  }
+  if (isDemoMode) {
+    return {
+      text: 'Modo Simulación Activo',
+      bg: '#E0F2FE',
+      color: '#0369A1',
+      dot: '#0284C7',
+    };
+  }
   switch (status) {
-    case 'connected':
-      return Colors.status.normal;
-    case 'scanning':
-    case 'connecting':
-      return Colors.status.elevated;
     case 'error':
-      return Colors.danger;
+      return {
+        text: 'Sin conexión',
+        bg: '#FEE2E2',
+        color: '#B91C1C',
+        dot: '#DC2626',
+      };
     case 'idle':
     case 'disconnected':
     default:
-      return Colors.textSecondary;
+      return {
+        text: hasBonded ? 'Esperando señal de ESP32...' : 'Lista para enlazar',
+        bg: '#F1F5F9',
+        color: '#64748B',
+        dot: '#94A3B8',
+      };
   }
 }
 
 export default function Esp32PrototypeScreen() {
   const router = useRouter();
+  const { preferences } = useStudent();
+  const {
+    bpm: monitorBpm,
+    spo2: monitorSpo2,
+    activity: monitorActivity,
+    trafficState,
+  } = useBiometricMonitor();
+
   const {
     status,
-    bpm,
-    activityLevel,
-    spo2,
-    stepDelta,
-    hardwareAlert,
-    sosPressed,
-    lowBattery,
-    rawAdcValue,
-    percentage,
+    bpm: bleBpm,
+    activityLevel: bleActivity,
+    spo2: bleSpo2,
+    hardwareAlert: bleHardwareAlert,
+    sosPressed: bleSosPressed,
     connectedDeviceName,
     errorMessage,
     discoveredDevices,
+    bondedDeviceId,
     startScanOnly,
     stopScan,
     connectToDeviceId,
-    disconnect,
+    unpair,
     openSettings,
   } = useEsp32Ble();
 
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [showUnpairModal, setShowUnpairModal] = useState<boolean>(false);
+  const [isUnpairing, setIsUnpairing] = useState<boolean>(false);
+  const [showCelebration, setShowCelebration] = useState<boolean>(false);
 
   const isScanning = status === 'scanning';
   const isConnecting = status === 'connecting';
   const isConnected = status === 'connected';
+  const isDemoMode = !isConnected && Boolean(preferences.demoMode);
 
-  const displayBpm =
-    isConnected && bpm > 0
-      ? bpm
-      : rawAdcValue > 0
-      ? Math.round(45 + (rawAdcValue / 4095) * (190 - 45))
-      : 0;
-  const displayActivity = isConnected ? activityLevel : percentage;
+
+
+  const isDataActive = isConnected || isDemoMode;
+  const activeBpm = isConnected ? (bleBpm > 0 ? bleBpm : 74) : (monitorBpm ?? 74);
+  const activeActivity = isConnected ? bleActivity : (monitorActivity ?? 0);
+  const activeSpo2 = isConnected ? bleSpo2 : (monitorSpo2 ?? 98);
+  const hasAlert = isConnected
+    ? bleHardwareAlert
+    : isDemoMode && trafficState === 'RED';
+
+  // Radar ripple animations when scanning
+  const [waveAnim1] = useState(() => new Animated.Value(0));
+  const [waveAnim2] = useState(() => new Animated.Value(0));
+  const [waveAnim3] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (isScanning) {
+      const createLoop = (anim: Animated.Value, delay: number) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 2000,
+              useNativeDriver: true,
+            }),
+          ])
+        );
+      };
+
+      const loop1 = createLoop(waveAnim1, 0);
+      const loop2 = createLoop(waveAnim2, 600);
+      const loop3 = createLoop(waveAnim3, 1200);
+
+      loop1.start();
+      loop2.start();
+      loop3.start();
+
+      return () => {
+        loop1.stop();
+        loop2.stop();
+        loop3.stop();
+        waveAnim1.setValue(0);
+        waveAnim2.setValue(0);
+        waveAnim3.setValue(0);
+      };
+    } else {
+      waveAnim1.setValue(0);
+      waveAnim2.setValue(0);
+      waveAnim3.setValue(0);
+    }
+  }, [isScanning, waveAnim1, waveAnim2, waveAnim3]);
+
+  const handleCelebrationFinish = useCallback(() => {
+    setShowCelebration(false);
+  }, []);
 
   const handleConnectDevice = async (device: ScannedDevice) => {
     setConnectingId(device.id);
     try {
       await connectToDeviceId(device.id);
+      // Instant transition into celebration as soon as device is connected
+      setShowCelebration(true);
+    } catch {
+      // Keep celebration inactive on connection errors
     } finally {
       setConnectingId(null);
     }
   };
 
+  const handleExecuteUnpair = async () => {
+    setIsUnpairing(true);
+    try {
+      setShowUnpairModal(false);
+      await unpair();
+    } finally {
+      setIsUnpairing(false);
+    }
+  };
+
+  const statusBadge = getStatusBadgeInfo(status, isDemoMode, Boolean(bondedDeviceId));
+
+  // Auto-select preferred device (first compatible or first discovered device)
+  const selectedDevice =
+    discoveredDevices.find((d) => d.id === selectedDeviceId) ??
+    discoveredDevices.find(
+      (d) =>
+        d.isCompatible ||
+        d.name?.toLowerCase().includes('ecos') ||
+        d.name?.toLowerCase().includes('band')
+    ) ??
+    discoveredDevices[0] ??
+    null;
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      {/* Navigation Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
+          activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel="Volver a la pantalla anterior"
         >
           <Text style={styles.backButtonText}>← Volver</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Prototipo ESP32 BLE</Text>
+        <Text style={styles.headerTitle}>Ecos Band</Text>
+        {isDemoMode && (
+          <TouchableOpacity
+            style={styles.headerDemoBadge}
+            onPress={() => router.push('/settings' as Href)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Ir a ajustes de simulación"
+          >
+            <Text style={styles.headerDemoText}>Demo Activa</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Connection Status Card */}
-        <View style={styles.card}>
-          <View style={styles.statusRow}>
-            <View
-              style={[
-                styles.statusIndicator,
-                { backgroundColor: getStatusColor(status) },
-              ]}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 1. DISCOVERED DEVICES: Elevated above search card when devices are found */}
+        {!isConnected && !bondedDeviceId && discoveredDevices.length > 0 && (
+          <DiscoveredDevicesSection
+            devices={discoveredDevices}
+            selectedDevice={selectedDevice}
+            onSelectDevice={(device) => setSelectedDeviceId(device.id)}
+            isConnecting={isConnecting}
+            connectingId={connectingId}
+            onConnect={(device) => void handleConnectDevice(device)}
+          />
+        )}
+
+        {/* 2. HERO SECTION: Wearable Status & Radar Scan (Rendered below discovered devices) */}
+        {!isConnected && (
+          <WearableHeroCard
+            isConnected={isConnected}
+            isConnecting={isConnecting}
+            isScanning={isScanning}
+            isDemoMode={isDemoMode}
+            bondedDeviceId={bondedDeviceId}
+            connectedDeviceName={connectedDeviceName}
+            primaryDeviceDetected={discoveredDevices.length > 0}
+            statusBadge={statusBadge}
+            waveAnim1={waveAnim1}
+            waveAnim2={waveAnim2}
+            waveAnim3={waveAnim3}
+            onStartScan={() => void startScanOnly()}
+            onStopScan={stopScan}
+            onReconnect={(deviceId) => void connectToDeviceId(deviceId)}
+            onOpenUnpairModal={() => setShowUnpairModal(true)}
+          />
+        )}
+
+        {/* 4. ACTIVE CONNECTED STATE CARDS */}
+        {isConnected && (
+          <>
+            <ConnectedHardwareCard
+              connectedDeviceName={connectedDeviceName}
+              onUnpair={() => setShowUnpairModal(true)}
             />
-            <Text style={styles.statusText}>{getStatusLabel(status)}</Text>
+            <SleepMonitoringCard />
+          </>
+        )}
+
+        {/* 5. DEMO MODE SCENARIO BANNER (Hidden when connected or when devices are detected) */}
+        {isDemoMode && !isConnected && discoveredDevices.length === 0 && (
+          <View style={styles.demoCard}>
+            <View style={styles.demoCardLeft}>
+              <Text style={styles.demoCardLabel}>Escenario de simulación:</Text>
+              <Text style={styles.demoCardValue}>
+                {getScenarioLabel(preferences.simulationScenario)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.demoConfigButton}
+              onPress={() => router.push('/settings' as Href)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Modificar escenario en ajustes"
+            >
+              <Text style={styles.demoConfigButtonText}>Ajustes →</Text>
+            </TouchableOpacity>
           </View>
+        )}
 
-          {connectedDeviceName && (
-            <Text style={styles.deviceLabel}>
-              Dispositivo enlazado: {connectedDeviceName}
-            </Text>
-          )}
-
-          <View style={styles.scanActionsRow}>
-            {!isConnected ? (
-              <Button
-                label={isScanning ? 'Detener Búsqueda' : 'Escanear Dispositivos BLE'}
-                onPress={() => {
-                  if (isScanning) {
-                    stopScan();
-                  } else {
-                    void startScanOnly();
-                  }
-                }}
-                disabled={isConnecting}
-                variant={isScanning ? 'danger' : 'primary'}
-              />
-            ) : (
-              <Button
-                label="Desconectar Dispositivo"
-                variant="danger"
-                onPress={() => void disconnect()}
-              />
-            )}
-          </View>
-        </View>
-
-        {/* Error Card with Settings shortcut */}
+        {/* 6. HARDWARE ERROR ALERT */}
         {errorMessage && (
           <View style={styles.errorCard}>
             <Text style={styles.errorText}>{errorMessage}</Text>
@@ -165,199 +339,57 @@ export default function Esp32PrototypeScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.settingsButtonText}>
-                Abrir Ajustes de Bluetooth en iPhone
+                Abrir Ajustes de Bluetooth
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Native Discovered Devices List */}
-        {!isConnected && (
-          <View style={styles.card}>
-            <View style={styles.devicesHeaderRow}>
-              <Text style={styles.cardSubtitle}>
-                DISPOSITIVOS BLUETOOTH DISPONIBLES ({discoveredDevices.length})
-              </Text>
-              {isScanning && (
-                <ActivityIndicator size="small" color={Colors.brand} />
-              )}
-            </View>
+        {/* 7. REAL-TIME TELEMETRY METRICS SECTION */}
+        {isDataActive && (
+          <TelemetryDashboard
+            isConnected={isConnected}
+            activeBpm={activeBpm}
+            activeActivity={activeActivity}
+            activeSpo2={activeSpo2}
+            trafficState={trafficState}
+            hasAlert={hasAlert}
+            bleSosPressed={bleSosPressed}
+          />
+        )}
 
-            {discoveredDevices.length === 0 ? (
-              <View style={styles.emptyDevicesBox}>
-                <Text style={styles.emptyDevicesText}>
-                  {isScanning
-                    ? 'Buscando señales de radio BLE en el entorno...'
-                    : 'No hay dispositivos detectados. Presione «Escanear Dispositivos BLE» para iniciar el escaneo.'}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.devicesList}>
-                {discoveredDevices.map((item) => {
-                  const isThisConnecting =
-                    isConnecting && connectingId === item.id;
+        {/* 8. PROGRESSIVE DISCLOSURE: COLLAPSIBLE TECHNICAL SPECIFICATIONS */}
+        <TechSpecsAccordion />
 
-                  return (
-                    <View
-                      key={item.id}
-                      style={[
-                        styles.deviceItem,
-                        item.isCompatible && styles.deviceItemCompatible,
-                      ]}
-                    >
-                      <View style={styles.deviceItemLeft}>
-                        <View
-                          style={[
-                            styles.deviceIconBox,
-                            item.isCompatible && styles.deviceIconBoxCompatible,
-                          ]}
-                        >
-                          <WatchIcon
-                            size={20}
-                            color={item.isCompatible ? '#0F766E' : '#64748B'}
-                          />
-                        </View>
-                        <View style={styles.deviceInfoTextWrap}>
-                          <View style={styles.deviceNameRow}>
-                            <Text style={styles.deviceNameText}>
-                              {item.name ?? 'Dispositivo BLE (Sin Nombre)'}
-                            </Text>
-                            {item.isCompatible && (
-                              <View style={styles.compatibleBadge}>
-                                <Text style={styles.compatibleBadgeText}>
-                                  ECOS BAND
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.deviceDetailsText}>
-                            {item.rssi != null ? `Señal: ${item.rssi} dBm · ` : ''}
-                            ID: {item.id.slice(0, 16)}...
-                          </Text>
-                        </View>
-                      </View>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.connectSmallBtn,
-                          item.isCompatible && styles.connectSmallBtnPrimary,
-                        ]}
-                        onPress={() => void handleConnectDevice(item)}
-                        disabled={isConnecting}
-                        activeOpacity={0.8}
-                      >
-                        {isThisConnecting ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={item.isCompatible ? '#FFFFFF' : Colors.brand}
-                          />
-                        ) : (
-                          <Text
-                            style={[
-                              styles.connectSmallBtnText,
-                              item.isCompatible && styles.connectSmallBtnTextPrimary,
-                            ]}
-                          >
-                            Conectar
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
+        {/* 9. DISCREET UNPAIR ACTION AT FOOTER (When connected) */}
+        {isConnected && (
+          <View style={styles.footerUnpairContainer}>
+            <TouchableOpacity
+              style={styles.footerUnpairButton}
+              onPress={() => setShowUnpairModal(true)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Desvincular pulsera"
+            >
+              <Text style={styles.footerUnpairText}>Desvincular pulsera</Text>
+            </TouchableOpacity>
           </View>
         )}
-
-        {/* Live Hardware Telemetry Section */}
-        {isConnected && (
-          <>
-            {/* Hardware Alert Banner */}
-            {hardwareAlert && (
-              <View style={styles.alertCard}>
-                <Text style={styles.alertCardTitle}>¡Alerta Autonómica Activa!</Text>
-                <Text style={styles.alertCardText}>
-                  Desacople fisiológico detectado: Ritmo cardíaco acelerado en estado de reposo muscular.
-                </Text>
-              </View>
-            )}
-
-            {sosPressed && (
-              <View style={styles.alertCard}>
-                <Text style={styles.alertCardTitle}>¡Botón de Emergencia Pulsado!</Text>
-                <Text style={styles.alertCardText}>
-                  Se ha recibido señal de auxilio desde el dispositivo periférico.
-                </Text>
-              </View>
-            )}
-
-            {/* Live Potentiometer 1: Heart Rate (BPM) */}
-            <View style={styles.card}>
-              <Text style={styles.cardSubtitle}>
-                RITMO CARDÍACO · POTENCIÓMETRO 1 (GPIO 34)
-              </Text>
-              <View style={styles.metricContainer}>
-                <Text style={styles.metricValue}>
-                  {displayBpm > 0 ? displayBpm : '--'}
-                </Text>
-                <Text style={styles.metricUnit}>BPM</Text>
-              </View>
-              <Text style={styles.rangeLegend}>Rango calibrado: 45 - 190 BPM</Text>
-            </View>
-
-            {/* Live Potentiometer 2: Physical Activity (%) */}
-            <View style={styles.card}>
-              <Text style={styles.cardSubtitle}>
-                NIVEL DE ACTIVIDAD · POTENCIÓMETRO 2 (GPIO 35)
-              </Text>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressBar,
-                    {
-                      width: `${Math.min(100, Math.max(0, displayActivity))}%`,
-                    },
-                  ]}
-                />
-              </View>
-              <View style={styles.percentageRow}>
-                <Text style={styles.percentageLabel}>Intensidad corporal</Text>
-                <Text style={styles.percentageValue}>{displayActivity}%</Text>
-              </View>
-            </View>
-
-            {/* Secondary Telemetry Grid */}
-            <View style={styles.telemetryGrid}>
-              <View style={styles.miniCard}>
-                <Text style={styles.miniLabel}>Oxigenación (SpO2)</Text>
-                <Text style={styles.miniValue}>{`${spo2}%`}</Text>
-              </View>
-              <View style={styles.miniCard}>
-                <Text style={styles.miniLabel}>Pasos Acumulados</Text>
-                <Text style={styles.miniValue}>{stepDelta}</Text>
-              </View>
-            </View>
-          </>
-        )}
-
-        {/* Technical Specs Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardSubtitle}>DETALLES TÉCNICOS DEL ENLACE</Text>
-          <Text style={styles.infoRow}>
-            Entradas: GPIO 34 (BPM) | GPIO 35 (Actividad)
-          </Text>
-          <Text style={styles.infoRow}>Frecuencia de telemetría: 1000 ms (1 Hz)</Text>
-          <Text style={styles.infoRow}>
-            Perfil: GATT con Notificación Activa (6 bytes)
-          </Text>
-          {lowBattery && (
-            <Text style={[styles.infoRow, { color: Colors.danger }]}>
-              Estado de batería: Nivel bajo
-            </Text>
-          )}
-        </View>
       </ScrollView>
+
+      {/* CALM CELEBRATION OVERLAY */}
+      <CalmCelebration
+        active={showCelebration}
+        onFinish={handleCelebrationFinish}
+      />
+
+      {/* 9. MODAL DE CONFIRMACIÓN PARA DESVINCULAR */}
+      <UnpairConfirmModal
+        visible={showUnpairModal}
+        isUnpairing={isUnpairing}
+        onConfirm={() => void handleExecuteUnpair()}
+        onCancel={() => setShowUnpairModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -368,286 +400,147 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
-    paddingHorizontal: Spacing.three,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.two,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: Colors.surface,
   },
   backButton: {
     paddingVertical: Spacing.one,
-    paddingRight: Spacing.three,
+    paddingRight: Spacing.two,
   },
   backButtonText: {
-    fontSize: 16,
-    color: Colors.brand,
+    fontSize: 15,
     fontWeight: '600',
+    color: Colors.brand,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: Colors.text,
+  },
+  headerDemoBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: Radius.small,
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  headerDemoText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284C7',
   },
   scrollContent: {
-    padding: Spacing.three,
+    padding: Spacing.four,
     gap: Spacing.three,
+    paddingBottom: 48,
   },
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.medium,
-    padding: Spacing.three,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-    marginBottom: Spacing.two,
-    letterSpacing: 0.5,
-  },
-  statusRow: {
+  demoCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0FDFA',
+    borderRadius: Radius.large,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    padding: Spacing.three,
+    gap: 8,
   },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: Spacing.two,
+  demoCardLeft: {
+    flex: 1,
   },
-  statusText: {
-    fontSize: 16,
+  demoCardLabel: {
+    fontSize: 11,
     fontWeight: '600',
+    color: Colors.brand,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  demoCardValue: {
+    fontSize: 13.5,
+    fontWeight: '700',
     color: Colors.text,
+    marginTop: 2,
   },
-  deviceLabel: {
-    fontSize: 14,
-    color: '#0F766E',
+  demoConfigButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.small,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+  },
+  demoConfigButtonText: {
+    fontSize: 12,
     fontWeight: '600',
-    marginTop: Spacing.two,
-  },
-  scanActionsRow: {
-    marginTop: Spacing.two,
+    color: Colors.brand,
   },
   errorCard: {
-    backgroundColor: Colors.dangerSurface,
-    borderColor: Colors.dangerBorder,
+    backgroundColor: '#FEF2F2',
+    borderRadius: Radius.large,
     borderWidth: 1,
-    borderRadius: Radius.small,
-    padding: Spacing.three,
-    gap: Spacing.two,
+    borderColor: '#FECACA',
+    padding: Spacing.four,
+    gap: Spacing.three,
   },
   errorText: {
-    color: Colors.danger,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    color: '#DC2626',
+    lineHeight: 18,
   },
   settingsButton: {
-    backgroundColor: '#FFFFFF',
-    borderColor: Colors.dangerBorder,
-    borderWidth: 1,
-    borderRadius: Radius.small,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    backgroundColor: '#DC2626',
+    borderRadius: Radius.medium,
+    paddingVertical: 10,
     alignItems: 'center',
   },
   settingsButtonText: {
-    color: Colors.danger,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  devicesHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  emptyDevicesBox: {
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyDevicesText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  devicesList: {
-    gap: Spacing.two,
-    marginTop: Spacing.one,
-  },
-  deviceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.two,
-    backgroundColor: '#F8FAFC',
-    borderRadius: Radius.medium,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  deviceItemCompatible: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
-  },
-  deviceItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: Spacing.two,
-  },
-  deviceIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deviceIconBoxCompatible: {
-    backgroundColor: '#CCFBF1',
-  },
-  deviceInfoTextWrap: {
-    flex: 1,
-  },
-  deviceNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  deviceNameText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  compatibleBadge: {
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: Radius.pill,
-  },
-  compatibleBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#15803D',
-  },
-  deviceDetailsText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  connectSmallBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: Radius.small,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: '#FFFFFF',
-  },
-  connectSmallBtnPrimary: {
-    backgroundColor: Colors.brand,
-    borderColor: Colors.brand,
-  },
-  connectSmallBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  connectSmallBtnTextPrimary: {
     color: '#FFFFFF',
-  },
-  alertCard: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#F87171',
-    borderWidth: 1,
-    borderRadius: Radius.medium,
-    padding: Spacing.three,
-  },
-  alertCardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#DC2626',
-    marginBottom: 4,
-  },
-  alertCardText: {
     fontSize: 13,
-    color: '#991B1B',
-    lineHeight: 18,
+    fontWeight: '600',
   },
-  metricContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: Spacing.one,
-  },
-  metricValue: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: Colors.text,
-  },
-  metricUnit: {
-    fontSize: 16,
-    color: Colors.textSecondary,
-    marginLeft: Spacing.two,
-  },
-  rangeLegend: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  progressTrack: {
-    height: 12,
-    backgroundColor: Colors.inputBackground,
-    borderRadius: Radius.pill,
-    overflow: 'hidden',
-    marginBottom: Spacing.two,
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: Colors.brand,
-    borderRadius: Radius.pill,
-  },
-  percentageRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  footerUnpairContainer: {
+    paddingVertical: Spacing.four,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  percentageLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+  footerUnpairButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: Radius.pill,
   },
-  percentageValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text,
+  footerUnpairText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8',
   },
-  telemetryGrid: {
+  scanningNoticeRow: {
     flexDirection: 'row',
-    gap: Spacing.two,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
   },
-  miniCard: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.medium,
-    padding: Spacing.three,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  miniLabel: {
+  scanningNoticeText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 4,
+    fontWeight: '500',
   },
-  miniValue: {
-    fontSize: 20,
+  stopScanTextBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: Radius.small,
+    backgroundColor: '#F1F5F9',
+  },
+  stopScanTextBtnText: {
+    fontSize: 11.5,
     fontWeight: '700',
-    color: Colors.text,
-  },
-  infoRow: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.one,
+    color: '#64748B',
   },
 });

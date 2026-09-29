@@ -36,6 +36,17 @@ export interface LocalSyncQueueItem {
   last_error?: string | null;
 }
 
+export interface LocalAppointmentRecord {
+  id: number;
+  appointment_date: string;
+  status: string;
+  reason?: string | null;
+  doctor_name?: string | null;
+  doctor_id?: string | null;
+  modality?: string | null;
+  synced?: number; // 1 = confirmed with backend, 0 = local draft / pending queue
+}
+
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -83,6 +94,19 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       attempts INTEGER DEFAULT 0,
       last_error TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS local_appointments (
+      id INTEGER PRIMARY KEY,
+      appointment_date TEXT NOT NULL,
+      status TEXT NOT NULL,
+      reason TEXT,
+      doctor_name TEXT,
+      doctor_id TEXT,
+      modality TEXT,
+      synced INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -162,3 +186,66 @@ export async function markSyncItemFailed(id: number, errorMsg: string): Promise<
     [errorMsg, id]
   );
 }
+
+/**
+ * Persists an array of appointments into local SQLite storage.
+ */
+export async function saveLocalAppointments(
+  appointments: LocalAppointmentRecord[]
+): Promise<void> {
+  const db = await getDatabase();
+  for (const appt of appointments) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO local_appointments (
+         id, appointment_date, status, reason, doctor_name, doctor_id, modality, synced, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'));`,
+      [
+        appt.id,
+        appt.appointment_date,
+        appt.status,
+        appt.reason ?? null,
+        appt.doctor_name ?? null,
+        appt.doctor_id ?? null,
+        appt.modality ?? null,
+        appt.synced ?? 1,
+      ]
+    );
+  }
+}
+
+/**
+ * Saves or updates a single local appointment.
+ */
+export async function saveSingleLocalAppointment(
+  appt: LocalAppointmentRecord
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO local_appointments (
+       id, appointment_date, status, reason, doctor_name, doctor_id, modality, synced, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'));`,
+    [
+      appt.id,
+      appt.appointment_date,
+      appt.status,
+      appt.reason ?? null,
+      appt.doctor_name ?? null,
+      appt.doctor_id ?? null,
+      appt.modality ?? null,
+      appt.synced ?? 1,
+    ]
+  );
+}
+
+/**
+ * Retrieves cached appointments from local SQLite ordered by appointment date descending.
+ */
+export async function getLocalAppointments(): Promise<LocalAppointmentRecord[]> {
+  const db = await getDatabase();
+  return db.getAllAsync<LocalAppointmentRecord>(
+    `SELECT id, appointment_date, status, reason, doctor_name, doctor_id, modality, synced
+     FROM local_appointments
+     ORDER BY appointment_date DESC;`
+  );
+}
+

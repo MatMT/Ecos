@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,13 +11,16 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 
 import { Colors, Radius } from '@/constants/theme';
 import {
+  ActivityIcon,
+  BatteryChargingIcon,
   BatteryIcon,
   CalendarIcon,
   ChevronRightIcon,
+  CloseIcon,
   LogOutIcon,
   MessageSquareIcon,
   PhoneIcon,
@@ -23,18 +29,38 @@ import {
   WatchIcon,
 } from '@/components/ui/app-icons';
 import { useAuth } from '@/hooks/use-auth';
-import { useStudent } from '@/hooks/use-student';
+import { useStudent, type SimulationScenario } from '@/hooks/use-student';
 import { useTheme } from '@/context/theme-context';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
+import { useEsp32Ble } from '@/hooks/use-esp32-ble';
 
-function formatAppointmentDate(isoString: string | null | undefined): string {
+function getScenarioLabel(scenario: SimulationScenario | undefined): string {
+  switch (scenario) {
+    case 'work_stress':
+      return 'Tensión Laboral';
+    case 'panic_attack':
+      return 'Ataque de Pánico';
+    case 'physical_exercise':
+      return 'Ejercicio Físico';
+    case 'resting':
+    default:
+      return 'Reposo y Calma';
+  }
+}
+
+function formatAppointmentDate(isoString: string | null | undefined, status?: string | null): string {
   if (!isoString) return 'Sin sesiones programadas';
   try {
     const d = new Date(isoString);
     const dayName = d.toLocaleDateString('es-ES', { weekday: 'long' });
     const time = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-    return `Próxima sesión: ${capitalizedDay} ${time}`;
+    const statusTag = status === 'pending'
+      ? ' · Solicitada (Pendiente)'
+      : status === 'confirmed'
+      ? ' · Confirmada'
+      : '';
+    return `Próxima sesión: ${capitalizedDay} ${time}${statusTag}`;
   } catch {
     return 'Próxima sesión programada';
   }
@@ -57,9 +83,62 @@ function formatDiagnosis(diag: string | null | undefined): string {
 export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
-  const { student, displayName, preferences } = useStudent();
+  const { student, displayName, preferences, refreshStudent } = useStudent();
   const { colors } = useTheme();
-  const { isBleConnected } = useBiometricMonitor();
+  const { bpm, spo2, isBleConnected, isDemoMode, trafficState } = useBiometricMonitor();
+  const { bondedDeviceId, bondedDeviceName, unpair } = useEsp32Ble();
+
+  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+  const hasBondedBand = Boolean(bondedDeviceId) || isBleConnected;
+
+  const handleLogoutPress = () => {
+    if (hasBondedBand) {
+      setShowLogoutModal(true);
+    } else {
+      Alert.alert(
+        'Cerrar Sesión',
+        '¿Está seguro de que desea cerrar su sesión actual en este dispositivo?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Cerrar Sesión',
+            style: 'destructive',
+            onPress: () => {
+              void logout();
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const handleOnlyLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      setShowLogoutModal(false);
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const handleUnpairAndLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await unpair();
+      setShowLogoutModal(false);
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshStudent();
+    }, [refreshStudent])
+  );
 
   const userInitial = displayName.charAt(0).toUpperCase();
   const institutionName = student?.institution?.name || 'Universidad Don Bosco';
@@ -123,7 +202,7 @@ export default function Profile() {
         <Text style={styles.sectionLabel}>PREFERENCIAS Y PERSONALIZACIÓN</Text>
         <TouchableOpacity
           style={[styles.settingsNavigationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => router.push('/settings')}
+          onPress={() => router.push('/settings' as Href)}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel="Ir a Ajustes y Preferencias"
@@ -224,18 +303,22 @@ export default function Profile() {
 
           <TouchableOpacity
             style={styles.appointmentRow}
-            onPress={() => router.push({ pathname: '/stats', params: { tab: 'sessions' } } as Href)}
+            onPress={() => router.push('/modals/appointment-request' as Href)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Solicitar o coordinar cita clínica con el terapeuta"
           >
             <CalendarIcon size={14} color="#0284C7" />
             <Text style={styles.appointmentText}>
-              {formatAppointmentDate(student?.nextAppointment?.appointmentDate)} · Ver agenda
+              {student?.nextAppointment?.appointmentDate
+                ? `${formatAppointmentDate(student.nextAppointment.appointmentDate, student.nextAppointment.status)} · Solicitar nueva cita`
+                : 'Solicitar cita clínica con su terapeuta'}
             </Text>
             <ChevronRightIcon size={14} color="#0284C7" />
           </TouchableOpacity>
         </View>
 
-        {/* NEXO BAND Hardware Card */}
+        {/* ECOS BAND Wearable Card */}
         <Text style={styles.sectionLabel}>DISPOSITIVO VINCULADO</Text>
         <View style={styles.infoCard}>
           <View style={styles.cardHeaderRow}>
@@ -243,58 +326,150 @@ export default function Profile() {
               <WatchIcon size={20} color="#4F46E5" />
             </View>
             <View style={styles.cardHeaderTextWrap}>
-              <Text style={styles.cardMainTitle}>NEXO BAND</Text>
+              <Text style={styles.cardMainTitle}>ECOS BAND</Text>
               <Text style={styles.cardSubTitle}>
-                {isBleConnected ? 'Pulsera Nexo · Bluetooth Activo' : 'Pulsera Nexo · Bluetooth Disponible'}
+                {isBleConnected
+                  ? 'Hardware Bluetooth · Enlace Activo'
+                  : isDemoMode
+                  ? `Simulación Activa · ${getScenarioLabel(preferences.simulationScenario)}`
+                  : 'Pulsera Desconectada · En espera de enlace'}
               </Text>
             </View>
             <View
               style={[
                 styles.connectionPill,
-                { backgroundColor: isBleConnected ? '#DCFCE7' : '#F1F5F9' },
+                {
+                  backgroundColor: isBleConnected
+                    ? '#DCFCE7'
+                    : isDemoMode
+                    ? '#E0F2FE'
+                    : '#F1F5F9',
+                },
               ]}
             >
               <View
                 style={[
                   styles.connectionDot,
-                  { backgroundColor: isBleConnected ? '#16A34A' : '#94A3B8' },
+                  {
+                    backgroundColor: isBleConnected
+                      ? '#16A34A'
+                      : isDemoMode
+                      ? '#0284C7'
+                      : '#94A3B8',
+                  },
                 ]}
               />
               <Text
                 style={[
                   styles.connectionPillText,
-                  { color: isBleConnected ? '#15803D' : '#64748B' },
+                  {
+                    color: isBleConnected
+                      ? '#15803D'
+                      : isDemoMode
+                      ? '#0369A1'
+                      : '#64748B',
+                  },
                 ]}
               >
-                {isBleConnected ? 'Conectado en vivo' : 'Sincronizado'}
+                {isBleConnected
+                  ? 'Sincronizado'
+                  : isDemoMode
+                  ? 'Modo Demo'
+                  : 'Sin conexión'}
               </Text>
             </View>
           </View>
 
           {/* Live hardware feedback row */}
           <View style={styles.deviceFeedbackRow}>
-            <View style={styles.feedbackItem}>
-              <BatteryIcon size={15} color="#15803D" />
-              <Text style={styles.feedbackText}>Batería: 85%</Text>
-            </View>
-            <View style={styles.feedbackItem}>
-              <WatchIcon size={14} color="#64748B" />
-              <Text style={styles.feedbackText}>Sensores calibrados</Text>
-            </View>
-            {!isBleConnected && (
-              <View style={styles.demoBadgeMuted}>
-                <Text style={styles.demoBadgeMutedText}>Modo Demo</Text>
-              </View>
+            {isBleConnected ? (
+              <>
+                <View style={styles.feedbackItem}>
+                  <BatteryChargingIcon size={16} color="#0D9488" />
+                  <Text style={styles.feedbackText}>
+                    Cargando (100%)
+                  </Text>
+                </View>
+                <View style={styles.feedbackItem}>
+                  <ActivityIcon size={14} color="#0284C7" strokeWidth={2.2} />
+                  <Text style={styles.feedbackText}>
+                    {bpm ? `BPM: ${bpm}` : 'BPM: 74'} · {spo2 ? `SpO2: ${spo2}%` : 'SpO2: 98%'}
+                  </Text>
+                </View>
+                {trafficState === 'RED' ? (
+                  <View style={[styles.demoBadgeMuted, { backgroundColor: '#FEE2E2' }]}>
+                    <Text style={[styles.demoBadgeMutedText, { color: '#DC2626' }]}>
+                      Alerta Fisiológica
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.demoBadgeMuted}>
+                    <Text style={styles.demoBadgeMutedText}>Sensores Calibrados</Text>
+                  </View>
+                )}
+              </>
+            ) : isDemoMode ? (
+              <>
+                <View style={styles.feedbackItem}>
+                  <BatteryChargingIcon size={16} color="#0D9488" />
+                  <Text style={styles.feedbackText}>
+                    Batería: Simulación (100%)
+                  </Text>
+                </View>
+                <View style={styles.feedbackItem}>
+                  <ActivityIcon size={14} color="#0284C7" strokeWidth={2.2} />
+                  <Text style={styles.feedbackText}>
+                    {bpm ? `BPM: ${bpm}` : 'BPM: 74'} · {spo2 ? `SpO2: ${spo2}%` : 'SpO2: 98%'}
+                  </Text>
+                </View>
+                {trafficState === 'RED' ? (
+                  <View style={[styles.demoBadgeMuted, { backgroundColor: '#FEE2E2' }]}>
+                    <Text style={[styles.demoBadgeMutedText, { color: '#DC2626' }]}>
+                      Alerta Fisiológica
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.demoBadgeMuted}>
+                    <Text style={styles.demoBadgeMutedText}>
+                      {getScenarioLabel(preferences.simulationScenario)}
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              <>
+                <View style={styles.feedbackItem}>
+                  <BatteryIcon size={16} color="#94A3B8" />
+                  <Text style={[styles.feedbackText, { color: '#94A3B8' }]}>
+                    Batería: Sin conexión
+                  </Text>
+                </View>
+                <View style={styles.feedbackItem}>
+                  <ActivityIcon size={14} color="#94A3B8" strokeWidth={2.2} />
+                  <Text style={[styles.feedbackText, { color: '#94A3B8' }]}>
+                    BPM: -- · SpO2: --
+                  </Text>
+                </View>
+                <View style={styles.demoBadgeMuted}>
+                  <Text style={styles.demoBadgeMutedText}>Sin Datos</Text>
+                </View>
+              </>
             )}
           </View>
 
           <View style={styles.cardDivider} />
           <TouchableOpacity
             style={styles.prototypeActionBtn}
-            onPress={() => router.push('/esp32-prototype')}
+            onPress={() => router.push('/esp32-prototype' as Href)}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Administrar dispositivo Ecos Band y telemetría"
           >
-            <Text style={styles.prototypeActionBtnText}>Ver Diagnóstico de Sensores</Text>
+            <Text style={styles.prototypeActionBtnText}>
+              {isBleConnected || isDemoMode
+                ? 'Ver Diagnóstico y Métricas de Ecos Band'
+                : 'Buscar y Vincular Ecos Band'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -302,7 +477,8 @@ export default function Profile() {
         <View style={styles.accountSection}>
           <TouchableOpacity
             style={styles.logoutButton}
-            onPress={() => void logout()}
+            onPress={handleLogoutPress}
+            disabled={isLoggingOut}
             activeOpacity={0.8}
           >
             <LogOutIcon size={18} color="#DC2626" />
@@ -313,6 +489,111 @@ export default function Profile() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Modal de Confirmación de Cierre de Sesión y Gestión de Ecos Band */}
+      <Modal
+        visible={showLogoutModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isLoggingOut) setShowLogoutModal(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.logoutModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalIconCircle}>
+                <WatchIcon size={22} color="#0D9488" strokeWidth={2.2} />
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                style={styles.modalCloseButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <CloseIcon size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalTitle}>Cierre de Sesión</Text>
+            <Text style={styles.modalSubtitle}>
+              ¿Desea mantener enlazada su pulsera Ecos Band?
+            </Text>
+
+            <Text style={styles.modalBody}>
+              Por privacidad y seguridad clínica, la telemetría biométrica se desconectará de inmediato. Puede conservar la vinculación para su próxima sesión o desvincular el dispositivo de este teléfono.
+            </Text>
+
+            <View style={styles.bandStatusBox}>
+              <View style={styles.bandStatusLeft}>
+                <View style={isBleConnected ? styles.bandDotActive : styles.bandDotInactive} />
+                <Text style={styles.bandNameText} numberOfLines={1}>
+                  {bondedDeviceName || 'Ecos-Band-ESP32'}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.bandStatusBadge,
+                  { backgroundColor: isBleConnected ? '#DCFCE7' : '#F1F5F9' },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.bandStatusBadgeText,
+                    { color: isBleConnected ? '#15803D' : '#64748B' },
+                  ]}
+                >
+                  {isBleConnected ? 'Sincronizado (1 Hz)' : 'Enlazada'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.modalActionButtons}>
+              {/* Opción 1: Solo cerrar sesión */}
+              <TouchableOpacity
+                style={styles.keepBondButton}
+                onPress={() => void handleOnlyLogout()}
+                disabled={isLoggingOut}
+                activeOpacity={0.85}
+              >
+                {isLoggingOut ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Text style={styles.keepBondButtonText}>Solo cerrar sesión</Text>
+                    <Text style={styles.keepBondSubtext}>
+                      Conserva la pulsera vinculada para su próximo ingreso
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Opción 2: Desvincular y salir */}
+              <TouchableOpacity
+                style={styles.unpairButton}
+                onPress={() => void handleUnpairAndLogout()}
+                disabled={isLoggingOut}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.unpairButtonText}>Desvincular pulsera y salir</Text>
+                <Text style={styles.unpairSubtext}>
+                  Elimina el registro de hardware de este teléfono
+                </Text>
+              </TouchableOpacity>
+
+              {/* Cancelar */}
+              <TouchableOpacity
+                style={styles.cancelLogoutButton}
+                onPress={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelLogoutText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -651,6 +932,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  demoSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  demoSwitchTextWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  demoSwitchLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  demoSwitchHint: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
   deviceFeedbackRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -721,5 +1025,163 @@ const styles = StyleSheet.create({
   appVersionText: {
     fontSize: 12,
     color: '#94A3B8',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  logoutModalCard: {
+    width: '100%',
+    maxWidth: 390,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.large,
+    padding: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 8,
+  },
+  modalBody: {
+    fontSize: 12.5,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  bandStatusBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.medium,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 18,
+  },
+  bandStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  bandDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#16A34A',
+  },
+  bandDotInactive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#94A3B8',
+  },
+  bandNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  bandStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.small,
+  },
+  bandStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  modalActionButtons: {
+    gap: 10,
+  },
+  keepBondButton: {
+    backgroundColor: '#0D9488',
+    borderRadius: Radius.medium,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0D9488',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  keepBondButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  keepBondSubtext: {
+    fontSize: 11,
+    color: '#CCFBF1',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  unpairButton: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: Radius.medium,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unpairButtonText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  unpairSubtext: {
+    fontSize: 11,
+    color: '#991B1B',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  cancelLogoutButton: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  cancelLogoutText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#64748B',
   },
 });

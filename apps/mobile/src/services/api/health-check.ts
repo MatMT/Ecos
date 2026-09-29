@@ -16,7 +16,7 @@ export async function checkServerHealth(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(`${API_URL}/`, {
+    const res = await fetch(`${API_URL}/api/v1`, {
       method: 'GET',
       signal: controller.signal,
     });

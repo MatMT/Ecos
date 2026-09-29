@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
+  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -19,14 +21,23 @@ import {
   BookOpenIcon,
   CheckIcon,
   CoffeeIcon,
+  InfoIcon,
   MoonIcon,
   SmartphoneOffIcon,
   SunIcon,
+  WatchIcon,
   WindIcon,
 } from '@/components/ui/app-icons';
 import { useStudent } from '@/hooks/use-student';
+import { useEsp32Ble } from '@/hooks/use-esp32-ble';
 import { useTheme } from '@/context/theme-context';
 import { studentClient } from '@/services/api/student-client';
+import {
+  getSecureItem,
+  setSecureItem,
+} from '@/services/api/secure-session-storage';
+
+const DEMO_SLEEP_KEY_PREFIX = 'ecos_demo_sleep_hours_';
 
 interface DailySleepRecord {
   dayName: string;
@@ -103,10 +114,30 @@ export default function SleepDetailScreen() {
   const router = useRouter();
   const { student, preferences, updatePreferences } = useStudent();
   const { colors } = useTheme();
+  const ble = useEsp32Ble();
+  const isBleConnected = ble.status === 'connected';
 
   const currentGoal = preferences.sleepGoalHours || 8;
   const [weeklyRecords, setWeeklyRecords] = useState<DailySleepRecord[]>(DEFAULT_WEEKLY_RECORDS);
   const [activeTipIndex, setActiveTipIndex] = useState<number>(0);
+
+  // Demo mode sleep input state (when band is not connected)
+  const [todaySleepInput, setTodaySleepInput] = useState<string>('7.5');
+  const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
+  const [isPersistedFeedback, setIsPersistedFeedback] = useState<boolean>(false);
+
+  // Load persisted demo sleep for student if available
+  useEffect(() => {
+    if (!student?.id) return;
+    const storageKey = `${DEMO_SLEEP_KEY_PREFIX}${student.id}`;
+    getSecureItem(storageKey)
+      .then((savedVal) => {
+        if (savedVal) {
+          setTodaySleepInput(savedVal);
+        }
+      })
+      .catch(() => {});
+  }, [student?.id]);
 
   useEffect(() => {
     if (!student?.id) return;
@@ -115,11 +146,24 @@ export default function SleepDetailScreen() {
       .then((trends) => {
         if (trends && trends.length > 0) {
           const daysMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+          const todayIso = new Date().toISOString().slice(0, 10);
+
           const mapped: DailySleepRecord[] = trends.slice(-7).map((t) => {
             const d = new Date(t.date);
+            const isToday = t.date.slice(0, 10) === todayIso;
+
+            // If band is connected, simulate 7.5h for today if null.
+            // If band is disconnected and it's today with no sleep record, use the demo input value.
+            const fallbackHours = isBleConnected
+              ? 7.5
+              : parseFloat(todaySleepInput) || 7.0;
+
             const hoursVal = t.avgSleepQualityHours
               ? Number(t.avgSleepQualityHours.toFixed(1))
+              : isToday
+              ? fallbackHours
               : 7.0;
+
             const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
             return {
               dayName: daysMap[d.getDay()],
@@ -135,7 +179,39 @@ export default function SleepDetailScreen() {
         }
       })
       .catch(() => {});
-  }, [student?.id]);
+  }, [student?.id, isBleConnected, todaySleepInput]);
+
+  const handleUpdateTodaySleep = (val: string) => {
+    setTodaySleepInput(val);
+    const parsed = parseFloat(val);
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 24) {
+      setWeeklyRecords((prev) =>
+        prev.map((rec) => {
+          const isTodayRecord = rec.dateStr === new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+          if (isTodayRecord) {
+            return { ...rec, hours: Number(parsed.toFixed(1)) };
+          }
+          return rec;
+        })
+      );
+    }
+  };
+
+  const handlePersistSimulation = async () => {
+    if (!student?.id) return;
+    const parsed = parseFloat(todaySleepInput);
+    if (isNaN(parsed) || parsed <= 0 || parsed > 24) return;
+
+    try {
+      const storageKey = `${DEMO_SLEEP_KEY_PREFIX}${student.id}`;
+      await setSecureItem(storageKey, String(parsed));
+
+      setIsPersistedFeedback(true);
+      setTimeout(() => setIsPersistedFeedback(false), 2500);
+    } catch {
+      // Ignored
+    }
+  };
 
   const handleSelectGoal = (hours: number) => {
     void updatePreferences({ sleepGoalHours: hours });
@@ -232,6 +308,142 @@ export default function SleepDetailScreen() {
             })}
           </View>
         </View>
+
+        {/* Card Demostrativa / Hardware de Horas de Sueño de Hoy */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.iconCircleTeal, { backgroundColor: isBleConnected ? '#DCFCE7' : colors.surfaceSubtle }]}>
+              {isBleConnected ? (
+                <WatchIcon size={20} color="#15803D" />
+              ) : (
+                <MoonIcon size={20} color={colors.brand} />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.cardTitleWithActionRow}>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  {isBleConnected ? 'Monitoreo de Hoy (Pulsera)' : 'Simulación de Hoy (Demo)'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.infoIconButton}
+                  onPress={() => setShowInfoModal(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Información sobre la medición de descanso"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <InfoIcon size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
+                {isBleConnected
+                  ? 'Sincronizado con hardware real en tiempo real.'
+                  : 'Ajusta las horas de descanso estimadas para la jornada de hoy.'}
+              </Text>
+            </View>
+          </View>
+
+          {isBleConnected ? (
+            <View style={[styles.hardwareConnectedBanner, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+              <View style={styles.hardwareConnectedDot} />
+              <Text style={[styles.hardwareConnectedText, { color: '#166534' }]}>
+                Pulsera conectada: estimando descanso fisiológico automático (7.5 hrs).
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.demoInputContainer}>
+              <Text style={[styles.demoInputLabel, { color: colors.textSecondary }]}>
+                Horas dormidas hoy:
+              </Text>
+              <View style={styles.demoInputRow}>
+                {[6, 7, 8, 9].map((val) => {
+                  const isSelected = todaySleepInput === String(val);
+                  return (
+                    <TouchableOpacity
+                      key={val}
+                      style={[
+                        styles.demoQuickPill,
+                        { borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+                        isSelected && [styles.demoQuickPillActive, { backgroundColor: colors.brand, borderColor: colors.brand }],
+                      ]}
+                      onPress={() => handleUpdateTodaySleep(String(val))}
+                    >
+                      <Text
+                        style={[
+                          styles.demoQuickPillText,
+                          { color: colors.text },
+                          isSelected && styles.demoQuickPillTextActive,
+                        ]}
+                      >
+                        {val}h
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                <View style={[styles.customInputWrapper, { borderColor: colors.border, backgroundColor: colors.surfaceSubtle }]}>
+                  <TextInput
+                    style={[styles.customTextInput, { color: colors.text }]}
+                    keyboardType="numeric"
+                    value={todaySleepInput}
+                    onChangeText={handleUpdateTodaySleep}
+                    maxLength={4}
+                    placeholder="7.5"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                  <Text style={[styles.customInputSuffix, { color: colors.textSecondary }]}>hrs</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.persistButton,
+                  { backgroundColor: isPersistedFeedback ? '#16A34A' : colors.brand },
+                ]}
+                onPress={handlePersistSimulation}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Guardar simulación de horas de descanso"
+              >
+                {isPersistedFeedback ? (
+                  <>
+                    <CheckIcon size={14} color="#FFFFFF" strokeWidth={2.5} />
+                    <Text style={styles.persistButtonText}>Simulación guardada</Text>
+                  </>
+                ) : (
+                  <Text style={styles.persistButtonText}>Guardar simulación</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Modal Informativo Concreto */}
+        <Modal
+          visible={showInfoModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowInfoModal(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.modalHeaderRow}>
+                <View style={[styles.modalIconWrap, { backgroundColor: colors.brandLight }]}>
+                  <InfoIcon size={20} color={colors.brand} />
+                </View>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Medición de Descanso</Text>
+              </View>
+              <Text style={[styles.modalMessage, { color: colors.textSecondary }]}>
+                Esta función es meramente demostrativa y se integrará con el hardware real a futuro.
+              </Text>
+              <TouchableOpacity
+                style={[styles.modalCloseButton, { backgroundColor: colors.brand }]}
+                onPress={() => setShowInfoModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCloseButtonText}>Entendido</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         {/* Card 2: Resumen Semanal No Punitivo */}
         <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -644,5 +856,153 @@ const styles = StyleSheet.create({
   },
   recordBadgeTextMuted: {
     color: '#64748B',
+  },
+  cardTitleWithActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  infoIconButton: {
+    padding: 4,
+    borderRadius: Radius.pill,
+  },
+  hardwareConnectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: Radius.small,
+    borderWidth: 1,
+    gap: 8,
+    marginTop: 8,
+  },
+  hardwareConnectedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#16A34A',
+  },
+  hardwareConnectedText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  demoInputContainer: {
+    marginTop: 10,
+    gap: 8,
+  },
+  demoInputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  demoInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  demoQuickPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  demoQuickPillActive: {
+    backgroundColor: '#0F766E',
+    borderColor: '#0F766E',
+  },
+  demoQuickPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  demoQuickPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  customInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    minWidth: 64,
+  },
+  customTextInput: {
+    fontSize: 12,
+    fontWeight: '700',
+    padding: 0,
+    minWidth: 26,
+    textAlign: 'center',
+  },
+  customInputSuffix: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: Radius.medium,
+    padding: 20,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  modalIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalMessage: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  modalCloseButton: {
+    paddingVertical: 10,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  persistButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    marginTop: 4,
+  },
+  persistButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '700',
   },
 });

@@ -24,13 +24,19 @@ export default function Login() {
     }
   };
 
+  const isNetworkError =
+    !!error &&
+    (error.includes('No fue posible conectar') ||
+      error.includes('Network') ||
+      error.includes('servidor'));
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Image source={require('@/assets/logo_nexo_ecos.png')} style={styles.image} resizeMode="contain" />
       <View style={styles.card}>
-        <DevServerBanner />
+        <DevServerBanner forceShow={isNetworkError} />
         <TextField
           placeholder="Ingrese su correo electrónico"
           value={email}

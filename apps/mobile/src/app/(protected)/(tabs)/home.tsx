@@ -231,7 +231,7 @@ export default function Home() {
               <Text style={styles.accordionSubtitle}>
                 {isBleConnected
                   ? showMetrics
-                    ? 'Telemetría en vivo desde ESP32'
+                    ? 'Telemetría sincronizada desde ESP32'
                     : 'Pulso y actividad en tiempo real'
                   : showMetrics
                   ? '4 lecturas sincronizadas'
@@ -305,7 +305,7 @@ export default function Home() {
         <Text style={styles.sectionHeaderLabel}>MONITOREO DE SUEÑO Y DESCANSO</Text>
         <TouchableOpacity
           style={[styles.sleepCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => router.push('/sleep-detail')}
+          onPress={() => router.push('/sleep-detail' as Href)}
           activeOpacity={0.88}
           accessibilityRole="button"
           accessibilityLabel="Ver detalle completo de descanso y sueño"

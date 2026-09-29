@@ -3,12 +3,20 @@ import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View }
 import { Colors, Radius } from '@/constants/theme';
 import { useServerHealth } from '@/hooks/use-server-health';
 
-export function DevServerBanner() {
-  const { status, isChecking, check } = useServerHealth(__DEV__);
+interface DevServerBannerProps {
+  forceShow?: boolean;
+}
 
-  if (!__DEV__ || !status || status.isHealthy) {
+export function DevServerBanner({ forceShow = false }: DevServerBannerProps = {}) {
+  const { status, isChecking, check } = useServerHealth(true);
+
+  if (!forceShow && (!__DEV__ || !status || status.isHealthy)) {
     return null;
   }
+
+  // If forced because of network failure but status is still pending/unhealthy, show current URL
+  const displayUrl = status?.url || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:6622';
+  const displayError = status?.errorMessage || 'No fue posible establecer comunicación con el servidor.';
 
   return (
     <View style={styles.container}>
@@ -17,10 +25,10 @@ export function DevServerBanner() {
         No es posible conectar con el servidor backend en la dirección configurada:
       </Text>
       <View style={styles.urlBadge}>
-        <Text style={styles.urlText}>{status.url}</Text>
+        <Text style={styles.urlText}>{displayUrl}</Text>
       </View>
-      {status.errorMessage ? (
-        <Text style={styles.errorDetail}>{status.errorMessage}</Text>
+      {displayError ? (
+        <Text style={styles.errorDetail}>{displayError}</Text>
       ) : null}
       <TouchableOpacity
         style={[styles.retryButton, isChecking && styles.retryButtonDisabled]}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Dimensions,
   NativeScrollEvent,
@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 
 import CustomTopBar from '@/components/custom-top-bar';
 import { Colors, Radius } from '@/constants/theme';
@@ -25,6 +25,7 @@ import {
   MoonIcon,
   ShieldCheckIcon,
   SparklesIcon,
+  PlusIcon,
 } from '@/components/ui/app-icons';
 import { useStudent } from '@/hooks/use-student';
 import { useTheme } from '@/context/theme-context';
@@ -32,12 +33,54 @@ import {
   studentClient,
   type AppointmentItem,
 } from '@/services/api/student-client';
+import { fetchAndCacheAppointments } from '@/services/storage/appointment-service';
 
 type StatsTab = 'biometrics' | 'sessions';
 
 interface WeeklyDataPoint {
   day: string;
   minutesHighStress: number;
+}
+
+interface AppointmentStatusVisuals {
+  label: string;
+  color: string;
+  bgColor: string;
+}
+
+function getAppointmentStatusVisuals(status: string): AppointmentStatusVisuals {
+  switch (status.toLowerCase()) {
+    case 'pending':
+      return {
+        label: 'Solicitada (Pendiente)',
+        color: '#B45309',
+        bgColor: '#FEF3C7',
+      };
+    case 'confirmed':
+      return {
+        label: 'Confirmada',
+        color: '#0369A1',
+        bgColor: '#E0F2FE',
+      };
+    case 'completed':
+      return {
+        label: 'Completada',
+        color: '#15803D',
+        bgColor: '#DCFCE7',
+      };
+    case 'cancelled':
+      return {
+        label: 'Cancelada',
+        color: '#DC2626',
+        bgColor: '#FEE2E2',
+      };
+    default:
+      return {
+        label: 'Programada',
+        color: '#0369A1',
+        bgColor: '#E0F2FE',
+      };
+  }
 }
 
 const DEFAULT_WEEKLY_DATA: WeeklyDataPoint[] = [
@@ -87,11 +130,30 @@ export default function Stats() {
   const sleepGoal = preferences.sleepGoalHours || 8;
   const stressDiffPercent = Math.max(18, Math.round((sleepGoal / 7) * 28));
 
+  const studentId = student?.id;
+
+  const loadAppointments = useCallback(() => {
+    if (!studentId) return;
+    fetchAndCacheAppointments(studentId)
+      .then((items) => {
+        if (items && Array.isArray(items)) {
+          setAppointments(items);
+        }
+      })
+      .catch(() => {});
+  }, [studentId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAppointments();
+    }, [loadAppointments])
+  );
+
   useEffect(() => {
-    if (!student?.id) return;
+    if (!studentId) return;
 
     studentClient
-      .getBiometricTrends(student.id)
+      .getBiometricTrends(studentId)
       .then((trends) => {
         if (trends && trends.length > 0) {
           const dayLabels = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
@@ -110,15 +172,8 @@ export default function Stats() {
       })
       .catch(() => {});
 
-    studentClient
-      .getAppointments(student.id)
-      .then((items) => {
-        if (items && Array.isArray(items)) {
-          setAppointments(items);
-        }
-      })
-      .catch(() => {});
-  }, [student?.id]);
+    loadAppointments();
+  }, [studentId, loadAppointments]);
 
   const maxBarValue = 80;
   const barChartHeight = 100;
@@ -150,12 +205,12 @@ export default function Stats() {
             <Text style={styles.title}>Tu Evolución</Text>
             <TouchableOpacity
               style={styles.therapistLinkBtn}
-              onPress={() => router.push('/profile')}
+              onPress={() => router.push('/modals/appointment-request' as Href)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel="Consultar con terapeuta asignado en perfil"
+              accessibilityLabel="Solicitar cita con el profesional tratante"
             >
-              <Text style={styles.therapistLinkText}>Consultar terapeuta →</Text>
+              <Text style={styles.therapistLinkText}>Solicitar cita →</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.subtitle}>
@@ -427,45 +482,65 @@ export default function Stats() {
             {/* Recent Sessions */}
             <View style={styles.card}>
               <View style={styles.cardHeaderTopRow}>
-                <Text style={styles.cardTitle}>SESIONES CLÍNICAS RECIENTES</Text>
-                <View style={[styles.trendBadge, { backgroundColor: '#E0F2FE' }]}>
-                  <Text style={[styles.trendText, { color: '#0369A1' }]}>
-                    {appointments.length} cita(s)
+                <View>
+                  <Text style={styles.cardTitle}>SESIONES CLÍNICAS RECIENTES</Text>
+                  <Text style={styles.cardSubtitleNotice}>
+                    {appointments.length} cita(s) en su expediente
                   </Text>
                 </View>
+                <TouchableOpacity
+                  style={[styles.requestSessionBtn, { backgroundColor: colors.brand }]}
+                  onPress={() => router.push('/modals/appointment-request' as Href)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Solicitar cita clínica con su terapeuta"
+                >
+                  <PlusIcon size={12} color="#FFFFFF" strokeWidth={2.8} />
+                  <Text style={styles.requestSessionBtnText}>Solicitar Cita</Text>
+                </TouchableOpacity>
               </View>
 
               {appointments.length > 0 ? (
-                appointments.slice(0, 4).map((appt, idx) => (
-                  <React.Fragment key={appt.id}>
-                    {idx > 0 && <View style={styles.sessionDivider} />}
-                    <View style={styles.sessionItem}>
-                      <View style={styles.sessionIconCircle}>
-                        {appt.status === 'completed' ? (
-                          <CheckCircle2Icon size={16} color="#059669" />
-                        ) : (
-                          <GearIcon size={16} color="#0284C7" />
-                        )}
-                      </View>
-                      <View style={styles.sessionDetails}>
-                        <Text style={styles.sessionTitle}>
-                          {appt.reason || 'Sesión de Acompañamiento Psicológico'}
-                        </Text>
-                        <Text style={styles.sessionSubtitle}>
-                          {formatSessionDate(appt.appointmentDate)} · Estado:{' '}
-                          <Text
-                            style={{
-                              color: appt.status === 'completed' ? '#15803D' : '#0284C7',
-                              fontWeight: '600',
-                            }}
-                          >
-                            {appt.status === 'completed' ? 'Completada' : 'Programada'}
+                appointments.slice(0, 6).map((appt, idx) => {
+                  const statusVisuals = getAppointmentStatusVisuals(appt.status);
+                  return (
+                    <React.Fragment key={appt.id}>
+                      {idx > 0 && <View style={styles.sessionDivider} />}
+                      <View style={styles.sessionItem}>
+                        <View
+                          style={[
+                            styles.sessionIconCircle,
+                            { backgroundColor: statusVisuals.bgColor },
+                          ]}
+                        >
+                          {appt.status === 'completed' ? (
+                            <CheckCircle2Icon size={16} color="#059669" />
+                          ) : appt.status === 'pending' ? (
+                            <CalendarCheckIcon size={16} color="#B45309" />
+                          ) : (
+                            <GearIcon size={16} color="#0284C7" />
+                          )}
+                        </View>
+                        <View style={styles.sessionDetails}>
+                          <Text style={styles.sessionTitle}>
+                            {appt.reason || 'Sesión de Acompañamiento Psicológico'}
                           </Text>
-                        </Text>
+                          <Text style={styles.sessionSubtitle}>
+                            {formatSessionDate(appt.appointmentDate)} · Estado:{' '}
+                            <Text
+                              style={{
+                                color: statusVisuals.color,
+                                fontWeight: '700',
+                              }}
+                            >
+                              {statusVisuals.label}
+                            </Text>
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                  </React.Fragment>
-                ))
+                    </React.Fragment>
+                  );
+                })
               ) : (
                 <>
                   <View style={styles.sessionItem}>
@@ -944,5 +1019,23 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: '#475569',
     lineHeight: 17,
+  },
+  cardSubtitleNotice: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  requestSessionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radius.pill,
+  },
+  requestSessionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

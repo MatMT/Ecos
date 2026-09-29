@@ -47,6 +47,10 @@ export default function ProtectedLayout() {
           name="modals/alerts-history"
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
+        <Stack.Screen
+          name="modals/appointment-request"
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
       </Stack>
       </ThemeProvider>
     </StudentProvider>
