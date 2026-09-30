@@ -24,6 +24,7 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { StudentResponseDto } from './dto/student-response.dto';
 import { StudentMeResponseDto } from './dto/student-me-response.dto';
+import { FindStudentsQueryDto } from './dto/find-students-query.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -81,11 +82,8 @@ export class StudentsController {
     description: 'Paginated list of patients.',
     type: [StudentResponseDto],
   })
-  findAll(
-    @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skip: number,
-    @Query('take', new DefaultValuePipe(20), ParseIntPipe) take: number,
-  ) {
-    return this.studentsService.findAll(skip, take);
+ findAll(@Query() query: FindStudentsQueryDto) {
+    return this.studentsService.findAll(query);
   }
 
   @Get('me')
