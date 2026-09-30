@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Mail, Phone, Stethoscope, FileText, UserCircle } from "lucide-react"
+import { Mail, Phone, Stethoscope, FileText, UserCircle, CalendarDays, AlertTriangle } from "lucide-react"
 import { useTherapist, useTherapistPatients, useUpdateTherapist } from "@/features/therapists/hooks/use-therapists"
+import { useSchedules, useExceptions } from "@/features/schedules/hooks/use-schedules"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
@@ -10,6 +11,74 @@ import { ErrorState } from "@/components/common/ErrorState"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import type { PatientListItem } from "@/features/patients/types/patient.types"
+import Link from "next/link"
+
+const DAYS_OF_WEEK = [
+  { value: "1", label: "Lunes" },
+  { value: "2", label: "Martes" },
+  { value: "3", label: "Miércoles" },
+  { value: "4", label: "Jueves" },
+  { value: "5", label: "Viernes" },
+  { value: "6", label: "Sábado" },
+  { value: "7", label: "Domingo" },
+]
+
+function formatTime(timeStr: string | null | undefined) {
+  if (!timeStr) return ""
+  const d = new Date(`1970-01-01T${timeStr}`)
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function TherapistSchedulesSummary({ therapistId }: { therapistId: string }) {
+  const { data: schedules, isLoading } = useSchedules(therapistId)
+
+  if (isLoading) return <p className="text-xs text-muted-foreground">Cargando horarios...</p>
+  if (!schedules || schedules.length === 0) return <p className="text-xs text-muted-foreground">Sin horarios configurados.</p>
+
+  return (
+    <ul className="space-y-2">
+      {schedules.map((sch) => {
+        const dayLabel = DAYS_OF_WEEK.find(d => d.value === sch.dayOfWeek.toString())?.label
+        return (
+          <li key={sch.id} className="text-sm flex justify-between items-center bg-background p-2 rounded border">
+            <span className="font-medium">{dayLabel}</span>
+            <span className="text-muted-foreground text-xs">
+              {formatTime(sch.startTime)} - {formatTime(sch.endTime)}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function TherapistExceptionsSummary({ therapistId }: { therapistId: string }) {
+  const { data: exceptions, isLoading } = useExceptions(therapistId)
+
+  if (isLoading) return <p className="text-xs text-muted-foreground">Cargando excepciones...</p>
+  if (!exceptions || exceptions.length === 0) return <p className="text-xs text-muted-foreground">Sin excepciones registradas.</p>
+
+  const upcoming = exceptions
+    .filter(e => new Date(e.date) >= new Date(new Date().setHours(0,0,0,0)))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 3)
+
+  if (upcoming.length === 0) return <p className="text-xs text-muted-foreground">Sin excepciones futuras.</p>
+
+  return (
+    <ul className="space-y-2">
+      {upcoming.map((exc) => (
+        <li key={exc.id} className="text-sm flex flex-col bg-background p-2 rounded border gap-1">
+          <div className="flex justify-between items-center">
+            <span className="font-medium">{new Date(exc.date).toLocaleDateString()}</span>
+            <StatusBadge tone={exc.available ? "success" : "neutral"} label={exc.available ? "Habilitado" : "Bloqueado"} />
+          </div>
+          {exc.reason && <span className="text-xs text-muted-foreground truncate">{exc.reason}</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 interface TherapistProfileProps {
   therapistId: string | number
@@ -73,8 +142,6 @@ export function TherapistProfile({ therapistId }: TherapistProfileProps) {
       cell: (row) => <span className="text-sm">{row.primaryDiagnosis || "No especificado"}</span>,
     },
   ]
-
-
 
   return (
     <div className="space-y-8">
@@ -158,6 +225,36 @@ export function TherapistProfile({ therapistId }: TherapistProfileProps) {
             </dd>
           </div>
         </dl>
+      </div>
+
+      {/* Horarios de Atención */}
+      <div className="rounded-xl border border-border bg-card shadow-sm p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <h3 className="text-lg font-semibold text-foreground">Horarios de Atención y Excepciones</h3>
+          <Button variant="outline" asChild>
+            <Link href={`/therapists/${therapistId}/schedule`}>
+              Gestión de horarios
+            </Link>
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Horarios Fijos Resumen */}
+          <div className="space-y-3 border rounded-lg p-4 bg-muted/10">
+            <h4 className="font-medium text-sm text-foreground flex items-center gap-2">
+              <CalendarDays className="size-4" /> Horarios Fijos
+            </h4>
+            <TherapistSchedulesSummary therapistId={therapistId as string} />
+          </div>
+
+          {/* Excepciones Resumen */}
+          <div className="space-y-3 border rounded-lg p-4 bg-muted/10">
+            <h4 className="font-medium text-sm text-foreground flex items-center gap-2">
+              <AlertTriangle className="size-4" /> Próximas Excepciones
+            </h4>
+            <TherapistExceptionsSummary therapistId={therapistId as string} />
+          </div>
+        </div>
       </div>
 
       {/* Pacientes Activos */}

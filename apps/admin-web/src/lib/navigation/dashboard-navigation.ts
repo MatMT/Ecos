@@ -4,6 +4,7 @@ import {
   Stethoscope,
   ClipboardList,
   CalendarDays,
+  Calendar,
   type LucideIcon,
 } from "lucide-react"
 import type { UserRole } from "@/features/auth/types/auth.types"
@@ -33,6 +34,13 @@ export const dashboardNavigation: readonly NavigationItem[] = [
   },
   {
     activeMatch: "prefix",
+    href: "/appointments",
+    icon: Calendar,
+    label: "Citas",
+    permission: "dashboard.view",
+  },
+  {
+    activeMatch: "prefix",
     href: "/patients",
     icon: Users,
     label: "Pacientes",
@@ -57,12 +65,13 @@ export const dashboardNavigation: readonly NavigationItem[] = [
     href: "/schedules",
     icon: CalendarDays,
     label: "Horarios",
-    permission: "therapists.view", // Reusing therapist view permission since schedules are tied to therapists
+    permission: "therapists.view",
   },
 ]
 
 const breadcrumbDefinitions: readonly BreadcrumbDefinition[] = [
   { href: "/dashboard", label: "Inicio", path: "/dashboard" },
+  { href: "/appointments", label: "Citas", path: "/appointments" },
   { href: "/patients", label: "Pacientes", path: "/patients" },
   { href: "/therapists", label: "Terapeutas", path: "/therapists" },
   { href: "/assignments", label: "Asignaciones", path: "/assignments" },
@@ -94,12 +103,12 @@ export function getBreadcrumbDefinitions(
   }
 
   if (pathname === "/patients") {
-    return breadcrumbDefinitions.slice(0, 2)
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[2]]
   }
 
   if (pathname === "/patients/new") {
     return [
-      ...breadcrumbDefinitions.slice(0, 2),
+      breadcrumbDefinitions[0], breadcrumbDefinitions[2],
       { label: "Nuevo paciente", path: pathname },
     ]
   }
@@ -109,24 +118,24 @@ export function getBreadcrumbDefinitions(
     const patientPath = `/patients/${editMatch[1]}`
 
     return [
-      ...breadcrumbDefinitions.slice(0, 2),
+      breadcrumbDefinitions[0], breadcrumbDefinitions[2],
       { href: patientPath, label: "Detalle", path: patientPath },
       { label: "Editar", path: pathname },
     ]
   }
 
   if (/^\/patients\/[^/]+$/.test(pathname)) {
-    return [...breadcrumbDefinitions.slice(0, 2), { label: "Detalle", path: pathname }]
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[2], { label: "Detalle", path: pathname }]
   }
 
   if (pathname === "/therapists") {
-    return [breadcrumbDefinitions[0], breadcrumbDefinitions[2]]
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[3]]
   }
 
   if (pathname === "/therapists/new") {
     return [
       breadcrumbDefinitions[0],
-      breadcrumbDefinitions[2],
+      breadcrumbDefinitions[3],
       { label: "Nuevo terapeuta", path: pathname },
     ]
   }
@@ -136,7 +145,7 @@ export function getBreadcrumbDefinitions(
     const therapistPath = `/therapists/${scheduleMatch[1]}`
     return [
       breadcrumbDefinitions[0],
-      breadcrumbDefinitions[2],
+      breadcrumbDefinitions[3],
       { href: therapistPath, label: "Detalle", path: therapistPath },
       { label: "Horario", path: pathname }
     ]
@@ -145,17 +154,21 @@ export function getBreadcrumbDefinitions(
   if (/^\/therapists\/[^/]+$/.test(pathname)) {
     return [
       breadcrumbDefinitions[0],
-      breadcrumbDefinitions[2],
+      breadcrumbDefinitions[3],
       { label: "Detalle", path: pathname }
     ]
   }
 
   if (pathname === "/assignments") {
-    return [breadcrumbDefinitions[0], breadcrumbDefinitions[3]]
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[4]]
   }
 
   if (pathname === "/schedules") {
-    return [breadcrumbDefinitions[0], breadcrumbDefinitions[4]]
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[5]]
+  }
+
+  if (pathname === "/appointments") {
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[1]]
   }
 
   return [{ label: "Inicio", path: "/dashboard", href: "/dashboard" }]

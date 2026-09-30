@@ -65,8 +65,6 @@ export function PatientAssignmentHistoryModal({ patientId, onClose, therapists }
         studentId: patientId,
         therapistId: selectedTherapistId,
         reason: reason || undefined,
-        startsAt: startsAt ? new Date(startsAt) : undefined,
-        endsAt: endsAt ? new Date(endsAt) : undefined,
       },
       {
         onSuccess: () => {

@@ -193,6 +193,10 @@ export class AppointmentsService {
           doctorId: filters.doctorId,
           status: filters.status,
         },
+        include: {
+          student: { include: { user: true } },
+          doctor: true,
+        },
         skip,
         take: Math.min(take, MAX_PAGE_SIZE),
         orderBy: { appointmentDate: 'desc' },
@@ -202,7 +206,13 @@ export class AppointmentsService {
 
   async findOne(id: number) {
     const appointment = await this.prisma.withRls((tx) =>
-      tx.appointment.findUnique({ where: { id } }),
+      tx.appointment.findUnique({ 
+        where: { id },
+        include: {
+          student: { include: { user: true } },
+          doctor: true,
+        }
+      }),
     );
     if (!appointment) {
       throw new NotFoundException('No se ha encontrado la cita solicitada.');
