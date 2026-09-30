@@ -113,7 +113,7 @@ export function DataTable<Row>({
           </tbody>
         </table>
       </div>
-      {pagination ? <DataTablePaginationControls pagination={pagination} /> : null}
+      {pagination ? <PaginationControls pagination={pagination} /> : null}
     </div>
   )
 }
@@ -130,7 +130,7 @@ function DataTableLoadingRows({ columnCount }: { columnCount: number }) {
   ))
 }
 
-function DataTablePaginationControls({
+export function PaginationControls({
   pagination,
 }: {
   pagination: DataTablePagination

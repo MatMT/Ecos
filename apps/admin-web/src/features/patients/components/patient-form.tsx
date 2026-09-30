@@ -32,6 +32,7 @@ export function PatientForm({
     <form className="space-y-8" noValidate onSubmit={form.handleSubmit(onSubmit)}>
       {isCreate ? (
         <FormSection
+          className="rounded-2xl border bg-card p-5 shadow-sm"
           description="Registre los datos necesarios para habilitar el acceso inicial del paciente."
           title="Información de acceso"
         >
@@ -71,6 +72,7 @@ export function PatientForm({
       ) : null}
 
       <FormSection
+          className="rounded-2xl border bg-card p-5 shadow-sm"
         description="Este código es opcional. Si se deja vacío, no se enviará una modificación del código actual."
         title="Información institucional"
       >
@@ -150,7 +152,7 @@ function FormField({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input
+      <Input className="bg-background"
         aria-describedby={error ? errorId : undefined}
         aria-invalid={Boolean(error)}
         autoComplete={autoComplete}

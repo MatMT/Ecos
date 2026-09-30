@@ -1,8 +1,23 @@
-"use client"
+"use client" /* Filter / Search Bar */ /* Content Rendering */ /* Pagination Controls */ /* Modal for Therapist Assignment */
 
-import {useState} from "react"
+// function getPatientsErrorMessage(error: Error): string {
+//   if (error instanceof ApiError) {
+//     return error.message
+//   }
+
+//   return "Ha ocurrido un problema temporal. Por favor, intente nuevamente."
+// }
+
+import { useState } from "react"
 import Link from "next/link"
-import {  ChevronLeft, ChevronRight, Filter, Plus, Search, UserCheck } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Plus,
+  Search,
+  UserCheck,
+} from "lucide-react"
 import { EmptyState } from "@/components/common/EmptyState"
 import { ErrorState } from "@/components/common/ErrorState"
 import { ForbiddenState } from "@/components/common/ForbiddenState"
@@ -21,19 +36,27 @@ import {
   PatientCardsSkeleton,
 } from "@/features/patients/components/patient-card"
 import { usePatients } from "@/features/patients/hooks/use-patients"
+import { patientRoutes } from "@/features/patients/routes/patient-routes"
 import { INITIAL_PATIENTS_LIST_PARAMS } from "@/features/patients/types/patient.types"
 
 export function PatientsPage() {
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(0)
-  const [selectedPatientForAssign, setSelectedPatientForAssign] = useState<PatientListItem | null>(null)
+  const [selectedPatientForAssign, setSelectedPatientForAssign] =
+    useState<PatientListItem | null>(null)
   const pageSize = 6
   const patientsQuery = usePatients({
-    search: search.trim() || undefined,
-    skip: currentPage * pageSize,
+    search:
+      search.trim() ||
+      undefined,
+    skip:
+      currentPage *
+      pageSize,
     take: pageSize,
   })
-  const patients = patientsQuery.data ?? []
+  const patients =
+    patientsQuery.data ??
+    []
 
   return (
     <div className="space-y-6">
@@ -41,7 +64,7 @@ export function PatientsPage() {
         actions={
           <PermissionGate permission="patients.manage">
             <Button asChild>
-              <Link href="/patients/new">
+              <Link href={patientRoutes.create()}>
                 <Plus aria-hidden="true" className="mr-2 size-4" />
                 Nuevo paciente
               </Link>
@@ -51,7 +74,7 @@ export function PatientsPage() {
         description="Gestión y supervisión de los pacientes de la institución."
         title="Pacientes"
       />
-      {/* Filter / Search Bar */}
+      {}
       <Card>
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1">
@@ -73,9 +96,12 @@ export function PatientsPage() {
           )}
         </CardContent>
       </Card>
-      {/* Content Rendering */}
-      {patientsQuery.isError && (
-        patientsQuery.error instanceof ApiError && patientsQuery.error.status === 403 ? (
+      {}
+      {patientsQuery.isError &&
+        (patientsQuery.error instanceof
+          ApiError &&
+        patientsQuery.error.status ===
+          403 ? (
           <ForbiddenState variant="embedded" />
         ) : (
           <ErrorState
@@ -83,8 +109,7 @@ export function PatientsPage() {
             onRetry={() => void patientsQuery.refetch()}
             title="Error al cargar pacientes"
           />
-        )
-      )}
+        ))}
       {patientsQuery.isPending && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -92,96 +117,144 @@ export function PatientsPage() {
           ))}
         </div>
       )}
-      {patientsQuery.isSuccess && patients.length === 0 && (
-        <EmptyState
-          description="No se han encontrado pacientes registrados que coincidan con la búsqueda."
-          title="No se encontraron pacientes"
-        />
-      )}
-      {patientsQuery.isSuccess && patients.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {patients.map((patient) => {
-            const fullName = patient.user.fullName?.trim() || "Nombre no registrado"
-            const therapistName = patient.assignedDoctor?.fullName || "Sin terapeuta asignado"
-            return (
-              <Card className="flex flex-col justify-between transition-shadow hover:shadow-md" key={patient.id}>
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-foreground">{fullName}</h3>
-                      <p className="text-xs text-muted-foreground">{patient.user.email || "Sin correo"}</p>
-                    </div>
-                    {patient.studentCode && (
-                      <Badge variant="outline">{patient.studentCode}</Badge>
-                    )}
-                  </div>
-                  <div className="mt-4 space-y-2 border-t pt-3 text-xs text-muted-foreground">
-                    <div className="flex justify-between">
-                      <span>Terapeuta:</span>
-                      <span className="font-medium text-foreground">{therapistName}</span>
-                    </div>
-                    {patient.primaryDiagnosis && (
-                      <div className="flex justify-between">
-                        <span>Diagnóstico:</span>
-                        <span className="truncate font-medium text-foreground">{patient.primaryDiagnosis}</span>
+      {patientsQuery.isSuccess &&
+        patients.length ===
+          0 && (
+          <EmptyState
+            description="No se han encontrado pacientes registrados que coincidan con la búsqueda."
+            title="No se encontraron pacientes"
+          />
+        )}
+      {patientsQuery.isSuccess &&
+        patients.length >
+          0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {patients.map((patient) => {
+              const fullName =
+                patient.user.fullName?.trim() ||
+                "Nombre no registrado"
+              const therapistName =
+                patient.assignedDoctor?.fullName ||
+                "Sin terapeuta asignado"
+              return (
+                <Card
+                  className="flex flex-col justify-between transition-shadow hover:shadow-md"
+                  key={patient.id}
+                >
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-semibold text-foreground">
+                          {fullName}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {patient.user.email ||
+                            "Sin correo"}
+                        </p>
                       </div>
-                    )}
+                      {patient.studentCode && (
+                        <Badge variant="outline">{patient.studentCode}</Badge>
+                      )}
+                    </div>
+                    <div className="mt-4 space-y-2 border-t pt-3 text-xs text-muted-foreground">
+                      <div className="flex justify-between">
+                        <span>Terapeuta:</span>
+                        <span className="font-medium text-foreground">
+                          {therapistName}
+                        </span>
+                      </div>
+                      {patient.primaryDiagnosis && (
+                        <div className="flex justify-between">
+                          <span>Diagnóstico:</span>
+                          <span className="truncate font-medium text-foreground">
+                            {patient.primaryDiagnosis}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                  <div className="flex items-center justify-between border-t bg-muted/20 px-5 py-3">
+                    <Button asChild size="sm" variant="ghost">
+                      <Link href={patientRoutes.overview(patient.id)}>
+                        Abrir ficha
+                      </Link>
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      <PermissionGate permission="patients.manage">
+                        <Button
+                          onClick={() => setSelectedPatientForAssign(patient)}
+                          size="sm"
+                          title="Asignar terapeuta"
+                          variant="ghost"
+                        >
+                          <UserCheck className="size-4" />
+                        </Button>
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={patientRoutes.edit(patient.id)}>
+                            Editar
+                          </Link>
+                        </Button>
+                      </PermissionGate>
+                    </div>
                   </div>
-                </CardContent>
-                <div className="flex items-center justify-between border-t bg-muted/20 px-5 py-3">
-                  <Button asChild size="sm" variant="ghost">
-                    <Link href={`/patients/${patient.id}`}>Abrir ficha</Link>
-                  </Button>
-                  <div className="flex items-center gap-1">
-                    <PermissionGate permission="patients.manage">
-                      <Button
-                        onClick={() => setSelectedPatientForAssign(patient)}
-                        size="sm"
-                        title="Asignar terapeuta"
-                        variant="ghost"
-                      >
-                        <UserCheck className="size-4" />
-                      </Button>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/patients/${patient.id}/edit`}>Editar</Link>
-                      </Button>
-                    </PermissionGate>
-                  </div>
-                </div>
-              </Card>
-            )
-          })}
-        </div>
-      )}
-      {/* Pagination Controls */}
-      {patientsQuery.isSuccess && patients.length > 0 && (
-        <div className="flex items-center justify-between border-t pt-4">
-          <p className="text-sm text-muted-foreground">
-            Página {currentPage + 1}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              disabled={currentPage === 0}
-              onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-              size="sm"
-              variant="outline"
-            >
-              <ChevronLeft className="mr-1 size-4" />
-              Anterior
-            </Button>
-            <Button
-              disabled={patients.length < pageSize}
-              onClick={() => setCurrentPage((p) => p + 1)}
-              size="sm"
-              variant="outline"
-            >
-              Siguiente
-              <ChevronRight className="ml-1 size-4" />
-            </Button>
+                </Card>
+              )
+            })}
           </div>
-        </div>
-      )}
-      {/* Modal for Therapist Assignment */}
+        )}
+      {}
+      {patientsQuery.isSuccess &&
+        patients.length >
+          0 && (
+          <div className="flex items-center justify-between border-t pt-4">
+            <p className="text-sm text-muted-foreground">
+              Página{" "}
+              {currentPage +
+                1}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                disabled={
+                  currentPage ===
+                  0
+                }
+                onClick={() =>
+                  setCurrentPage((p) =>
+                    Math.max(
+                      0,
+                      p -
+                        1,
+                    ),
+                  )
+                }
+                size="sm"
+                variant="outline"
+              >
+                <ChevronLeft className="mr-1 size-4" />
+                Anterior
+              </Button>
+              <Button
+                disabled={
+                  patients.length <
+                  pageSize
+                }
+                onClick={() =>
+                  setCurrentPage(
+                    (p) =>
+                      p +
+                      1,
+                  )
+                }
+                size="sm"
+                variant="outline"
+              >
+                Siguiente
+                <ChevronRight className="ml-1 size-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      {}
       <AssignTherapistDialog
         onOpenChange={(open) => {
           if (!open) setSelectedPatientForAssign(null)
@@ -190,13 +263,5 @@ export function PatientsPage() {
         patient={selectedPatientForAssign}
       />
     </div>
-    )
-  }
-
-// function getPatientsErrorMessage(error: Error): string {
-//   if (error instanceof ApiError) {
-//     return error.message
-//   }
-
-//   return "Ha ocurrido un problema temporal. Por favor, intente nuevamente."
-// }
+  )
+}

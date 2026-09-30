@@ -28,9 +28,6 @@ export const appointmentsApi = {
   confirm: (id: number) => 
     api.patch<AppointmentResponse, undefined>(`/appointments/${id}/confirm`, undefined),
 
-  complete: (id: number) => 
-    api.patch<AppointmentResponse, undefined>(`/appointments/${id}/complete`, undefined),
-
   noShow: (id: number) => 
     api.patch<AppointmentResponse, undefined>(`/appointments/${id}/no-show`, undefined),
 

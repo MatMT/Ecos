@@ -67,6 +67,11 @@ the `Detalle` fallback and do not fetch a name. A client feature that already
 knows a resource name can call `useDashboardBreadcrumbLabel(name)` to replace the
 current path's fallback while mounted.
 
+`PatientWorkspace` calls that hook from the patient context already loaded by
+the active query. Its contextual navigation is feature-owned, horizontal and
+does not duplicate the global sidebar. Only **Resumen** is visible today;
+future patient sections remain unavailable until their routes and modules exist.
+
 ## 12. Content container
 
 The shell owns responsive page spacing: `p-4 sm:p-6 lg:p-8`. It is full width so

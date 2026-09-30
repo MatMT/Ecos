@@ -654,7 +654,7 @@ is in the future.
 | POST | `/clinical-notes` | Log a note for a completed appointment. |
 | GET | `/clinical-notes/:id` | Get note. |
 | PATCH | `/clinical-notes/:id` | Update while the edit policy allows it. |
-| GET | `/students/:id/clinical-notes` | Patient's note history. |
+| GET | `/students/:id/clinical-notes?skip=0&take=20` | Paginated, minimized patient note history; returns `{ data, meta }`. |
 
 > **Deletion.** A physical `DELETE` on `ClinicalNote` is not recommended. If a note needs to be
 > voided or corrected, use `voidedAt`, `voidedBy`, and `voidReason`, or an equivalent strategy that
@@ -733,28 +733,48 @@ patient's private journal.
 | `GET /dashboard/psychologist` | Assigned patients, today's appointments, upcoming appointments, pending alerts, priority alerts, activities, and recent follow-up. |
 | `GET /dashboard/administrator` | Users, patients, therapists, assignments, appointments, linked bands, and the institution's operational metrics. |
 
-### 7.13 Patient aggregated view
+### 7.13 Secure patient aggregated view
 
-A composite endpoint is recommended for the record's landing screen, to avoid the frontend firing
-many independent requests when a patient is opened.
+`GET /students/:id/overview` is a composite projection for the clinical header. It is restricted
+to the currently assigned psychologist through `Roles(psychologist)` and RLS; an administrator
+uses `GET /students/:id` for the non-clinical institutional record. Its purpose is to avoid N+1
+requests without sending the record or clinical bodies the summary view does not need.
 
-`GET /students/:id/overview` — indicative contract:
+The contract is intentionally minimal:
 
 ```json
 {
-  "student": {},
-  "currentTherapist": {},
-  "nextAppointment": {},
-  "activeTreatmentPlan": {},
+  "student": { "id": 0, "fullName": "string|null", "email": "string|null", "studentCode": "string|null" },
+  "institutionTimezone": "America/El_Salvador",
+  "currentTherapist": { "id": "uuid", "fullName": "string|null", "email": "string|null", "specialty": "string|null" },
+  "nextAppointment": { "id": 0, "appointmentDate": "date|null", "endAt": "date|null", "durationMinutes": 0, "sessionType": "string|null", "modality": "string|null", "status": "string|null" },
+  "activeTreatmentPlan": { "id": 0, "title": "string|null", "generalGoal": "string|null", "startsAt": "date", "endsAt": "date|null", "status": "string" },
   "recentBiometricSummary": {},
   "openAlerts": [],
   "pendingActivities": [],
-  "recentClinicalNotes": [],
+  "recentFollowUps": [],
   "recentSharedContent": []
 }
 ```
 
-### 7.14 Clinical timeline
+Recent collections are limited to three records. `pendingActivities` contains title, origin,
+status, assignment and due date; `recentFollowUps` provides only date, linked appointment, type,
+status and therapist; `recentSharedContent` provides only identifier, type and date. The endpoint
+does not include diagnosis, observations, AI analysis, summaries, impressions, interventions,
+agreements, follow-up plans, activity responses, or shared-content bodies. The timezone comes from
+the patient's institution and falls back to `America/El_Salvador` when unavailable.
+
+### 7.14 Clinical and administrative read separation
+
+Administrators may manage institutional patients and authorized appointment
+operations, but they do not obtain clinical telemetry through that role. The RLS
+policies for `remote_alerts`, `remote_band_devices`, and
+`remote_biometric_records` allow reads only to the owning student or currently
+assigned psychologist through `can_access_clinical_data`. This separation
+complements Nest guards; it must not be replaced by client-side or
+institution-filter checks.
+
+### 7.15 Clinical timeline
 
 `ClinicalTimelineService` can unify events from `Appointment`, `ClinicalNote`, `Alert`,
 `StudentActivity`, `SharedPatientContent`, and relevant clinical changes. It doesn't need its own
@@ -961,7 +981,7 @@ _This table is the original proposal, not the executed plan.)_
 | Availability | `GET /psychologists/:id/availability` |
 | Appointments | `GET/POST /appointments` · `GET /appointments/:id` · confirm · reschedule · cancel · no-show · complete |
 | Record | `GET/POST/PATCH /students/:id/clinical-record` |
-| Notes | `POST /clinical-notes` · `GET/PATCH /clinical-notes/:id` · `GET /students/:id/clinical-notes` |
+| Notes | `POST /clinical-notes` · `GET/PATCH /clinical-notes/:id` · `GET /students/:id/clinical-notes?skip&take` |
 | Plans | `POST /treatment-plans` · `GET /students/:id/treatment-plans` · `PATCH /treatment-plans/:id` |
 | Goals | `POST /treatment-plans/:id/goals` · `PATCH /treatment-goals/:id` |
 | Activities | `GET/POST /activities` · `POST/GET /students/:id/activities` · `PATCH /student-activities/:id` |

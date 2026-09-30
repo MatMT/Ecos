@@ -18,9 +18,12 @@ import {
 import { Role } from '@prisma/client';
 import { ClinicalNotesService } from './clinical-notes.service';
 import { CreateClinicalNoteDto } from './dto/create-clinical-note.dto';
+import { CreateManualClinicalNoteDto } from './dto/create-manual-clinical-note.dto';
 import { UpdateClinicalNoteDto } from './dto/update-clinical-note.dto';
 import { VoidClinicalNoteDto } from './dto/void-clinical-note.dto';
 import { ClinicalNoteResponseDto } from './dto/clinical-note-response.dto';
+import { ClinicalNoteListQueryDto } from './dto/clinical-note-list-query.dto';
+import { ClinicalNoteListResponseDto } from './dto/clinical-note-list-item-response.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -28,17 +31,17 @@ import type { RequestUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('clinical-notes')
 @ApiBearerAuth()
+@UseGuards(RolesGuard)
+@Roles(Role.psychologist)
 @Controller()
 export class ClinicalNotesController {
   constructor(private readonly clinicalNotesService: ClinicalNotesService) {}
 
   @Post('clinical-notes')
-  @UseGuards(RolesGuard)
-  @Roles(Role.psychologist)
   @ApiOperation({
-    summary: 'Register a clinical note for a completed appointment',
+    summary: 'Register a clinical note and complete its confirmed appointment',
     description:
-      'The appointment must be completed and its own doctor must be the caller. studentId/doctorId are derived from the appointment, never accepted directly.',
+      'The appointment must be confirmed and its own doctor must be the caller. The note and completion transition are persisted atomically. studentId/doctorId are derived from the appointment, never accepted directly.',
   })
   @ApiResponse({
     status: 201,
@@ -47,7 +50,8 @@ export class ClinicalNotesController {
   })
   @ApiResponse({
     status: 409,
-    description: 'The appointment is not completed.',
+    description:
+      'The appointment cannot receive a clinical note, or it already has one.',
   })
   @ApiResponse({
     status: 403,
@@ -59,6 +63,37 @@ export class ClinicalNotesController {
     @CurrentUser() currentUser?: RequestUser,
   ) {
     return this.clinicalNotesService.create(dto, currentUser);
+  }
+
+  @Post('students/:studentId/clinical-notes')
+  @ApiOperation({
+    summary: 'Register a manual clinical session for a patient',
+    description:
+      "The patient and author are derived from the route and authenticated user. The caller must be the patient's current assigned psychologist.",
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Manual clinical session created.',
+    type: ClinicalNoteResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'The manual clinical session data is invalid.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'The caller does not have clinical-session permissions.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'The patient does not exist or is not visible to the caller.',
+  })
+  createManual(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Body() dto: CreateManualClinicalNoteDto,
+    @CurrentUser() currentUser?: RequestUser,
+  ) {
+    return this.clinicalNotesService.createManual(studentId, dto, currentUser);
   }
 
   @Get('clinical-notes/:id')
@@ -81,23 +116,20 @@ export class ClinicalNotesController {
   @ApiResponse({
     status: 200,
     description: 'Clinical notes, most recent first.',
-    type: [ClinicalNoteResponseDto],
+    type: ClinicalNoteListResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'The patient does not exist or is not visible to the caller.',
   })
   findByStudent(
     @Param('studentId', ParseIntPipe) studentId: number,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
+    @Query() query: ClinicalNoteListQueryDto,
   ) {
-    return this.clinicalNotesService.findByStudent(
-      studentId,
-      skip ? Number(skip) : undefined,
-      take ? Number(take) : undefined,
-    );
+    return this.clinicalNotesService.findByStudent(studentId, query);
   }
 
   @Patch('clinical-notes/:id')
-  @UseGuards(RolesGuard)
-  @Roles(Role.psychologist)
   @ApiOperation({
     summary: 'Update a clinical note',
     description: 'Original author only. Fails if the note has been voided.',
@@ -124,8 +156,6 @@ export class ClinicalNotesController {
   }
 
   @Patch('clinical-notes/:id/void')
-  @UseGuards(RolesGuard)
-  @Roles(Role.psychologist)
   @ApiOperation({
     summary: 'Void a clinical note',
     description:

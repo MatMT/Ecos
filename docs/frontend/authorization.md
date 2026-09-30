@@ -39,6 +39,11 @@ Un 401 representa sesión inválida y finaliza la sesión según Fase 1.6. Un 40
 
 El frontend no compara instituciones ni mantiene listas locales de pacientes permitidos como defensa. Nest y RLS validan institución, asignación terapéutica, propiedad y estado de cada operación.
 
+La separación clínica es también efectiva en datos: RLS limita alertas, bandas
+y biometría al estudiante propietario o al psicólogo actualmente asignado. Un
+administrador conserva el listado, la ficha institucional y las operaciones de
+citas autorizadas, pero no puede recuperar esos recursos clínicos directamente.
+
 No hay polling de roles. Cuando la sesión se reconstruya, la matriz tomará el rol actualizado; logout limpia la caché y elimina inmediatamente los permisos efectivos del usuario anterior.
 
 ## Añadir un permiso

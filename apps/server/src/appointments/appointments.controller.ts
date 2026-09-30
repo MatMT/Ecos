@@ -210,24 +210,6 @@ export class AppointmentsController {
     return this.appointmentsService.noShow(id);
   }
 
-  @Patch(':id/complete')
-  @UseGuards(RolesGuard)
-  @Roles(Role.administrator, Role.psychologist)
-  @ApiOperation({ summary: 'Mark a confirmed appointment as completed' })
-  @ApiResponse({
-    status: 200,
-    description: 'Appointment completed.',
-    type: AppointmentResponseDto,
-  })
-  @ApiResponse({
-    status: 409,
-    description:
-      'The appointment is not in a state that allows this transition.',
-  })
-  complete(@Param('id', ParseIntPipe) id: number) {
-    return this.appointmentsService.complete(id);
-  }
-
   @Patch(':id/reschedule')
   @UseGuards(RolesGuard)
   @Roles(Role.administrator, Role.psychologist)

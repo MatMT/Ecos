@@ -10,16 +10,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PermissionGate } from "@/features/auth/components/PermissionGate"
+import { PatientAvatar } from "@/features/patients/components/patient-avatar"
+import { patientRoutes } from "@/features/patients/routes/patient-routes"
 import type { PatientListItem } from "@/features/patients/types/patient.types"
-import { getPatientInitials } from "@/features/patients/utils/patient-initials"
-import { cn } from "@/lib/utils"
-
-const avatarToneClassNames = [
-  "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200",
-  "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
-  "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200",
-  "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200",
-] as const
 
 interface PatientCardProps {
   patient: PatientListItem
@@ -35,7 +28,10 @@ export function PatientCard({ patient }: PatientCardProps) {
     >
       <CardHeader>
         <div className="flex min-w-0 items-center gap-3">
-          <PatientAvatar fullName={patient.user.fullName} patientId={patient.id} />
+          <PatientAvatar
+            fullName={patient.user.fullName}
+            patientId={patient.id}
+          />
           <div className="min-w-0">
             <CardTitle className="truncate" id={`patient-${patient.id}-name`}>
               {fullName}
@@ -51,14 +47,20 @@ export function PatientCard({ patient }: PatientCardProps) {
           <div className="flex items-center gap-1">
             <PermissionGate permission="patients.view">
               <Button asChild size="xs" variant="ghost">
-                <Link aria-label={`Ver paciente ${fullName}`} href={`/patients/${patient.id}`}>
+                <Link
+                  aria-label={`Ver paciente ${fullName}`}
+                  href={patientRoutes.overview(patient.id)}
+                >
                   Ver
                 </Link>
               </Button>
             </PermissionGate>
             <PermissionGate permission="patients.manage">
               <Button asChild size="xs" variant="ghost">
-                <Link aria-label={`Editar paciente ${fullName}`} href={`/patients/${patient.id}/edit`}>
+                <Link
+                  aria-label={`Editar paciente ${fullName}`}
+                  href={patientRoutes.edit(patient.id)}
+                >
                   Editar
                 </Link>
               </Button>
@@ -88,7 +90,10 @@ export function PatientCard({ patient }: PatientCardProps) {
 
 export function PatientCardsSkeleton() {
   return (
-    <div aria-hidden="true" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div
+      aria-hidden="true"
+      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+    >
       {Array.from({ length: 6 }, (_, index) => (
         <Card key={index}>
           <CardHeader>
@@ -114,25 +119,6 @@ export function PatientCardsSkeleton() {
   )
 }
 
-interface PatientAvatarProps {
-  fullName: string | null
-  patientId: number
-}
-
-function PatientAvatar({ fullName, patientId }: PatientAvatarProps) {
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        "flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-        avatarToneClassNames[getAvatarToneIndex(patientId)]
-      )}
-    >
-      {getPatientInitials(fullName)}
-    </div>
-  )
-}
-
 interface PatientDetailProps {
   label: string
   value: string
@@ -147,8 +133,4 @@ function PatientDetail({ label, value }: PatientDetailProps) {
       <dd className="line-clamp-2 text-sm text-foreground">{value}</dd>
     </div>
   )
-}
-
-function getAvatarToneIndex(patientId: number): number {
-  return Math.abs(patientId) % avatarToneClassNames.length
 }

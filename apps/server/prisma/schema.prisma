@@ -307,9 +307,13 @@ model Appointment {
 
 model ClinicalNote {
   id                     Int             @id @default(autoincrement())
-  appointmentId          Int             @unique @map("appointment_id")
+  appointmentId          Int?            @unique @map("appointment_id")
   doctorId               String?         @map("doctor_id") @db.Uuid
   studentId              Int?            @map("student_id")
+  sessionDate            DateTime?       @map("session_date")
+  sessionType            String?         @map("session_type") @db.VarChar(255)
+  durationMinutes         Int?            @map("duration_minutes")
+  modality               String?         @db.VarChar(50)
   sessionDiagnosis       String?         @map("session_diagnosis") @db.VarChar(255)
   observedEmotionalState EmotionalState? @map("observed_emotional_state")
   observations           String?         @db.Text
@@ -325,13 +329,14 @@ model ClinicalNote {
   createdAt              DateTime        @default(now()) @map("created_at")
   updatedAt              DateTime        @updatedAt @map("updated_at")
 
-  appointment Appointment     @relation(fields: [appointmentId], references: [id])
+  appointment Appointment?    @relation(fields: [appointmentId], references: [id])
   doctor      User?           @relation("DoctorClinicalNotes", fields: [doctorId], references: [id])
   student     StudentProfile? @relation(fields: [studentId], references: [id])
   voidedBy    User?           @relation("VoidedClinicalNotes", fields: [voidedById], references: [id])
 
   @@index([doctorId])
   @@index([studentId])
+  @@index([studentId, sessionDate(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   @@index([voidedById])
   @@map("remote_clinical_notes")
 }

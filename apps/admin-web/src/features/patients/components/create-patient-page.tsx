@@ -7,6 +7,7 @@ import { useState } from "react"
 import { PageHeader } from "@/components/common/PageHeader"
 import { PatientForm } from "@/features/patients/components/patient-form"
 import { useCreatePatient } from "@/features/patients/hooks/use-create-patient"
+import { patientRoutes } from "@/features/patients/routes/patient-routes"
 import { createPatientFormSchema } from "@/features/patients/schemas/patient-form.schema"
 import {
   EMPTY_PATIENT_FORM_VALUES,
@@ -31,7 +32,7 @@ export function CreatePatientPage() {
       onError: (error) => setSubmitError(getPatientFormErrorMessage(error)),
       onSuccess: () => {
         toast.success("Paciente creado correctamente.")
-        router.push("/patients")
+        router.push(patientRoutes.list())
       },
     })
   }
@@ -46,7 +47,7 @@ export function CreatePatientPage() {
         form={form}
         isPending={createPatient.isPending}
         mode="create"
-        onCancel={() => router.push("/patients")}
+        onCancel={() => router.push(patientRoutes.list())}
         onSubmit={handleSubmit}
         submitError={submitError}
       />

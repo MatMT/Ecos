@@ -138,6 +138,12 @@ Las query keys y adaptadores pertenecen a la feature que posee el dominio. Las q
 
 La sesión es una query de `features/auth` con la key `["auth", "session"]`. `AuthSessionProvider` integra Bearer, refresh y limpieza de caché sin duplicar el usuario en Context. `src/lib/permissions` contiene la matriz visual pura; `usePermission`, `PermissionGate` y `RouteAccessBoundary` consumen la sesión sin crear una segunda fuente de identidad. Nest y RLS siguen autorizando cada recurso.
 
+El workspace contextual de paciente vive en `features/patients`: recibe el
+contexto normalizado de una query ya resuelta, no crea estado global ni consultas
+propias. Sus secciones y helpers de ruta son una configuración tipada de la
+feature; una sección futura no se registra como página ni se hace visible antes
+de disponer de módulo, permiso y autorización efectivos.
+
 ## Nomenclatura
 
 - Usar inglés para archivos, variables, funciones, tipos y componentes.

@@ -655,9 +655,10 @@ horario configurado, excepción de agenda, conflicto de citas, duración permiti
 | Método | Endpoint | Uso |
 |---|---|---|
 | POST | `/clinical-notes` | Registrar nota para una cita realizada. |
+| POST | `/students/:id/clinical-notes` | Registrar sesión manual del paciente actualmente asignado. |
 | GET | `/clinical-notes/:id` | Consultar nota. |
 | PATCH | `/clinical-notes/:id` | Actualizar mientras la política de edición lo permita. |
-| GET | `/students/:id/clinical-notes` | Historial de notas del paciente. |
+| GET | `/students/:id/clinical-notes?skip=0&take=20` | Historial paginado y minimizado de notas del paciente; responde `{ data, meta }`. |
 
 > **Eliminación.** No se recomienda `DELETE` físico para `ClinicalNote`. Si una nota debe anularse o
 > corregirse, utilice `voidedAt`, `voidedBy` y `voidReason`, o una estrategia equivalente que
@@ -736,28 +737,49 @@ panel que permita navegar el diario privado del paciente.
 | `GET /dashboard/psychologist` | Pacientes asignados, citas del día, próximas citas, alertas pendientes, alertas prioritarias, actividades y seguimiento reciente. |
 | `GET /dashboard/administrator` | Usuarios, pacientes, terapeutas, asignaciones, citas, bandas vinculadas y métricas operativas de la institución. |
 
-### 7.13 Vista agregada del paciente
+### 7.13 Vista agregada segura del paciente
 
-Se recomienda un endpoint compuesto para la pantalla inicial del expediente. Su objetivo es evitar
-que el frontend ejecute numerosas solicitudes independientes al abrir un paciente.
+`GET /students/:id/overview` es una proyección compuesta para la cabecera clínica. Está reservada
+para el psicólogo actualmente asignado mediante `Roles(psychologist)` y RLS; un administrador usa
+`GET /students/:id` para su ficha institucional no clínica. Su objetivo es evitar solicitudes N+1
+sin enviar el expediente ni cuerpos clínicos que la vista resumen no necesita.
 
-`GET /students/:id/overview` — contrato orientativo:
+El contrato es deliberadamente reducido:
 
 ```json
 {
-  "student": {},
-  "currentTherapist": {},
-  "nextAppointment": {},
-  "activeTreatmentPlan": {},
+  "student": { "id": 0, "fullName": "string|null", "email": "string|null", "studentCode": "string|null" },
+  "institutionTimezone": "America/El_Salvador",
+  "currentTherapist": { "id": "uuid", "fullName": "string|null", "email": "string|null", "specialty": "string|null" },
+  "nextAppointment": { "id": 0, "appointmentDate": "date|null", "endAt": "date|null", "durationMinutes": 0, "sessionType": "string|null", "modality": "string|null", "status": "string|null" },
+  "activeTreatmentPlan": { "id": 0, "title": "string|null", "generalGoal": "string|null", "startsAt": "date", "endsAt": "date|null", "status": "string" },
   "recentBiometricSummary": {},
   "openAlerts": [],
   "pendingActivities": [],
-  "recentClinicalNotes": [],
+  "recentFollowUps": [],
   "recentSharedContent": []
 }
 ```
 
-### 7.14 Línea de tiempo clínica
+Las colecciones recientes se limitan a tres registros. `pendingActivities` entrega título, origen,
+estado, asignación y vencimiento; `recentFollowUps` aporta solo fecha, cita asociada, tipo, estado
+y terapeuta; `recentSharedContent` aporta únicamente identificador, tipo y fecha. El endpoint no
+incluye diagnóstico, observaciones, análisis de IA, resúmenes, impresiones, intervenciones,
+acuerdos, planes de seguimiento, respuestas de actividades ni el cuerpo del contenido compartido.
+La zona horaria se toma de la institución del paciente y, si no está disponible, usa
+`America/El_Salvador`.
+
+### 7.14 Separación de lecturas clínicas y administrativas
+
+Los administradores pueden gestionar pacientes institucionales y operaciones de
+citas autorizadas, pero no obtienen telemetría clínica por ese rol. Las políticas
+RLS de `remote_alerts`, `remote_band_devices` y
+`remote_biometric_records` permiten lectura únicamente al estudiante propietario
+o al psicólogo actualmente asignado mediante `can_access_clinical_data`. Esta
+separación complementa los guards de Nest: no debe sustituirse por validaciones
+del cliente ni por filtros de institución.
+
+### 7.15 Línea de tiempo clínica
 
 `ClinicalTimelineService` puede unificar eventos provenientes de `Appointment`, `ClinicalNote`,
 `Alert`, `StudentActivity`, `SharedPatientContent` y cambios clínicos relevantes. No necesita una
@@ -823,7 +845,7 @@ correspondan al servidor. NestJS debe aplicar `ValidationPipe` global con `white
 | Fecha/hora | ISO 8601; interpretar utilizando la zona horaria institucional. |
 | Duración de sesión | Rango razonable y coherente con configuración del terapeuta. |
 | `Appointment.status` | Cambios únicamente mediante transiciones permitidas. |
-| `ClinicalNote` | `appointmentId` obligatorio y relación consistente con `studentId`/`doctorId`. |
+| `ClinicalNote` | `appointmentId` opcional y único cuando existe; las sesiones manuales requieren `sessionDate` pasada o presente y derivan `studentId`/`doctorId` del alcance autorizado. |
 | Asignación | `therapistId` debe ser `User` con `role=psychologist` de la misma institución. |
 | `AlertAction` | Solo profesional autorizado sobre el paciente asociado. |
 | Contenido compartido | No aceptar creación desde panel salvo caso explícitamente autorizado. |
@@ -884,6 +906,7 @@ correo, WebSocket o push al mismo método que persiste la operación.
   `status`, `appointmentDate`, `createdAt`.
 - Indexar `TherapistAssignment` por `studentId`, `therapistId`, `startsAt` y `endsAt`.
 - Indexar `Appointment` por `doctorId` + `appointmentDate` y `studentId` + `appointmentDate`.
+- Indexar `ClinicalNote` por `studentId` + `sessionDate` + `createdAt` + `id` para el historial clínico cronológico.
 - Indexar `Alert` por `studentId` + `status` + `createdAt` y, si aplica, terapeuta scope derivado.
 - Evitar N+1 en overview y dashboard; utilizar `include`/`select` controlados o consultas agregadas.
 - Paginar historiales y series biométricas.
@@ -965,7 +988,7 @@ _original, no el plan ejecutado.)_
 | Disponibilidad | `GET /psychologists/:id/availability` |
 | Citas | `GET/POST /appointments` · `GET /appointments/:id` · confirm · reschedule · cancel · no-show · complete |
 | Expediente | `GET/POST/PATCH /students/:id/clinical-record` |
-| Notas | `POST /clinical-notes` · `GET/PATCH /clinical-notes/:id` · `GET /students/:id/clinical-notes` |
+| Notas | `POST /clinical-notes` · `GET/PATCH /clinical-notes/:id` · `GET /students/:id/clinical-notes?skip&take` |
 | Planes | `POST /treatment-plans` · `GET /students/:id/treatment-plans` · `PATCH /treatment-plans/:id` |
 | Objetivos | `POST /treatment-plans/:id/goals` · `PATCH /treatment-goals/:id` |
 | Actividades | `GET/POST /activities` · `POST/GET /students/:id/activities` · `PATCH /student-activities/:id` |

@@ -51,10 +51,18 @@ describe('ClinicalRecordsService', () => {
   });
 
   describe('create', () => {
+    it('throws ForbiddenException when there is no current user', async () => {
+      await expect(service.create(1, {}, undefined)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
     it('throws NotFoundException when the patient does not exist', async () => {
       tx.studentProfile.findUnique.mockResolvedValue(null);
 
-      await expect(service.create(1, {})).rejects.toThrow(NotFoundException);
+      await expect(service.create(1, {}, CURRENT_USER)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(tx.clinicalRecord.create).not.toHaveBeenCalled();
     });
 
@@ -62,7 +70,9 @@ describe('ClinicalRecordsService', () => {
       tx.studentProfile.findUnique.mockResolvedValue({ id: 1 });
       tx.clinicalRecord.findUnique.mockResolvedValue({ id: 9, studentId: 1 });
 
-      await expect(service.create(1, {})).rejects.toThrow(ConflictException);
+      await expect(service.create(1, {}, CURRENT_USER)).rejects.toThrow(
+        ConflictException,
+      );
       expect(tx.clinicalRecord.create).not.toHaveBeenCalled();
     });
 
@@ -71,12 +81,23 @@ describe('ClinicalRecordsService', () => {
       tx.clinicalRecord.findUnique.mockResolvedValue(null);
       tx.clinicalRecord.create.mockResolvedValue({ id: 9, studentId: 1 });
 
-      const result = await service.create(1, { initialReason: 'Ansiedad' });
+      const result = await service.create(
+        1,
+        { initialReason: 'Ansiedad' },
+        CURRENT_USER,
+      );
 
       expect(tx.clinicalRecord.create).toHaveBeenCalledWith({
         data: { studentId: 1, initialReason: 'Ansiedad' },
       });
       expect(result).toEqual({ id: 9, studentId: 1 });
+      expect(auditService.log).toHaveBeenCalledWith(tx, {
+        userId: CURRENT_USER.id,
+        institutionId: CURRENT_USER.institutionId,
+        action: 'CLINICAL_RECORD_CREATED',
+        entity: 'ClinicalRecord',
+        entityId: '9',
+      });
     });
   });
 
@@ -114,10 +135,18 @@ describe('ClinicalRecordsService', () => {
   });
 
   describe('update', () => {
+    it('throws ForbiddenException when there is no current user', async () => {
+      await expect(service.update(1, {}, undefined)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
     it('throws NotFoundException when no record exists yet', async () => {
       tx.clinicalRecord.findUnique.mockResolvedValue(null);
 
-      await expect(service.update(1, {})).rejects.toThrow(NotFoundException);
+      await expect(service.update(1, {}, CURRENT_USER)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(tx.clinicalRecord.update).not.toHaveBeenCalled();
     });
 
@@ -131,13 +160,37 @@ describe('ClinicalRecordsService', () => {
 
       const result = await service.update(1, {
         currentMedication: 'Sertralina',
-      });
+      }, CURRENT_USER);
 
       expect(tx.clinicalRecord.update).toHaveBeenCalledWith({
         where: { studentId: 1 },
         data: { currentMedication: 'Sertralina' },
       });
       expect(result.currentMedication).toBe('Sertralina');
+      expect(auditService.log).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({
+          action: 'CLINICAL_RECORD_UPDATED',
+          entity: 'ClinicalRecord',
+          entityId: '9',
+        }),
+      );
+    });
+
+    it('clears an optional field when the update supplies null', async () => {
+      tx.clinicalRecord.findUnique.mockResolvedValue({ id: 9, studentId: 1 });
+      tx.clinicalRecord.update.mockResolvedValue({
+        id: 9,
+        studentId: 1,
+        currentMedication: null,
+      });
+
+      await service.update(1, { currentMedication: null }, CURRENT_USER);
+
+      expect(tx.clinicalRecord.update).toHaveBeenCalledWith({
+        where: { studentId: 1 },
+        data: { currentMedication: null },
+      });
     });
   });
 });

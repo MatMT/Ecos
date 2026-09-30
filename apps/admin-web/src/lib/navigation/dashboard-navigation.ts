@@ -124,6 +124,45 @@ export function getBreadcrumbDefinitions(
     ]
   }
 
+  const clinicalRecordMatch = pathname.match(
+    /^\/patients\/([^/]+)\/clinical-record$/,
+  )
+  if (clinicalRecordMatch) {
+    const patientPath = `/patients/${clinicalRecordMatch[1]}`
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { href: patientPath, label: "Detalle", path: patientPath },
+      { label: "Expediente", path: pathname },
+    ]
+  }
+
+  const sessionsMatch = pathname.match(/^\/patients\/([^/]+)\/sessions$/)
+  if (sessionsMatch) {
+    const patientPath = `/patients/${sessionsMatch[1]}`
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { href: patientPath, label: "Detalle", path: patientPath },
+      { label: "Sesiones", path: pathname },
+    ]
+  }
+
+  const newSessionMatch = pathname.match(
+    /^\/patients\/([^/]+)\/sessions\/new$/,
+  )
+  if (newSessionMatch) {
+    const patientPath = `/patients/${newSessionMatch[1]}`
+    const sessionsPath = `${patientPath}/sessions`
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { href: patientPath, label: "Detalle", path: patientPath },
+      { href: sessionsPath, label: "Sesiones", path: sessionsPath },
+      { label: "Nueva sesión", path: pathname },
+    ]
+  }
+
   if (/^\/patients\/[^/]+$/.test(pathname)) {
     return [breadcrumbDefinitions[0], breadcrumbDefinitions[2], { label: "Detalle", path: pathname }]
   }

@@ -54,17 +54,6 @@ export function useConfirmAppointment() {
   })
 }
 
-export function useCompleteAppointment() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => appointmentsApi.complete(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: appointmentsKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: appointmentsKeys.detail(id) })
-    },
-  })
-}
-
 export function useNoShowAppointment() {
   const queryClient = useQueryClient()
   return useMutation({

@@ -10,10 +10,11 @@ export interface PatientAccount {
   updatedAt: string
 }
 
-export interface AssignedTherapistSummary{
+export interface AssignedTherapistSummary {
   email: string | null
   fullName: string | null
   id: string
+  specialty?: string | null
 }
 export interface PatientListItem {
   assignedDoctor?: AssignedTherapistSummary | null
@@ -69,74 +70,86 @@ export const EMPTY_PATIENT_FORM_VALUES: PatientFormValues = {
   studentCode: "",
 }
 
-// PATIENT OVERVIEW (FICHA DEL PACIENTE) TYPE --- By Will-Trucker
-export interface OverviewStudent{
+export interface OverviewStudent {
   email: string | null
   fullName: string | null
   id: number
-  primaryDiagnosis: string | null
   studentCode: string | null
 }
 
 export interface OverviewAppointment {
-  appointmentDate: string
+  appointmentDate: string | null
+  durationMinutes: number | null
+  endAt: string | null
   id: number
-  notes: string | null
-  reason: string | null
-  status: "pending" | "confirmed" | "completed" | "cancelled"
+  modality: string | null
+  sessionType: string | null
+  status: string | null
 }
 
 export interface OverviewTreatmentPlan {
-  diagnosis: string | null
   endsAt: string | null
+  generalGoal: string | null
   id: number
-  objective: string | null
   startsAt: string
   status: string
+  title: string | null
 }
 
 export interface OverviewBiometrics {
-  createdAt: string
-  deviceId: number
-  heartRate: number | null
+  avgHeartRate: number | null
+  bloodOxygen: number | null
+  bodyTemperature: number | null
   id: number
-  oxygenLevel: number | null
+  sleepQualityHours: number | null
   stressLevel: number | null
-  temperature: number | null
-  timestamp: string
+  timestamp: string | null
 }
 
 export interface OverviewAlert {
-  alertType: string
+  alertType: string | null
   createdAt: string
+  description: string | null
   id: number
-  message: string
-  priority: "low" | "medium" | "high" | "critical"
-  status: "open" | "acknowledged" | "resolved" | "closed"
+  priority: string | null
+  status: string
 }
 
 export interface OverviewActivity {
+  activityId: number
   assignedAt: string
-  dueDate: string | null
+  dueAt: string | null
   id: number
-  status: "assigned" | "in_progress" | "completed"
+  origin: string
+  status: string
   title: string
 }
 
-export interface OverviewClinicalNote {
+export interface OverviewFollowUp {
+  appointmentId: number | null
   createdAt: string
   id: number
-  sessionDate: string
-  title: string
+  sessionDate: string | null
+  sessionType: string | null
+  status: string | null
+  therapist: AssignedTherapistSummary | null
+}
+
+export interface OverviewSharedContent {
+  contentType: string
+  id: number
+  sharedAt: string
 }
 
 export interface StudentOverview {
-   activeTreatmentPlan: OverviewTreatmentPlan | null
+  activeTreatmentPlan: OverviewTreatmentPlan | null
   currentTherapist: AssignedTherapistSummary | null
+  institutionTimezone: string
   nextAppointment: OverviewAppointment | null
   openAlerts: OverviewAlert[]
   pendingActivities: OverviewActivity[]
   recentBiometricSummary: OverviewBiometrics | null
-  recentClinicalNotes: OverviewClinicalNote[]
+  recentFollowUps: OverviewFollowUp[]
+  recentSharedContent: OverviewSharedContent[]
   student: OverviewStudent
 }

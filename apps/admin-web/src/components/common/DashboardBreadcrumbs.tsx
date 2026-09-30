@@ -96,6 +96,7 @@ export function DashboardBreadcrumbs() {
       <ol className="flex min-w-0 items-center gap-1.5 text-sm">
         {breadcrumbs.map((breadcrumb, index) => {
           const isCurrent = index === breadcrumbs.length - 1
+          const label = context?.labels[breadcrumb.path] ?? breadcrumb.label
 
           return (
             <li
@@ -113,16 +114,14 @@ export function DashboardBreadcrumbs() {
                   className="truncate text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   href={breadcrumb.href}
                 >
-                  {breadcrumb.label}
+                  {label}
                 </Link>
               ) : (
                 <span
                   aria-current={isCurrent ? "page" : undefined}
                   className="truncate font-medium text-foreground"
                 >
-                  {isCurrent
-                    ? context?.labels[pathname] ?? breadcrumb.label
-                    : breadcrumb.label}
+                  {label}
                 </span>
               )}
             </li>

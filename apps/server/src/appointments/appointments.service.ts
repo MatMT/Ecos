@@ -234,10 +234,6 @@ export class AppointmentsService {
     return this.transition(id, AppointmentStatus.no_show, {});
   }
 
-  complete(id: number) {
-    return this.transition(id, AppointmentStatus.completed, {});
-  }
-
   reschedule(id: number, dto: RescheduleAppointmentDto) {
     return this.prisma.withRls(async (tx) => {
       const oldAppointment = await tx.appointment.findUnique({

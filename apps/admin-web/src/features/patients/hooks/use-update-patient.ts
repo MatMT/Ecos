@@ -14,6 +14,7 @@ export function useUpdatePatient(id: number) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: patientKeys.detail(id) }),
         queryClient.invalidateQueries({ queryKey: patientKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: patientKeys.overview(id) }),
       ])
     },
   })

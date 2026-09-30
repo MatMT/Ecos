@@ -15,6 +15,7 @@ import {
 } from "@/features/patients/components/patient-form"
 import { usePatient } from "@/features/patients/hooks/use-patient"
 import { useUpdatePatient } from "@/features/patients/hooks/use-update-patient"
+import { patientRoutes } from "@/features/patients/routes/patient-routes"
 import { updatePatientFormSchema } from "@/features/patients/schemas/patient-form.schema"
 import type {
   PatientDetail,
@@ -80,7 +81,10 @@ function PatientEditForm({ patient, patientId }: PatientEditFormProps) {
     resolver: zodResolver(updatePatientFormSchema),
   })
 
-  useDashboardBreadcrumbLabel(patient.user.fullName, `/patients/${patientId}`)
+  useDashboardBreadcrumbLabel(
+    patient.user.fullName,
+    patientRoutes.overview(patientId),
+  )
 
   function handleSubmit(values: PatientFormValues) {
     setSubmitError(null)
@@ -88,7 +92,7 @@ function PatientEditForm({ patient, patientId }: PatientEditFormProps) {
       onError: (error) => setSubmitError(getPatientFormErrorMessage(error)),
       onSuccess: () => {
         toast.success("Información actualizada.")
-        router.push("/patients")
+        router.push(patientRoutes.list())
       },
     })
   }
@@ -103,7 +107,7 @@ function PatientEditForm({ patient, patientId }: PatientEditFormProps) {
         form={form}
         isPending={updatePatient.isPending}
         mode="edit"
-        onCancel={() => router.push("/patients")}
+        onCancel={() => router.push(patientRoutes.list())}
         onSubmit={handleSubmit}
         submitError={submitError}
       />

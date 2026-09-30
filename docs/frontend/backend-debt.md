@@ -12,9 +12,16 @@ A dedicated `auth/me` endpoint could reduce the round trips in the future, but n
 
 ## Clinical read separation
 
-Status: Requires backend confirmation
+Status: Resolved by RLS migration `20260930120000_restrict_administrative_clinical_reads`
 
-The local portal matrix intentionally denies `alerts.view` and `biometrics.view` to `administrator`. However, the current alerts and biometrics read paths rely on RLS using `can_access_student_profile`, which includes an administrator from the same institution. Nest should confirm whether those clinical reads are intentionally administrative or narrow the backend policy if the clinical separation is mandatory. The frontend does not attempt to compensate for this with institution or patient-ID checks.
+The local portal matrix denies `alerts.view` and `biometrics.view` to
+`administrator`. RLS now matches that policy: `remote_alerts`,
+`remote_band_devices` and `remote_biometric_records` are visible only to the
+student owner or currently assigned psychologist through
+`can_access_clinical_data`. Administrators retain institution-scoped patient
+management and operational appointments, but cannot obtain those clinical
+resources directly. The frontend does not perform institution or patient-ID
+checks as a substitute for this enforcement.
 
 ## Institution display name
 
@@ -82,3 +89,27 @@ Administrators can use `GET /api/v1/students/:id` for a non-clinical patient
 header, but cannot receive the aggregate clinical overview. The agreed frontend
 behavior is an administrative detail view without clinical summary until backend
 defines an authorized administrator overview contract.
+
+## Patient overview presentation gaps
+
+Status: Resolved by the secure overview contract
+
+`GET /api/v1/students/:studentId/overview` now projects the activity title,
+origin, status, assignment and due-date metadata explicitly. It returns a
+purpose-specific summary instead of full clinical-note, activity or
+shared-content DTOs. Clinical bodies, including observations, AI analysis,
+plan notes, activity responses and shared-content bodies, are not selected or
+returned.
+
+## Overview timezone and follow-up metadata
+
+Status: Resolved by the secure overview contract
+
+The overview provides `institutionTimezone`, resolved from the patient's
+institution with an `America/El_Salvador` fallback. `admin-web` formats the
+appointment and overview dates in that authorized institutional timezone.
+
+`recentFollowUps` replaces `recentClinicalNotes` and returns the metadata
+needed by the summary: date, linked appointment, appointment type and status,
+and therapist identity. It intentionally remains a follow-up summary rather
+than a session record or a clinical-note body.

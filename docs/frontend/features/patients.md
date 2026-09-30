@@ -1,138 +1,133 @@
 # Patients Feature
 
-## Terminología backend
+## Terminología y rutas
 
-El contrato HTTP conserva `StudentProfile`, `studentId` y `/students`.
+El contrato HTTP conserva `StudentProfile`, `studentId` y `/students`; la
+interfaz utiliza “Paciente” y “Pacientes”. Las rutas productivas son
+`/patients`, `/patients/new`, `/patients/[id]` y `/patients/[id]/edit` dentro
+del shell protegido.
 
-## Terminología frontend
+## API, cache y hooks
 
-La interfaz utiliza “Paciente” y “Pacientes”. Los nombres de la feature siguen
-la convención `patients` sin modificar endpoints ni DTO de Nest.
+`patientsApi` usa `ApiClient` para `GET /students`, `GET /students/:id`,
+`POST /students`, `PATCH /students/:id` y `GET /students/:id/overview`.
+Las listas solo reciben `skip` y `take`; todas las queries reenvían el
+`AbortSignal` de TanStack Query.
 
-## Ruta
+Las keys son `patientKeys.all`, `lists()`, `list(params)`, `details()`,
+`detail(id)`, `overviews()` y `overview(id)`. `usePatient(id)` consulta la
+ficha administrativa y `usePatientOverview(id)` el endpoint clínico compuesto.
+La ficha elige una única query por rol; no combina ambas ni realiza solicitudes
+N+1.
 
-`/patients` compone `PatientsPage` dentro del shell protegido existente.
+Una edición invalida la ficha, las listas y el overview del paciente porque el
+código institucional aparece en la cabecera. La creación invalida únicamente
+las listas afectadas.
 
-## Estructura
+## Listado, formularios y avatar
 
-```text
-features/patients/
-├── api/patients.api.ts
-├── api/patient.keys.ts
-├── components/patient-card.tsx
-├── components/patient-form.tsx
-├── components/create-patient-page.tsx
-├── components/edit-patient-page.tsx
-├── components/patients-page.tsx
-├── hooks/use-create-patient.ts
-├── hooks/use-patient.ts
-├── hooks/use-patients.ts
-├── hooks/use-update-patient.ts
-├── schemas/patient-form.schema.ts
-├── types/patient.types.ts
-├── utils/patient-form-errors.ts
-├── utils/patient-form-mappers.ts
-└── utils/patient-initials.ts
-```
+El listado es una cuadrícula responsive de tarjetas con nombre, correo cuando
+existe, código institucional y diagnóstico principal de `StudentResponseDto`.
+No incorpora datos clínicos agregados, fotografías ni imágenes mock.
 
-## API
+`PatientAvatar` centraliza el fallback visual de iniciales y la paleta muted
+determinística por identificador. Es compartido por tarjetas y ficha; nombres
+ausentes muestran `?` y “Nombre no registrado”.
 
-`patientsApi.list(params, signal)` usa `ApiClient` para solicitar
-`GET /students` con `skip` y `take`. La feature también usa contratos reales
-para `POST /students`, `GET /students/:id` y `PATCH /students/:id`; no realiza
-solicitudes por cada fila ni incluye delete, overview o reasignaciones.
+`/patients/new` crea un paciente con nombre, correo, contraseña y código
+opcional. `/patients/[id]/edit` solo modifica el código institucional. Zod
+presenta errores locales; las respuestas de Nest sin campos tipados se muestran
+como `FormError` general. La interfaz no permite borrar un código enviando un
+valor vacío porque backend no define un contrato para `null`.
 
-## Query keys
+## Ficha principal y workspace — Fases 2.4 a 2.6
 
-`patientKeys.all`, `patientKeys.lists()`, `patientKeys.list(params)`,
-`patientKeys.details()` y `patientKeys.detail(id)` son las keys implementadas.
-Los parámetros se incluyen en la key para preparar cambios posteriores de lista
-sin mezclar respuestas en caché.
+`/patients/[id]` cambia según el rol autenticado. Un administrador consulta
+solo `GET /students/:id` y recibe identidad, correo, código institucional y
+terapeuta si el contrato lo entrega. No recibe ni muestra diagnóstico,
+biometría, alertas, citas, planes, actividades, notas o contenido compartido.
 
-## usePatients
+Un psicólogo consulta exclusivamente `GET /students/:id/overview`. El overview
+seguro resume biometría, próxima cita, alertas, plan terapéutico, actividades,
+seguimiento y contenido compartido en tarjetas responsive. Cada bloque está
+protegido por su permiso de lectura. El contrato solo expone las proyecciones
+necesarias: no incluye diagnóstico ni cuerpos de notas clínicas, análisis de
+IA, respuestas de actividades o cuerpos de contenido compartido.
 
-`usePatients(params)` delega directamente a TanStack Query, utiliza la key del
-dominio y reenvía su `AbortSignal` al adaptador API. No copia pacientes a estado
-local ni renombra el resultado de `useQuery`.
+`PatientWorkspace` recibe ese contexto ya cargado y no ejecuta queries ni usa
+Zustand. La cabecera reutiliza `PatientAvatar`, establece el breadcrumb desde
+el nombre cargado y solo expone Editar bajo `patients.manage`. La navegación
+contextual es `PatientSectionNav`: su configuración tipada centraliza etiqueta,
+icono, permiso, estrategia de coincidencia, disponibilidad y helper de ruta.
+La visibilidad siempre es `available && can(role, permission)`.
 
-`usePatient(id)` carga una ficha administrativa actual con `AbortSignal`.
-`useCreatePatient()` invalida solo las listas tras una creación y
-`useUpdatePatient(id)` invalida la ficha y las listas afectadas. Las páginas
-deciden el toast y la navegación únicamente después del éxito.
+En Fase 5.2, **Resumen**, **Expediente** y **Sesiones** están disponibles para
+psicología. `/patients/[id]/sessions` muestra únicamente metadata paginada de
+las notas clínicas: fecha de atención, terapeuta, tipo, modalidad, estado de
+anulación y metadata de cita. No descarga ni presenta cuerpos clínicos. La
+ausencia de sesiones es un estado vacío válido; las rutas de nueva sesión y
+detalle continúan fuera de alcance.
 
-## Permisos
+`/patients/[id]/clinical-record` consulta y mantiene exclusivamente el
+expediente clínico longitudinal mediante los contratos explícitos de creación,
+lectura y edición. La ausencia de expediente es un estado vacío válido después
+de confirmar la visibilidad del paciente; no se trata como un error técnico.
+La navegación conserva `appointments`,
+`biometrics`, `alerts`, `treatment-plan`, `activities` y `shared-content`
+como `future`; no tienen páginas, reglas de ruta ni enlaces visibles.
+`patientRoutes` es la única fuente de rutas internas para listado, creación,
+edición, resumen, expediente y dichas convenciones. No existe aún
+un `patients/[id]/layout.tsx`: con una única sección causaría complejidad y
+riesgo de repetir queries sin aportar composición reutilizable.
 
-La ruta sigue protegida por `RouteAccessBoundary` con `patients.view`.
-Administradores y psicólogos consumen el mismo listado; Nest y RLS determinan
-las filas autorizadas. `patients.manage` protege `/patients/new`,
-`/patients/:id/edit`, el botón de creación y la acción Editar. Un psicólogo
-puede abrir la ficha temporal desde Ver paciente, pero no recibe acciones ni
-rutas administrativas.
+La carga usa skeletons. Un 403 muestra `ForbiddenState` embebido, un 404 usa
+Not Found y los demás errores muestran `ErrorState` con reintento. Las ausencias
+de terapeuta, cita, plan o datos biométricos se expresan como estados neutrales.
 
-## Create Patient
+## Overview Summary Blocks
 
-`/patients/new` usa `POST /students`. El formulario solicita nombre completo,
-correo electrónico, contraseña inicial y código institucional opcional. Zod
-valida nombre, correo y contraseña de al menos seis caracteres antes de que el
-modelo se transforme a `CreatePatientInput`. Al crear, la feature invalida
-`patientKeys.lists()`, muestra un toast de éxito y navega a `/patients`.
+| Bloque | Campo del overview | Permiso | Estado compacto | Detalle diferido |
+| --- | --- | --- | --- | --- |
+| Terapeuta actual | `currentTherapist` | `patients.view` | Sin terapeuta asignado | Historial y reasignación |
+| Próxima cita | `nextAppointment` | `appointments.view` | Sin próxima cita programada | Agenda y gestión de citas |
+| Biometría reciente | `recentBiometricSummary` | `biometrics.view` | Sin datos biométricos recientes | Historial, tendencias y gestión de banda |
+| Alertas abiertas | `openAlerts` | `alerts.view` | Sin alertas pendientes | Historial y resolución de alertas |
+| Plan activo | `activeTreatmentPlan` | `treatment-plans.view` | Sin plan terapéutico activo | Objetivos y edición del plan |
+| Actividades pendientes | `pendingActivities` | `patient-activities.view` | Sin actividades pendientes | Catálogo e historial de actividades |
+| Seguimiento reciente | `recentFollowUps` | `clinical-notes.view` | Aún no hay seguimiento reciente registrado | Resumen real de sesiones y notas completas |
+| Contenido compartido | `recentSharedContent` | `shared-content.view` | Sin contenido compartido reciente | Biblioteca y detalle del contenido |
 
-## Edit Patient
+Los bloques clínicos se limitan a tres elementos recientes por contrato. Los
+estados, prioridades, modalidades, tipos de cita y orígenes se traducen antes
+de mostrarse; los enums técnicos no se presentan en la interfaz. Las citas y
+fechas clínicas se formatean con `institutionTimezone`, proporcionada por el
+overview y resuelta por el servidor desde la institución del paciente.
 
-`/patients/:id/edit` carga `GET /students/:id`, no reutiliza una tarjeta como
-fuente de valores y envía `PATCH /students/:id`. El único campo expuesto es el
-código institucional. Un 404 usa la página Not Found y un 403 se representa con
-`ForbiddenState`; otros errores de carga muestran `ErrorState` con retry.
+## Overview boundaries
 
-El mismo `PatientForm` se reutiliza en ambos modos. La edición invalida
-`patientKeys.detail(id)` y `patientKeys.lists()` antes de volver al listado.
+El overview no contiene expediente completo, sesiones completas, cuerpos de
+notas, biometría histórica, historial o resolución de alertas, edición de plan,
+catálogo de actividades, diario emocional privado ni acciones de navegación a
+módulos aún incompletos. `recentFollowUps` contiene metadata de seguimiento
+(fecha, cita, tipo, estado y terapeuta), no el contenido clínico de una nota.
+`EmotionalJournal` no se consulta desde `admin-web`.
 
-## Campos y límites administrativos
+## Permisos y límites
 
-Aunque el DTO de Nest también permite `primaryDiagnosis`, la interfaz no lo
-presenta por tratarse de información clínica. La creación tampoco ofrece
-`assignedDoctorId`: un paciente puede crearse sin terapeuta y la asignación se
-reserva para el módulo correspondiente. La edición no cambia identidad, correo,
-contraseña, diagnóstico ni terapeuta.
+`RouteAccessBoundary` exige `patients.view` para la feature; RLS y Nest siguen
+siendo la autoridad sobre el alcance efectivo. `patients.manage` protege crear,
+editar y sus acciones visibles. El overview compuesto está guardado por backend
+para `psychologist`; no se invoca desde la ficha administrativa.
 
-Un código vacío se omite del DTO. El backend no declara un contrato para borrar
-el código con `null`, por lo que esta fase no ofrece esa operación.
+Los administradores conservan operaciones institucionales sobre pacientes y
+citas, pero no pueden leer ni modificar expedientes clínicos. El expediente
+requiere `clinical-record.view` o `clinical-record.manage` en la interfaz y la
+autorización efectiva de Nest y RLS. Un psicólogo no asignado recibe `404` para
+no revelar la existencia del recurso. Las demás secciones clínicas futuras
+seguirán requiriendo su permiso de frontend y la autorización efectiva de Nest
+y RLS cuando cuenten con una ruta funcional.
 
-Los errores locales de Zod aparecen junto al campo. Nest no entrega códigos de
-campo estables, de modo que sus errores 400, 409, 422, red y 5xx se conservan en
-el formulario como `FormError` general; no se infieren campos desde texto libre.
-
-## Tarjetas y avatares
-
-El listado es una cuadrícula responsive de tarjetas. Cada tarjeta muestra
-únicamente nombre, correo cuando existe, código institucional y diagnóstico
-principal de `StudentResponseDto`. No es una acción ni enlaza al detalle, que
-permanece fuera del alcance hasta la Fase 2.4.
-
-Las fotografías mock no se usan en el listado productivo. Como el proyecto no
-dispone de un primitivo `Avatar`, `PatientCard` presenta un fallback visual con
-iniciales de la primera y última palabra del nombre. La paleta muted se obtiene
-determinísticamente del identificador del paciente; no se guarda en backend ni
-cambia entre renders. Un nombre ausente usa `?`, mientras que su etiqueta de
-texto visible continúa siendo “Nombre no registrado”.
-
-## Carga, error y vacío
-
-La primera carga usa skeletons con la geometría de las tarjetas. Un 403 muestra
-`ForbiddenState` embebido; otros fallos usan `ErrorState` con retry; una
-respuesta exitosa vacía usa `EmptyState`. Un refresco en segundo plano conserva
-las tarjetas visibles.
-
-## Limitaciones actuales
-
-El servidor solo acepta `skip` y `take` y no devuelve total ni metadatos. No se
-implementan búsqueda, filtros, selector de tamaño, paginación interactiva ni
-estado del listado en URL. Tampoco se implementan creación, edición,
-reasignación, detalle ni overview. Las tarjetas muestran únicamente nombre,
-correo, código y diagnóstico disponibles en `StudentResponseDto`.
-
-## Próximo paso
-
-Una fase posterior incorporará búsqueda backend-side, filtros, paginación y
-estado en URL cuando el backend acepte los parámetros aprobados y devuelva
-metadatos confiables de paginación.
+El listado aún no tiene búsqueda, filtros, selector de tamaño, paginación
+interactiva ni estado de URL: backend no entrega filtros aprobados ni metadatos
+confiables. Reasignaciones, sesiones, editor de planes, gráficas biométricas,
+historial de alertas y módulos clínicos restantes siguen fuera de alcance.

@@ -84,9 +84,13 @@ export const rolePermissions: Readonly<
 }
 
 export const routeAccess: readonly RouteAccessRule[] = [
+  { path: "/", permission: "dashboard.view" },
   { path: "/dashboard", permission: "dashboard.view" },
   { path: "/patients/new", permission: "patients.manage" },
   { path: "/patients/:id/edit", permission: "patients.manage" },
+  { path: "/patients/:id/clinical-record", permission: "clinical-record.view" },
+  { path: "/patients/:id/sessions/new", permission: "clinical-notes.manage" },
+  { path: "/patients/:id/sessions", permission: "clinical-notes.view" },
   { path: "/patients", permission: "patients.view" },
   { path: "/administration", permission: "administration.view" },
   { path: "/therapists", permission: "therapists.view" },

@@ -90,10 +90,13 @@ filter the current slice as if it represented all patients.
 
 ## 6. Patient overview response
 
-`StudentOverviewResponseDto` returns, in one request, basic student identity,
-current therapist, next appointment, active treatment plan, most recent
-biometric record, open alerts, pending activities, recent clinical notes and
-recent shared content. The service limits each recent collection to five items.
+`StudentOverviewResponseDto` returns, in one request, minimal student identity,
+institution timezone, current therapist (including specialty when available),
+next appointment, active treatment plan, most recent biometric summary, open
+alerts, pending activities, recent follow-up metadata and recent shared-content
+metadata. The service limits each recent collection to three items. It omits
+diagnosis and sensitive clinical bodies, including note observations and shared
+content bodies.
 
 For a psychologist, the future overview can show header information plus safe
 summary counts or compact blocks for available aggregates. It must not become a
@@ -215,7 +218,15 @@ belong to later modules, not this feature's overview.
 4. **2.4:** Implement psychologist overview and administrator administrative
    detail, including dynamic breadcrumbs.
 5. **2.5:** Extract compact, contract-backed overview blocks.
-6. **2.6:** Add only functional navigation and future-module entry points.
+6. **2.6:** Implement the patient workspace without a nested layout. Summary
+   is its only available contextual section; `PatientWorkspace`,
+   `PatientSectionNav`, `patientNavigation` and `patientRoutes` centralize the
+   loaded identity context, visible navigation and documented future route
+   conventions. The RLS migration
+   `20260930120000_restrict_administrative_clinical_reads` aligns alert, band
+   and biometric reads with the clinical separation: owner and assigned
+   psychologist only, while administrative patient and appointment operations
+   remain available.
 7. **2.7:** Run integration, accessibility, responsive, permission and error
    handling QA.
 
@@ -240,3 +251,30 @@ Both own final integration and QA.
 - Three existing `no-img-element` lint warnings remain in mockup/login imagery.
 - Manual authenticated validation requires a running server and authorized test
   accounts; no credentials are embedded in the frontend.
+
+## Fase 2.4 implementada
+
+`/patients/[id]` selecciona una vista por rol sin ejecutar consultas paralelas:
+el administrador usa `GET /students/:id` para una ficha institucional no
+clínica y el psicólogo usa `GET /students/:id/overview` para el resumen clínico
+compuesto. La cabecera comparte avatar por iniciales, nombre, correo, código y
+terapeuta, establece el breadcrumb dinámico y solo muestra Editar para
+`patients.manage`.
+
+El overview reutiliza tarjetas del sistema de diseño para biometría, próxima
+cita, alertas, plan, actividades, seguimiento y contenido compartido. No incorpora
+fotografías, IA, gráficas, detalles de expediente ni navegación hacia módulos
+sin una ruta funcional. El contenido textual de notas clínicas y recursos
+compartidos no se renderiza. Los bloques clínicos se someten a sus permisos y
+los estados 403, 404, error recuperable, carga y ausencia de datos tienen una
+representación explícita.
+
+## Contrato seguro del overview implementado
+
+`GET /students/:id/overview` conserva su URL y exclusividad para `psychologist`,
+pero ahora responde una proyección mínima construida con `select` acotados. El
+servidor entrega `institutionTimezone`, título de actividad y metadata de
+seguimiento como `recentFollowUps`; no entrega diagnóstico, cuerpos clínicos,
+análisis de IA, respuestas de actividades ni el cuerpo del contenido compartido.
+Las listas de alertas, actividades, seguimiento y contenido compartido se
+limitan a tres registros. La ficha administrativa permanece en `GET /students/:id`.

@@ -363,8 +363,11 @@ logged-in psychologist) has the identical problem — not solved either, same re
 **Current coverage**: every domain table now has RLS enabled and forced, across three access
 "shapes":
 - **Self + assigned doctor + admin** (`can_access_student_profile`): `remote_users`,
-  `remote_student_profiles`, `remote_biometric_records`, `remote_institutions`,
-  `remote_band_devices`, `remote_alerts` (select/insert only — see below), `remote_appointments`.
+  `remote_student_profiles`, `remote_institutions`, `remote_appointments`.
+- **Self + currently assigned doctor, never admin** (`is_students_own_profile` OR
+  `can_access_clinical_data`): `remote_biometric_records`, `remote_band_devices`, and
+  `remote_alerts` SELECT/INSERT. `remote_biometric_records` resolves the device owner through
+  `app_private.can_access_biometric_device` to avoid policy-to-policy table queries.
 - **Assigned doctor only, no self, no admin** (`can_access_clinical_data`): `remote_clinical_records`,
   `remote_treatment_plans`, `remote_treatment_goals`, `remote_student_activities`, plus
   author-or-current-assigned variants on `remote_clinical_notes` and `remote_alert_actions`, and
