@@ -33,8 +33,8 @@ export function AssignmentsManager() {
   const [filterTherapistId, setFilterTherapistId] = useState("all")
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null)
 
-  const { data: patients, isLoading: isLoadingPatients } = usePatients({ skip: 0, take: 500 })
-  const { data: therapists, isLoading: isLoadingTherapists } = useTherapists(0, 500)
+  const { data: patients, isLoading: isLoadingPatients } = usePatients({ skip: 0, take: 100 })
+  const { data: therapists, isLoading: isLoadingTherapists } = useTherapists(0, 100)
 
   // Join patients with therapists
   const combinedData: CombinedPatientItem[] = useMemo(() => {

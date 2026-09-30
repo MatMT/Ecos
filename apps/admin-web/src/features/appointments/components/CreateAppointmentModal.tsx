@@ -27,8 +27,8 @@ export function CreateAppointmentModal({ open, onOpenChange }: CreateAppointment
   const [reason, setReason] = useState<string>("")
 
   // Fetch data
-  const { data: patientsResponse, isLoading: isLoadingPatients } = usePatients({ skip: 0, take: 500 })
-  const { data: therapistsResponse, isLoading: isLoadingTherapists } = useTherapists(0, 500)
+  const { data: patientsResponse, isLoading: isLoadingPatients } = usePatients({ skip: 0, take: 100 })
+  const { data: therapistsResponse, isLoading: isLoadingTherapists } = useTherapists(0, 100)
   const { data: availableSlots = [], isLoading: isLoadingSlots } = useAvailability(therapistId, date)
   
   // React Query returns the array directly

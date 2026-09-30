@@ -8,6 +8,8 @@ import type { AppointmentResponse } from "../dto/appointments.dto"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/common/StatusBadge"
+import { CancelAppointmentDialog } from "./CancelAppointmentDialog"
+import { RescheduleModal } from "./RescheduleModal"
 
 const DAYS_OF_WEEK = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
 const MONTHS = [
@@ -19,7 +21,10 @@ export function AppointmentsCalendar() {
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentResponse | null>(null)
   
-  const { data: appointments, isLoading } = useAppointments({ skip: 0, take: 500 })
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false)
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false)
+  
+  const { data: appointments, isLoading } = useAppointments({ skip: 0, take: 100 })
 
   const currentYear = currentDate.getFullYear()
   const currentMonth = currentDate.getMonth()
@@ -36,55 +41,48 @@ export function AppointmentsCalendar() {
   const handleNextMonth = () => {
     setCurrentDate(new Date(currentYear, currentMonth + 1, 1))
   }
-
-  const handleToday = () => {
-    setCurrentDate(new Date())
-  }
-
+  
   const handleDateSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.value) return
-    const [year, month] = e.target.value.split("-")
-    if (year && month) {
-      setCurrentDate(new Date(parseInt(year), parseInt(month) - 1, 1))
+    const val = e.target.value
+    if (val) {
+      const [year, month] = val.split('-')
+      setCurrentDate(new Date(Number(year), Number(month) - 1, 1))
     }
   }
 
-  // Get appointments for a specific day
   const getAppointmentsForDay = (day: number) => {
     if (!appointments) return []
     return appointments.filter(app => {
       if (!app.appointmentDate) return false
-      const appDate = new Date(app.appointmentDate)
-      return (
-        appDate.getDate() === day &&
-        appDate.getMonth() === currentMonth &&
-        appDate.getFullYear() === currentYear
-      )
-    })
+      const date = new Date(app.appointmentDate)
+      return date.getDate() === day && 
+             date.getMonth() === currentMonth && 
+             date.getFullYear() === currentYear
+    }).sort((a, b) => new Date(a.appointmentDate!).getTime() - new Date(b.appointmentDate!).getTime())
   }
 
   const getStatusColor = (status: string) => {
-    switch(status) {
+    switch (status) {
       case "pending": return "bg-yellow-500"
       case "confirmed": return "bg-blue-500"
       case "completed": return "bg-emerald-500"
-      case "cancelled": 
+      case "cancelled": return "bg-destructive"
       case "no_show": return "bg-red-500"
-      default: return "bg-gray-400"
+      case "rescheduled": return "bg-muted-foreground"
+      default: return "bg-muted"
     }
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+    <div className="flex flex-col h-full space-y-4">
+      {/* Calendar Header */}
+      <div className="flex items-center justify-between bg-card p-4 rounded-xl border">
         <div className="flex items-center gap-4">
-          <h2 className="text-xl font-semibold capitalize flex items-center gap-2">
+          <h2 className="text-xl font-semibold flex items-center gap-2">
             <CalendarIcon className="size-5 text-muted-foreground" />
             {MONTHS[currentMonth]} {currentYear}
           </h2>
-          <Button variant="outline" size="sm" onClick={handleToday}>Hoy</Button>
-          <div className="flex items-center gap-2 ml-4">
+          <div className="flex items-center gap-2 border-l pl-4 ml-2">
             <span className="text-sm text-muted-foreground">Ir a:</span>
             <Input 
               type="month" 
@@ -241,16 +239,35 @@ export function AppointmentsCalendar() {
             </div>
           )}
           
-          <div className="flex justify-end gap-2 pt-2 border-t">
+          <div className="flex justify-end gap-2 pt-2 border-t mt-4">
             <Button variant="outline" onClick={() => setSelectedAppointment(null)}>
               Cerrar
             </Button>
-            {selectedAppointment?.status === "pending" && (
-              <Button>Gestionar Cita</Button>
+            {(selectedAppointment?.status === "pending" || selectedAppointment?.status === "confirmed") && (
+              <>
+                <Button variant="outline" onClick={() => setIsRescheduleModalOpen(true)}>
+                  Reagendar
+                </Button>
+                <Button variant="destructive" onClick={() => setIsCancelModalOpen(true)}>
+                  Cancelar
+                </Button>
+              </>
             )}
           </div>
         </DialogContent>
       </Dialog>
+      
+      <CancelAppointmentDialog 
+        appointment={selectedAppointment}
+        open={isCancelModalOpen}
+        onOpenChange={setIsCancelModalOpen}
+      />
+
+      <RescheduleModal
+        appointment={selectedAppointment}
+        open={isRescheduleModalOpen}
+        onOpenChange={setIsRescheduleModalOpen}
+      />
     </div>
   )
 }
