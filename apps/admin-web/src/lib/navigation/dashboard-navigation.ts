@@ -1,6 +1,9 @@
 import {
   LayoutDashboard,
   Users,
+  Stethoscope,
+  ClipboardList,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react"
 import type { UserRole } from "@/features/auth/types/auth.types"
@@ -35,11 +38,35 @@ export const dashboardNavigation: readonly NavigationItem[] = [
     label: "Pacientes",
     permission: "patients.view",
   },
+  {
+    activeMatch: "prefix",
+    href: "/therapists",
+    icon: Stethoscope,
+    label: "Terapeutas",
+    permission: "therapists.view",
+  },
+  {
+    activeMatch: "prefix",
+    href: "/assignments",
+    icon: ClipboardList,
+    label: "Asignaciones",
+    permission: "assignments.view",
+  },
+  {
+    activeMatch: "prefix",
+    href: "/schedules",
+    icon: CalendarDays,
+    label: "Horarios",
+    permission: "therapists.view", // Reusing therapist view permission since schedules are tied to therapists
+  },
 ]
 
 const breadcrumbDefinitions: readonly BreadcrumbDefinition[] = [
   { href: "/dashboard", label: "Inicio", path: "/dashboard" },
   { href: "/patients", label: "Pacientes", path: "/patients" },
+  { href: "/therapists", label: "Terapeutas", path: "/therapists" },
+  { href: "/assignments", label: "Asignaciones", path: "/assignments" },
+  { href: "/schedules", label: "Horarios", path: "/schedules" },
 ]
 
 export function getNavigationForRole(
@@ -72,7 +99,7 @@ export function getBreadcrumbDefinitions(
 
   if (pathname === "/patients/new") {
     return [
-      ...breadcrumbDefinitions,
+      ...breadcrumbDefinitions.slice(0, 2),
       { label: "Nuevo paciente", path: pathname },
     ]
   }
@@ -82,14 +109,53 @@ export function getBreadcrumbDefinitions(
     const patientPath = `/patients/${editMatch[1]}`
 
     return [
-      ...breadcrumbDefinitions,
+      ...breadcrumbDefinitions.slice(0, 2),
       { href: patientPath, label: "Detalle", path: patientPath },
       { label: "Editar", path: pathname },
     ]
   }
 
   if (/^\/patients\/[^/]+$/.test(pathname)) {
-    return [...breadcrumbDefinitions, { label: "Detalle", path: pathname }]
+    return [...breadcrumbDefinitions.slice(0, 2), { label: "Detalle", path: pathname }]
+  }
+
+  if (pathname === "/therapists") {
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[2]]
+  }
+
+  if (pathname === "/therapists/new") {
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { label: "Nuevo terapeuta", path: pathname },
+    ]
+  }
+
+  const scheduleMatch = pathname.match(/^\/therapists\/([^/]+)\/schedule$/)
+  if (scheduleMatch) {
+    const therapistPath = `/therapists/${scheduleMatch[1]}`
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { href: therapistPath, label: "Detalle", path: therapistPath },
+      { label: "Horario", path: pathname }
+    ]
+  }
+
+  if (/^\/therapists\/[^/]+$/.test(pathname)) {
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { label: "Detalle", path: pathname }
+    ]
+  }
+
+  if (pathname === "/assignments") {
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[3]]
+  }
+
+  if (pathname === "/schedules") {
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[4]]
   }
 
   return [{ label: "Inicio", path: "/dashboard", href: "/dashboard" }]
