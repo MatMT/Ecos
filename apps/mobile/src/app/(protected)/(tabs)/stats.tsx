@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -17,6 +18,7 @@ import { Colors, Radius } from '@/constants/theme';
 import {
   ActivityIcon,
   ArrowDownIcon,
+  BookOpenIcon,
   CalendarCheckIcon,
   CheckCircle2Icon,
   CheckIcon,
@@ -26,9 +28,12 @@ import {
   ShieldCheckIcon,
   SparklesIcon,
   PlusIcon,
+  WindIcon,
 } from '@/components/ui/app-icons';
 import { useStudent } from '@/hooks/use-student';
 import { useTheme } from '@/context/theme-context';
+import { useTreatmentPlan } from '@/hooks/use-treatment-plan';
+import type { ActivityCategory } from '@/types/clinical';
 import {
   studentClient,
   type AppointmentItem,
@@ -104,11 +109,54 @@ function formatSessionDate(isoString: string): string {
   }
 }
 
+function renderActivityCategoryIcon(category: ActivityCategory, size = 18) {
+  switch (category) {
+    case 'BREATHING':
+      return <WindIcon size={size} color="#0284C7" />;
+    case 'DIARY':
+      return <BookOpenIcon size={size} color="#0F766E" />;
+    case 'SLEEP':
+      return <MoonIcon size={size} color="#6366F1" />;
+    case 'BEHAVIORAL':
+      return <CheckCircle2Icon size={size} color="#15803D" />;
+    case 'OTHER':
+    default:
+      return <SparklesIcon size={size} color="#8B5CF6" />;
+  }
+}
+
+function getActivityCategoryBg(category: ActivityCategory): string {
+  switch (category) {
+    case 'BREATHING':
+      return '#E0F2FE';
+    case 'DIARY':
+      return '#CCFBF1';
+    case 'SLEEP':
+      return '#EEF2FF';
+    case 'BEHAVIORAL':
+      return '#DCFCE7';
+    case 'OTHER':
+    default:
+      return '#F5F3FF';
+  }
+}
+
 export default function Stats() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
   const { student, preferences, displayName } = useStudent();
   const { colors } = useTheme();
+  const {
+    plan,
+    activities,
+    activeCount,
+    completedCount,
+    totalCount,
+    progressPercent,
+    isLoading: isPlanLoading,
+    toggleActivity,
+    refreshPlan,
+  } = useTreatmentPlan();
 
   const [userSelectedTab, setUserSelectedTab] = useState<StatsTab | null>(null);
   const [prevParamTab, setPrevParamTab] = useState(params.tab);
@@ -146,7 +194,8 @@ export default function Stats() {
   useFocusEffect(
     useCallback(() => {
       loadAppointments();
-    }, [loadAppointments])
+      void refreshPlan();
+    }, [loadAppointments, refreshPlan])
   );
 
   useEffect(() => {
@@ -569,73 +618,202 @@ export default function Stats() {
             </View>
 
             {/* Treatment Goals Card */}
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.cardHeaderTopRow}>
-                <Text style={styles.cardTitle}>OBJETIVOS TERAPÉUTICOS ACTIVOS</Text>
+                <View style={styles.cardHeaderTitleWrap}>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>
+                    OBJETIVOS TERAPÉUTICOS ACTIVOS
+                  </Text>
+                  {plan?.title ? (
+                    <Text style={[styles.cardPlanTitle, { color: colors.accent }]}>
+                      {plan.title}
+                    </Text>
+                  ) : null}
+                </View>
                 <View style={styles.goalsCountBadge}>
                   <Text style={styles.goalsCountBadgeText}>
-                    {student?.activeGoalsCount || 3} metas activas
+                    {activeCount} {activeCount === 1 ? 'meta activa' : 'metas activas'}
                   </Text>
                 </View>
               </View>
 
-              <Text style={styles.goalsSub}>
-                Enfoque clínico acordado con tu terapeuta para este ciclo de acompañamiento.
+              <Text style={[styles.goalsSub, { color: colors.textSecondary }]}>
+                {plan?.summary ||
+                  'Enfoque clínico y pautas acordadas con su terapeuta para este ciclo de acompañamiento.'}
               </Text>
 
-              {/* Goal 1 */}
-              <View style={styles.goalRow}>
-                <View style={styles.goalStatusIconActive}>
-                  <CheckIcon size={13} color="#FFFFFF" strokeWidth={3} />
-                </View>
-                <View style={styles.goalContent}>
-                  <Text style={styles.goalTitle}>
-                    Identificación de disparadores fisiológicos de tensión
-                  </Text>
-                  <Text style={styles.goalProgressText}>Progreso estimado: 80% · En curso</Text>
-                  <View style={styles.progressBarTrack}>
-                    <View style={[styles.progressBarFill, { width: '80%' }]} />
+              {/* Cycle Completion Progress Bar */}
+              {activities.length > 0 && (
+                <View style={[styles.planProgressOverview, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                  <View style={styles.planProgressTextRow}>
+                    <Text style={[styles.planProgressLabel, { color: colors.textSecondary }]}>
+                      Cumplimiento de pautas
+                    </Text>
+                    <Text style={[styles.planProgressValue, { color: colors.accent }]}>
+                      {progressPercent}% ({completedCount} de {totalCount})
+                    </Text>
+                  </View>
+                  <View style={[styles.progressBarTrack, { backgroundColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          width: `${progressPercent}%`,
+                          backgroundColor: progressPercent === 100 ? '#10B981' : colors.accent,
+                        },
+                      ]}
+                    />
                   </View>
                 </View>
-              </View>
+              )}
 
-              {/* Goal 2 */}
-              <View style={styles.goalRow}>
-                <View style={styles.goalStatusIconCompleted}>
-                  <CheckIcon size={13} color="#FFFFFF" strokeWidth={3} />
-                </View>
-                <View style={styles.goalContent}>
-                  <Text style={styles.goalTitle}>
-                    Regulación autónoma mediante respiración guiada
+              {/* Loading State */}
+              {isPlanLoading && activities.length === 0 ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.accent} />
+                  <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                    Cargando pautas terapéuticas asignadas...
                   </Text>
-                  <Text style={styles.goalProgressText}>Progreso estimado: 100% · Meta afianzada</Text>
-                  <View style={styles.progressBarTrack}>
-                    <View style={[styles.progressBarFill, { width: '100%', backgroundColor: '#10B981' }]} />
-                  </View>
                 </View>
-              </View>
+              ) : activities.length === 0 ? (
+                /* Empty State */
+                <View style={[styles.emptyActivitiesContainer, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                  <View style={styles.emptyActivitiesIconCircle}>
+                    <ShieldCheckIcon size={24} color={colors.textSecondary} />
+                  </View>
+                  <Text style={[styles.emptyActivitiesTitle, { color: colors.text }]}>
+                    Sin pautas asignadas
+                  </Text>
+                  <Text style={[styles.emptyActivitiesSub, { color: colors.textSecondary }]}>
+                    Su psicólogo asignará sus primeras pautas en su próxima sesión.
+                  </Text>
+                </View>
+              ) : (
+                /* Dynamic Prescribed Activities */
+                <View style={styles.activitiesList}>
+                  {activities.map((act) => {
+                    const isCompleted = act.status === 'COMPLETED';
+                    const isBreathing = act.category === 'BREATHING';
+                    const isDiary = act.category === 'DIARY';
 
-              {/* Goal 3 */}
-              <View style={styles.goalRow}>
-                <View style={styles.goalStatusIconActive}>
-                  <CheckIcon size={13} color="#FFFFFF" strokeWidth={3} />
+                    return (
+                      <View
+                        key={act.id}
+                        style={[
+                          styles.activityCard,
+                          {
+                            backgroundColor: isCompleted ? (colors.surfaceSubtle || '#F8FAFC') : colors.surface,
+                            borderColor: isCompleted ? '#86EFAC' : colors.border,
+                          },
+                        ]}
+                      >
+                        <View style={styles.activityTopRow}>
+                          {/* Category Vector Icon */}
+                          <View
+                            style={[
+                              styles.activityCategoryCircle,
+                              { backgroundColor: getActivityCategoryBg(act.category) },
+                            ]}
+                          >
+                            {renderActivityCategoryIcon(act.category, 18)}
+                          </View>
+
+                          {/* Content Details */}
+                          <View style={styles.activityMainContent}>
+                            <Text
+                              style={[
+                                styles.activityTitle,
+                                {
+                                  color: colors.text,
+                                  textDecorationLine: isCompleted ? 'line-through' : 'none',
+                                  opacity: isCompleted ? 0.75 : 1,
+                                },
+                              ]}
+                            >
+                              {act.title}
+                            </Text>
+                            <Text style={[styles.activityFrequency, { color: colors.textSecondary }]}>
+                              {act.frequency} · {isCompleted ? 'Completada' : 'Pendiente'}
+                              {act.syncStatus === 'PENDING_UPLOAD' ? ' · Guardado local' : ''}
+                            </Text>
+                            {act.description ? (
+                              <Text
+                                style={[
+                                  styles.activityDesc,
+                                  { color: colors.textMuted, opacity: isCompleted ? 0.7 : 1 },
+                                ]}
+                              >
+                                {act.description}
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          {/* Interactive Toggle Checkbox */}
+                          <TouchableOpacity
+                            onPress={() => void toggleActivity(act.id, act.status)}
+                            style={[
+                              styles.activityCheckbox,
+                              isCompleted
+                                ? styles.activityCheckboxCompleted
+                                : [styles.activityCheckboxPending, { borderColor: colors.border }],
+                            ]}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: isCompleted }}
+                            accessibilityLabel={`Marcar ${act.title} como ${isCompleted ? 'pendiente' : 'completada'}`}
+                          >
+                            {isCompleted ? (
+                              <CheckIcon size={12} color="#FFFFFF" strokeWidth={3} />
+                            ) : null}
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Direct Deep Link Actions */}
+                        {(isBreathing || isDiary) && (
+                          <View style={styles.activityActionRow}>
+                            {isBreathing && (
+                              <TouchableOpacity
+                                style={[styles.activityActionBtn, { backgroundColor: '#E0F2FE' }]}
+                                onPress={() => router.push('/modals/breathing-guide' as Href)}
+                                activeOpacity={0.7}
+                              >
+                                <WindIcon size={14} color="#0369A1" />
+                                <Text style={[styles.activityActionBtnText, { color: '#0369A1' }]}>
+                                  Iniciar
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+
+                            {isDiary && (
+                              <TouchableOpacity
+                                style={[styles.activityActionBtn, { backgroundColor: '#CCFBF1' }]}
+                                onPress={() =>
+                                  router.push({
+                                    pathname: '/(protected)/(tabs)/diario',
+                                    params: { newEntry: 'true', tag: act.title },
+                                  } as Href)
+                                }
+                                activeOpacity={0.7}
+                              >
+                                <BookOpenIcon size={14} color="#0F766E" />
+                                <Text style={[styles.activityActionBtnText, { color: '#0F766E' }]}>
+                                  Escribir
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
                 </View>
-                <View style={styles.goalContent}>
-                  <Text style={styles.goalTitle}>
-                    Higiene del sueño: mantener descanso regular
-                  </Text>
-                  <Text style={styles.goalProgressText}>Progreso estimado: 65% · En curso</Text>
-                  <View style={styles.progressBarTrack}>
-                    <View style={[styles.progressBarFill, { width: '65%' }]} />
-                  </View>
-                </View>
-              </View>
+              )}
 
               {/* Shared notes note */}
-              <View style={styles.sharedNotesNote}>
+              <View style={[styles.sharedNotesNote, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
                 <InfoIcon size={16} color="#64748B" />
-                <Text style={styles.sharedNotesNoteText}>
-                  Las reflexiones que decides compartir desde tu diario se abordan directamente en cada consulta clínica.
+                <Text style={[styles.sharedNotesNoteText, { color: colors.textSecondary }]}>
+                  Las reflexiones que decide compartir desde su diario se abordan directamente en cada consulta clínica.
                 </Text>
               </View>
             </View>
@@ -953,44 +1131,142 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     lineHeight: 18,
   },
-  goalRow: {
+  cardHeaderTitleWrap: {
+    flex: 1,
+    marginRight: 8,
+  },
+  cardPlanTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  planProgressOverview: {
+    padding: 10,
+    borderRadius: Radius.small,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  planProgressTextRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  planProgressLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  planProgressValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  loadingContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 12,
+  },
+  emptyActivitiesContainer: {
+    padding: 18,
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  emptyActivitiesIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  emptyActivitiesTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  emptyActivitiesSub: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  activitiesList: {
+    gap: 10,
+    marginBottom: 12,
+  },
+  activityCard: {
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    padding: 12,
+  },
+  activityTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 14,
-    gap: 12,
+    gap: 10,
   },
-  goalStatusIconActive: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#0D9488',
+  activityCategoryCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
-  goalStatusIconCompleted: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  goalContent: {
+  activityMainContent: {
     flex: 1,
   },
-  goalTitle: {
+  activityTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.text,
     lineHeight: 18,
   },
-  goalProgressText: {
+  activityFrequency: {
     fontSize: 11,
-    color: Colors.textSecondary,
     marginTop: 2,
-    marginBottom: 4,
+  },
+  activityDesc: {
+    fontSize: 11.5,
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  activityCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  activityCheckboxCompleted: {
+    backgroundColor: '#10B981',
+  },
+  activityCheckboxPending: {
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+  },
+  activityActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  activityActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+  },
+  activityActionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   progressBarTrack: {
     height: 6,
