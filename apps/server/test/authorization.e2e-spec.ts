@@ -778,6 +778,54 @@ describe('Authorization (RLS) e2e', () => {
       expect(asNewlyAssigned).not.toBeNull();
     });
 
+    it('clinical-note detail context exposes the exact note only to its author or current assignee', async () => {
+      const loadContext = (tx: Prisma.TransactionClient, studentId: number) =>
+        tx.$queryRaw<{ author_id: string | null; patient_id: number }[]>`
+          SELECT author_id, patient_id
+          FROM app_private.get_clinical_note_detail_context(
+            ${studentId},
+            ${fixture.clinicalNoteA2.id}
+          )
+        `;
+
+      const asAuthor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA2.profileId),
+      );
+      const asCurrentAssignee = await withRlsAs(
+        fixture.psychA2.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA2.profileId),
+      );
+      const asAdministrator = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA2.profileId),
+      );
+      const asOtherInstitutionPsychologist = await withRlsAs(
+        fixture.psychB1.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA2.profileId),
+      );
+      const withMismatchedPatient = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA.profileId),
+      );
+
+      expect(asAuthor).toEqual([
+        {
+          author_id: fixture.psychA1.id,
+          patient_id: fixture.studentA2.profileId,
+        },
+      ]);
+      expect(asCurrentAssignee).toHaveLength(1);
+      expect(asAdministrator).toHaveLength(0);
+      expect(asOtherInstitutionPsychologist).toHaveLength(0);
+      expect(withMismatchedPatient).toHaveLength(0);
+    });
+
     it('remote_clinical_notes: only the original author may update it, not the new assignee', async () => {
       await expect(
         withRlsAs(fixture.psychA1.id, 'authenticated', (tx) =>

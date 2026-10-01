@@ -186,8 +186,8 @@ export class AppointmentsService {
   }
 
   findAll(filters: AppointmentFilters, skip = 0, take = 20) {
-    return this.prisma.withRls((tx) =>
-      tx.appointment.findMany({
+    return this.prisma.withRls(async (tx) => {
+      const appointments = await tx.appointment.findMany({
         where: {
           studentId: filters.studentId,
           doctorId: filters.doctorId,
@@ -196,28 +196,39 @@ export class AppointmentsService {
         include: {
           student: { include: { user: true } },
           doctor: true,
+          clinicalNote: { select: { id: true } },
         },
         skip,
         take: Math.min(take, MAX_PAGE_SIZE),
         orderBy: { appointmentDate: 'desc' },
-      }),
-    );
+      });
+
+      return appointments.map(({ clinicalNote, ...appointment }) => ({
+        ...appointment,
+        hasClinicalNote: clinicalNote !== null,
+      }));
+    });
   }
 
   async findOne(id: number) {
     const appointment = await this.prisma.withRls((tx) =>
-      tx.appointment.findUnique({ 
+      tx.appointment.findUnique({
         where: { id },
         include: {
           student: { include: { user: true } },
           doctor: true,
-        }
+          clinicalNote: { select: { id: true } },
+        },
       }),
     );
     if (!appointment) {
       throw new NotFoundException('No se ha encontrado la cita solicitada.');
     }
-    return appointment;
+    const { clinicalNote, ...result } = appointment;
+    return {
+      ...result,
+      hasClinicalNote: clinicalNote !== null,
+    };
   }
 
   confirm(id: number) {

@@ -24,6 +24,7 @@ import { VoidClinicalNoteDto } from './dto/void-clinical-note.dto';
 import { ClinicalNoteResponseDto } from './dto/clinical-note-response.dto';
 import { ClinicalNoteListQueryDto } from './dto/clinical-note-list-query.dto';
 import { ClinicalNoteListResponseDto } from './dto/clinical-note-list-item-response.dto';
+import { ClinicalNoteDetailResponseDto } from './dto/clinical-note-detail-response.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -111,6 +112,33 @@ export class ClinicalNotesController {
     return this.clinicalNotesService.findOne(id);
   }
 
+  @Get('students/:studentId/clinical-notes/:id')
+  @ApiOperation({
+    summary: "Get a patient's clinical-note detail",
+    description:
+      'Returns the authorized note only when it belongs to the requested patient. The original author and current assigned psychologist may read it; administrators are denied.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Clinical-note detail.',
+    type: ClinicalNoteDetailResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'The caller does not have clinical-note permissions.',
+  })
+  @ApiResponse({
+    status: 404,
+    description:
+      'The note does not exist, does not belong to the patient, or is not visible to the caller.',
+  })
+  findOneByStudent(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.clinicalNotesService.findOneByStudent(studentId, id);
+  }
+
   @Get('students/:studentId/clinical-notes')
   @ApiOperation({ summary: "List a patient's clinical notes" })
   @ApiResponse({
@@ -137,7 +165,7 @@ export class ClinicalNotesController {
   @ApiResponse({
     status: 200,
     description: 'Clinical note updated.',
-    type: ClinicalNoteResponseDto,
+    type: ClinicalNoteDetailResponseDto,
   })
   @ApiResponse({
     status: 409,

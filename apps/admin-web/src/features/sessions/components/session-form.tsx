@@ -18,29 +18,64 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import type { AppointmentResponse } from "@/features/appointments/dto/appointments.dto"
 import { useCreateSession } from "@/features/sessions/hooks/use-create-session"
+import { useUpdateSession } from "@/features/sessions/hooks/use-session-detail"
 import {
-  sessionFormSchema,
+  createSessionFormSchema,
+  editSessionFormSchema,
   type SessionFormValues,
 } from "@/features/sessions/schemas/session-form.schema"
+import type { SessionDetail } from "@/features/sessions/types/session.types"
 import {
   EMPTY_SESSION_FORM_VALUES,
+  getAppointmentSessionDate,
   getDefaultSessionDate,
+  toCreateAppointmentSessionInput,
   toCreateManualSessionInput,
+  toSessionFormValues,
+  toUpdateSessionInput,
 } from "@/features/sessions/utils/session-form-mappers"
+import {
+  formatSessionDateTime,
+  formatSessionModality,
+  formatSessionType,
+} from "@/features/sessions/utils/session-formatters"
 import { ApiError } from "@/lib/api"
 import {
   applyApiFieldErrors,
   type ApiFieldErrorMap,
 } from "@/lib/forms/api-field-errors"
 
-interface SessionFormProps {
+interface SessionFormSharedProps {
   onCancel: () => void
-  onSaved: () => void
   patientName: string
   patientId: number
   timeZone: string
 }
+
+interface CreateSessionFormProps extends SessionFormSharedProps {
+  appointmentContext?: AppointmentSessionContext
+  mode: "create"
+  onSaved: (sessionId: number) => void
+}
+
+interface EditSessionFormProps extends SessionFormSharedProps {
+  mode: "edit"
+  onSaved: () => void
+  session: SessionDetail
+}
+
+type SessionFormProps = CreateSessionFormProps | EditSessionFormProps
+
+type AppointmentSessionContext = Pick<
+  AppointmentResponse,
+  | "appointmentDate"
+  | "durationMinutes"
+  | "id"
+  | "modality"
+  | "sessionType"
+>
 
 const fieldErrors = {
   "La duración de la sesión debe ser un número entero.": "durationMinutes",
@@ -70,22 +105,35 @@ const emotionalStates = [
 ] as const
 
 export function SessionForm({
-  onCancel,
-  onSaved,
-  patientName,
-  patientId,
-  timeZone,
+  ...props
 }: SessionFormProps) {
+  const { mode, patientId, timeZone } = props
+  const appointmentContext = mode === "create" ? props.appointmentContext : undefined
   const createSession = useCreateSession(patientId)
+  const updateSession = useUpdateSession(
+    patientId,
+    mode === "edit" ? props.session.id : 0,
+  )
   const [submitError, setSubmitError] = useState<string | null>(null)
   const form = useForm<SessionFormValues>({
-    defaultValues: {
-      ...EMPTY_SESSION_FORM_VALUES,
-      sessionDate: getDefaultSessionDate(timeZone),
-    },
-    resolver: zodResolver(sessionFormSchema),
+    defaultValues: mode === "edit"
+      ? toSessionFormValues(props.session, timeZone)
+      : {
+          ...EMPTY_SESSION_FORM_VALUES,
+          durationMinutes: appointmentContext?.durationMinutes
+            ? String(appointmentContext.durationMinutes)
+            : "",
+          modality: getAppointmentModality(appointmentContext?.modality),
+          sessionDate: appointmentContext?.appointmentDate
+            ? getAppointmentSessionDate(appointmentContext.appointmentDate, timeZone)
+            : getDefaultSessionDate(timeZone),
+          sessionType: appointmentContext?.sessionType ?? "",
+        },
+    resolver: zodResolver(
+      mode === "edit" ? editSessionFormSchema : createSessionFormSchema,
+    ),
   })
-  const isPending = createSession.isPending
+  const isPending = mode === "edit" ? updateSession.isPending : createSession.isPending
 
   useEffect(() => {
     if (!form.formState.isDirty) {
@@ -104,19 +152,53 @@ export function SessionForm({
   function handleCancel() {
     if (
       form.formState.isDirty &&
-      !window.confirm("Hay cambios sin guardar. ¿Desea abandonar el registro de la sesión?")
+      !window.confirm(
+        mode === "edit"
+          ? "Hay cambios sin guardar. ¿Desea descartar la edición de la sesión?"
+          : "Hay cambios sin guardar. ¿Desea abandonar el registro de la sesión?",
+      )
     ) {
       return
     }
 
-    onCancel()
+    props.onCancel()
   }
 
   function handleSubmit(values: SessionFormValues) {
     setSubmitError(null)
     form.clearErrors()
 
-    createSession.mutate(toCreateManualSessionInput(values, timeZone), {
+    if (mode === "edit") {
+      updateSession.mutate(toUpdateSessionInput(values), {
+        onError: (error) => {
+          const unmappedMessages = applyApiFieldErrors(
+            form.setError,
+            error,
+            fieldErrors,
+          )
+          setSubmitError(
+            unmappedMessages.join(" ") || getSessionFormErrorMessage(error, "actualizar"),
+          )
+        },
+        onSuccess: () => {
+          toast.success("La sesión ha sido actualizada correctamente.")
+          props.onSaved()
+        },
+      })
+      return
+    }
+
+    const input = appointmentContext
+      ? {
+          data: toCreateAppointmentSessionInput(values, appointmentContext.id),
+          kind: "appointment" as const,
+        }
+      : {
+          data: toCreateManualSessionInput(values, timeZone),
+          kind: "manual" as const,
+        }
+
+    createSession.mutate(input, {
       onError: (error) => {
         const unmappedMessages = applyApiFieldErrors(
           form.setError,
@@ -124,67 +206,85 @@ export function SessionForm({
           fieldErrors,
         )
         setSubmitError(
-          unmappedMessages.join(" ") || getSessionFormErrorMessage(error),
+          unmappedMessages.join(" ") || getSessionFormErrorMessage(error, "registrar"),
         )
       },
-      onSuccess: () => {
+      onSuccess: (session) => {
         toast.success("La sesión ha sido registrada correctamente.")
-        onSaved()
+        props.onSaved(session.id)
       },
     })
   }
 
   return (
     <form className="space-y-8" noValidate onSubmit={form.handleSubmit(handleSubmit)}>
-      <p className="text-sm text-muted-foreground">
-        Registrando sesión para <span className="font-medium text-foreground">{patientName}</span>.
-      </p>
+      {mode === "edit" ? (
+        <EditSessionContext session={props.session} timeZone={timeZone} />
+      ) : appointmentContext ? (
+        <AppointmentContext
+          appointment={appointmentContext}
+          patientName={props.patientName}
+          timeZone={timeZone}
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Registrando sesión para <span className="font-medium text-foreground">{props.patientName}</span>.
+        </p>
+      )}
 
       <FormSection
         className="rounded-2xl border bg-card p-5 shadow-sm"
         description="Documente el contexto clínico de la atención realizada."
         title="Información de la sesión"
       >
-        <div className="grid gap-5 sm:grid-cols-2">
-          <SessionInput
-            error={form.formState.errors.sessionDate?.message}
-            form={form}
-            id="sessionDate"
-            label="Fecha y hora clínica"
-            name="sessionDate"
-            required
-            type="datetime-local"
-          />
-          <SessionInput
-            error={form.formState.errors.durationMinutes?.message}
-            form={form}
-            id="durationMinutes"
-            label="Duración (minutos)"
-            min={1}
-            name="durationMinutes"
-            type="number"
-          />
-          <SessionInput
-            error={form.formState.errors.sessionType?.message}
-            form={form}
-            id="sessionType"
-            label="Tipo de sesión"
-            name="sessionType"
-            placeholder="Ej. Seguimiento"
-          />
-          <SessionSelect
-            error={form.formState.errors.modality?.message}
-            form={form}
-            id="modality"
-            label="Modalidad"
-            name="modality"
-            options={[
-              { label: "Presencial", value: "in_person" },
-              { label: "Virtual", value: "virtual" },
-            ]}
-            placeholder="Seleccionar modalidad"
-          />
-        </div>
+        {mode === "edit" ? (
+          <SessionMetadata session={props.session} timeZone={timeZone} />
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2">
+            <SessionInput
+              error={form.formState.errors.sessionDate?.message}
+              form={form}
+              id="sessionDate"
+              label="Fecha y hora clínica"
+              name="sessionDate"
+              required
+              type="datetime-local"
+              disabled={Boolean(appointmentContext)}
+            />
+            <SessionInput
+              error={form.formState.errors.durationMinutes?.message}
+              form={form}
+              id="durationMinutes"
+              label="Duración (minutos)"
+              min={1}
+              name="durationMinutes"
+              type="number"
+              disabled={Boolean(appointmentContext)}
+            />
+            <SessionInput
+              error={form.formState.errors.sessionType?.message}
+              form={form}
+              id="sessionType"
+              label="Tipo de sesión"
+              name="sessionType"
+              placeholder="Ej. Seguimiento"
+              disabled={Boolean(appointmentContext)}
+            />
+            <SessionSelect
+              error={form.formState.errors.modality?.message}
+              form={form}
+              id="modality"
+              label="Modalidad"
+              name="modality"
+              options={[
+                { label: "Presencial", value: "in_person" },
+                { label: "Virtual", value: "virtual" },
+              ]}
+              placeholder="Seleccionar modalidad"
+              disabled={Boolean(appointmentContext)}
+            />
+          </div>
+        )}
         <SessionInput
           error={form.formState.errors.sessionDiagnosis?.message}
           form={form}
@@ -301,7 +401,7 @@ export function SessionForm({
           Cancelar
         </Button>
         <Button aria-busy={isPending} disabled={isPending} type="submit">
-          {isPending ? "Guardando…" : "Guardar sesión"}
+          {isPending ? "Guardando…" : mode === "edit" ? "Guardar cambios" : "Guardar sesión"}
         </Button>
       </div>
     </form>
@@ -309,6 +409,7 @@ export function SessionForm({
 }
 
 interface SessionInputProps {
+  disabled?: boolean
   error: string | undefined
   form: UseFormReturn<SessionFormValues>
   id: string
@@ -321,6 +422,7 @@ interface SessionInputProps {
 }
 
 function SessionInput({
+  disabled = false,
   error,
   form,
   id,
@@ -336,6 +438,7 @@ function SessionInput({
       <Input className="bg-background"
         aria-describedby={error ? `${id}-error` : undefined}
         aria-invalid={Boolean(error)}
+        disabled={disabled}
         id={id}
         min={min}
         placeholder={placeholder}
@@ -347,6 +450,7 @@ function SessionInput({
 }
 
 interface SessionSelectProps {
+  disabled?: boolean
   error: string | undefined
   form: UseFormReturn<SessionFormValues>
   id: string
@@ -357,6 +461,7 @@ interface SessionSelectProps {
 }
 
 function SessionSelect({
+  disabled = false,
   error,
   form,
   id,
@@ -371,7 +476,7 @@ function SessionSelect({
         control={form.control}
         name={name}
         render={({ field }) => (
-          <Select onValueChange={field.onChange} value={field.value}>
+          <Select disabled={disabled} onValueChange={field.onChange} value={field.value}>
             <SelectTrigger
               aria-describedby={error ? `${id}-error` : undefined}
               aria-invalid={Boolean(error)}
@@ -392,6 +497,111 @@ function SessionSelect({
       />
     </SessionField>
   )
+}
+
+function AppointmentContext({
+  appointment,
+  patientName,
+  timeZone,
+}: {
+  appointment: AppointmentSessionContext
+  patientName: string
+  timeZone: string
+}) {
+  return (
+    <section aria-label="Cita asociada" className="rounded-xl border bg-muted/30 p-4">
+      <p className="text-sm font-semibold text-foreground">Cita asociada</p>
+      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+        <ContextDetail label="Paciente" value={patientName} />
+        <ContextDetail
+          label="Fecha y hora"
+          value={formatSessionDateTime(appointment.appointmentDate, timeZone)}
+        />
+        <ContextDetail label="Tipo" value={formatSessionType(appointment.sessionType)} />
+        <ContextDetail
+          label="Modalidad"
+          value={
+            appointment.modality
+              ? formatSessionModality(appointment.modality)
+              : "Sin modalidad registrada"
+          }
+        />
+      </dl>
+    </section>
+  )
+}
+
+function EditSessionContext({
+  session,
+  timeZone,
+}: {
+  session: SessionDetail
+  timeZone: string
+}) {
+  return (
+    <section aria-label="Contexto de la sesión" className="rounded-xl border bg-muted/30 p-4">
+      <p className="text-sm font-semibold text-foreground">Editando sesión clínica</p>
+      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+        <ContextDetail
+          label="Fecha y hora clínica"
+          value={formatSessionDateTime(session.sessionDate, timeZone)}
+        />
+        <ContextDetail label="Terapeuta registrado" value={session.therapist.fullName ?? "Terapeuta no registrado"} />
+        {session.appointment ? (
+          <ContextDetail label="Cita asociada" value={`Cita #${session.appointment.id}`} />
+        ) : null}
+      </dl>
+    </section>
+  )
+}
+
+function SessionMetadata({
+  session,
+  timeZone,
+}: {
+  session: SessionDetail
+  timeZone: string
+}) {
+  return (
+    <dl className="grid gap-4 text-sm sm:grid-cols-2">
+      <ContextDetail
+        label="Fecha y hora clínica"
+        value={formatSessionDateTime(session.sessionDate, timeZone)}
+      />
+      <ContextDetail
+        label="Duración"
+        value={
+          session.durationMinutes === null
+            ? "Sin información registrada."
+            : `${session.durationMinutes} minutos`
+        }
+      />
+      <ContextDetail label="Tipo" value={formatSessionType(session.sessionType)} />
+      <ContextDetail
+        label="Modalidad"
+        value={
+          session.modality
+            ? formatSessionModality(session.modality)
+            : "Sin información registrada."
+        }
+      />
+    </dl>
+  )
+}
+
+function ContextDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-medium text-foreground">{value}</dd>
+    </div>
+  )
+}
+
+function getAppointmentModality(
+  modality: string | null | undefined,
+): SessionFormValues["modality"] {
+  return modality === "in_person" || modality === "virtual" ? modality : ""
 }
 
 interface SessionTextareaProps {
@@ -456,10 +666,13 @@ function SessionField({
   )
 }
 
-function getSessionFormErrorMessage(error: unknown): string {
+function getSessionFormErrorMessage(
+  error: unknown,
+  action: "actualizar" | "registrar",
+): string {
   if (error instanceof ApiError) {
     return error.message
   }
 
-  return "Ha ocurrido un error al registrar la sesión. Por favor, intente nuevamente."
+  return `Ha ocurrido un error al ${action} la sesión. Por favor, intente nuevamente.`
 }

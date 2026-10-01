@@ -10,6 +10,10 @@ export const patientRoutes = {
   overview: (patientId: number) => `/patients/${patientId}`,
   sessions: (patientId: number) => `/patients/${patientId}/sessions`,
   newSession: (patientId: number) => `/patients/${patientId}/sessions/new`,
+  newSessionFromAppointment: (patientId: number, appointmentId: number) =>
+    `/patients/${patientId}/sessions/new?appointmentId=${appointmentId}`,
+  sessionDetail: (patientId: number, noteId: number) =>
+    `/patients/${patientId}/sessions/${noteId}`,
   sharedContent: (patientId: number) => `/patients/${patientId}/shared-content`,
   treatmentPlan: (patientId: number) => `/patients/${patientId}/treatment-plan`,
   alerts: (patientId: number) => `/patients/${patientId}/alerts`,

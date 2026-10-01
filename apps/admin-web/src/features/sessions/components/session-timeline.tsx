@@ -1,7 +1,10 @@
 import { CalendarDays, UserRound } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { Card, CardContent } from "@/components/ui/card"
 import type { SessionListItem } from "@/features/sessions/types/session.types"
+import { patientRoutes } from "@/features/patients/routes/patient-routes"
 import {
   formatObservedEmotionalState,
   formatSessionDateTime,
@@ -11,24 +14,32 @@ import {
 } from "@/features/sessions/utils/session-formatters"
 
 interface SessionTimelineProps {
+  patientId: number
   sessions: readonly SessionListItem[]
   timeZone: string
 }
 
-export function SessionTimeline({ sessions, timeZone }: SessionTimelineProps) {
+export function SessionTimeline({ patientId, sessions, timeZone }: SessionTimelineProps) {
   return (
     <ol aria-label="Historial de sesiones" className="space-y-4">
       {sessions.map((session) => (
-        <SessionTimelineItem key={session.id} session={session} timeZone={timeZone} />
+        <SessionTimelineItem
+          key={session.id}
+          patientId={patientId}
+          session={session}
+          timeZone={timeZone}
+        />
       ))}
     </ol>
   )
 }
 
 function SessionTimelineItem({
+  patientId,
   session,
   timeZone,
 }: {
+  patientId: number
   session: SessionListItem
   timeZone: string
 }) {
@@ -68,7 +79,14 @@ function SessionTimelineItem({
                 </div>
               </div>
             </div>
-            {session.isVoided ? <StatusBadge label="Nota anulada" tone="danger" /> : null}
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {session.isVoided ? <StatusBadge label="Nota anulada" tone="danger" /> : null}
+              <Button asChild size="sm" variant="outline">
+                <Link href={patientRoutes.sessionDetail(patientId, session.id)}>
+                  Ver sesión
+                </Link>
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

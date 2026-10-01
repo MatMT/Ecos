@@ -1,15 +1,17 @@
 "use client"
 
-import { useState } from "react"
 import { useAppointments } from "../hooks/use-appointments"
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { ErrorState } from "@/components/common/ErrorState"
+import { AppointmentSessionAction } from "@/features/appointments/components/AppointmentSessionAction"
+import { useSession } from "@/features/auth/hooks/use-session"
 import type { AppointmentResponse } from "../dto/appointments.dto"
 
 export function AppointmentsTable() {
-  const [skip, setSkip] = useState(0)
+  const skip = 0
   const take = 20
+  const session = useSession()
 
   const { data, isLoading, error, refetch } = useAppointments({ skip, take })
 
@@ -113,6 +115,16 @@ export function AppointmentsTable() {
 
         return <StatusBadge tone={tone} label={label} />
       },
+    },
+    {
+      id: "clinicalSession",
+      header: "Sesión clínica",
+      cell: (row) => (
+        <AppointmentSessionAction
+          appointment={row}
+          currentUser={session.data}
+        />
+      ),
     },
   ]
 

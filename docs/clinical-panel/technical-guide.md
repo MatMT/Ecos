@@ -623,7 +623,12 @@ además de actualizar `assignedDoctorId`.
 | PATCH | `/appointments/:id/reschedule` | Reprogramar. |
 | PATCH | `/appointments/:id/cancel` | Cancelar con motivo. |
 | PATCH | `/appointments/:id/no-show` | Marcar inasistencia. |
-| PATCH | `/appointments/:id/complete` | Marcar realizada; puede requerir `ClinicalNote`. |
+
+Las respuestas de listado y detalle incluyen `hasClinicalNote`, un indicador
+booleano sin contenido clínico. La finalización clínica no tiene endpoint
+separado: `POST /clinical-notes` crea la nota para una cita confirmada y la
+marca como `completed` en la misma transacción. Una cita histórica ya
+completada y sin nota puede documentarse una única vez.
 
 `CreateAppointmentDto` — JSON de ejemplo:
 
@@ -654,15 +659,23 @@ horario configurado, excepción de agenda, conflicto de citas, duración permiti
 
 | Método | Endpoint | Uso |
 |---|---|---|
-| POST | `/clinical-notes` | Registrar nota para una cita realizada. |
+| POST | `/clinical-notes` | Registrar nota para una cita confirmada y completarla atómicamente. |
 | POST | `/students/:id/clinical-notes` | Registrar sesión manual del paciente actualmente asignado. |
 | GET | `/clinical-notes/:id` | Consultar nota. |
-| PATCH | `/clinical-notes/:id` | Actualizar mientras la política de edición lo permita. |
+| GET | `/students/:studentId/clinical-notes/:id` | Consultar detalle calificado por paciente, incluyendo el contexto mínimo autorizado para el workspace. |
+| PATCH | `/clinical-notes/:id` | Actualizar únicamente contenido profesional permitido; el autor original es el único editor y una nota anulada devuelve conflicto. |
 | GET | `/students/:id/clinical-notes?skip=0&take=20` | Historial paginado y minimizado de notas del paciente; responde `{ data, meta }`. |
 
 > **Eliminación.** No se recomienda `DELETE` físico para `ClinicalNote`. Si una nota debe anularse o
 > corregirse, utilice `voidedAt`, `voidedBy` y `voidReason`, o una estrategia equivalente que
 > conserve trazabilidad.
+
+El detalle de sesión diferencia el contenido profesional del análisis complementario de ECOS.
+`aiAssistantAnalysis` es de solo lectura en esta superficie y no se mezcla con la valoración del
+terapeuta. La lectura conserva la continuidad entre el autor original y el terapeuta actualmente
+asignado; una proyección RLS limitada aporta únicamente el contexto necesario para el detalle, sin
+ampliar el acceso histórico a la ficha completa del paciente. Las actualizaciones registran
+`CLINICAL_NOTE_UPDATED` sin almacenar textos clínicos en el audit log.
 
 ### 7.7 Plan terapéutico y objetivos
 
@@ -986,7 +999,7 @@ _original, no el plan ejecutado.)_
 | Asignaciones | `POST /therapist-assignments` · `GET /students/:id/therapist-assignments` · `PATCH /therapist-assignments/:id/end` |
 | Horarios | `GET/POST /psychologists/:id/schedules` · `PATCH /schedules/:id` · `POST /psychologists/:id/schedule-exceptions` |
 | Disponibilidad | `GET /psychologists/:id/availability` |
-| Citas | `GET/POST /appointments` · `GET /appointments/:id` · confirm · reschedule · cancel · no-show · complete |
+| Citas | `GET/POST /appointments` · `GET /appointments/:id` · confirm · reschedule · cancel · no-show |
 | Expediente | `GET/POST/PATCH /students/:id/clinical-record` |
 | Notas | `POST /clinical-notes` · `GET/PATCH /clinical-notes/:id` · `GET /students/:id/clinical-notes?skip&take` |
 | Planes | `POST /treatment-plans` · `GET /students/:id/treatment-plans` · `PATCH /treatment-plans/:id` |

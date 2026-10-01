@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button"
 import type { AppointmentResponse } from "../dto/appointments.dto"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { StatusBadge } from "@/components/common/StatusBadge"
 import { CancelAppointmentDialog } from "./CancelAppointmentDialog"
 import { RescheduleModal } from "./RescheduleModal"
+import { AppointmentSessionAction } from "./AppointmentSessionAction"
+import { useSession } from "@/features/auth/hooks/use-session"
 
 const DAYS_OF_WEEK = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
 const MONTHS = [
@@ -23,6 +24,7 @@ export function AppointmentsCalendar() {
   
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false)
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false)
+  const session = useSession()
   
   const { data: appointments, isLoading } = useAppointments({ skip: 0, take: 100 })
 
@@ -243,6 +245,13 @@ export function AppointmentsCalendar() {
             <Button variant="outline" onClick={() => setSelectedAppointment(null)}>
               Cerrar
             </Button>
+            {selectedAppointment ? (
+              <AppointmentSessionAction
+                appointment={selectedAppointment}
+                currentUser={session.data}
+                variant="default"
+              />
+            ) : null}
             {(selectedAppointment?.status === "pending" || selectedAppointment?.status === "confirmed") && (
               <>
                 <Button variant="outline" onClick={() => setIsRescheduleModalOpen(true)}>

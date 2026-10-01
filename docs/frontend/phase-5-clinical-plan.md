@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-Phase 5 builds the clinical workspace in `admin-web` in subsequent subphases. Phases 5.0–5.3 are implemented: audited API foundations, longitudinal clinical-record route, paginated session history, and manual session registration. Appointment handoff and session detail/edit remain outside the implemented scope.
+Phase 5 builds the clinical workspace in `admin-web` in subsequent subphases. Phases 5.0–5.5 are implemented: audited API foundations, longitudinal clinical-record route, paginated session history, manual session registration, appointment handoff, and session detail/edit. Phase 5.6 remains integration verification only.
 
 The visual reference is the untouched prototype at `apps/therapist-web/src/views/ClinicalNotes.tsx`. It is mock-data-only and is not an API contract or a component to import into `admin-web`.
 
@@ -44,7 +44,8 @@ The contract remains explicit create followed by patch. Create and update are au
 | `POST` | `/students/:studentId/clinical-notes` | `CreateManualClinicalNoteDto` with manual session metadata and clinical content | Psychologist-only and RLS-limited to the currently assigned patient. Rejects future dates, derives author, and never changes appointments. |
 | `GET` | `/students/:studentId/clinical-notes?skip=0&take=20` | Validated offset pagination, `take` 1–100 | Psychologist-only, currently assigned therapist only. Returns `{ data, meta }`, newest clinical session first, without clinical-note bodies. |
 | `GET` | `/clinical-notes/:id` | None | Returns full detail only to a psychologist allowed by RLS. |
-| `PATCH` | `/clinical-notes/:id` | Partial clinical content | Original author only; voided notes cannot be edited. |
+| `GET` | `/students/:studentId/clinical-notes/:id` | None | Patient-qualified detail for the portal. It verifies the note/patient relation and returns the authorized workspace projection, author, appointment snapshot, clinical fields and timestamps. |
+| `PATCH` | `/clinical-notes/:id` | Explicit nullable professional-content DTO | Original author only; voided notes cannot be edited. Identity, appointment, session snapshots and AI analysis are immutable. |
 | `PATCH` | `/clinical-notes/:id/void` | Optional void reason | Soft void only; no ordinary physical delete exists. |
 
 The list item includes identity, canonical clinical session date, optional appointment metadata, session snapshots, therapist summary, observed emotional state, void state, and timestamps. The response metadata includes exact pagination and the patient institution timezone. It intentionally excludes observations, summaries, diagnosis, AI analysis, impressions, interventions, agreements, follow-up text, and void reason.
@@ -55,7 +56,7 @@ Appointments use `pending`, `confirmed`, `completed`, `cancelled`, `rescheduled`
 
 Phase 5.0 retires `PATCH /appointments/:id/complete`. The normal completion path is now `POST /clinical-notes`: an authorized psychologist records the note for a confirmed appointment and the server changes that appointment to `completed` in the same RLS transaction. Existing completed appointments without a note remain compatible with one authorized legacy-note creation, without an additional transition.
 
-## 8. Appointment → Session future handoff
+## 8. Appointment → Session handoff
 
 ```text
 Confirmed appointment
@@ -65,7 +66,12 @@ Confirmed appointment
   → invalidate session, overview, and appointment queries
 ```
 
-Phase 5.4 will carry `appointmentId` only as navigation context. The server already verifies existence, patient/therapist relationship, appointment status, RLS scope and uniqueness before writing.
+Phase 5.4 is implemented. Agenda carries only `appointmentId` as navigation
+context; the form reloads the appointment through its existing detail query,
+verifies the patient route, current therapist, compatible status and absence
+of a note before enabling submission. Appointment responses expose the
+non-clinical `hasClinicalNote` flag so the list and calendar can show the
+action or “Sesión registrada” without fetching note bodies.
 
 ## 9. Session form field mapping
 
@@ -121,10 +127,10 @@ sessionKeys.lists()
 sessionKeys.byPatient(patientId)
 sessionKeys.list(patientId, { skip, take })
 sessionKeys.details()
-sessionKeys.detail(noteId)
+sessionKeys.detail(patientId, noteId)
 ```
 
-Manual creation invalidates `sessionKeys.byPatient(patientId)` and `patientKeys.overview(patientId)`. It does not invalidate appointments. The future appointment-backed handoff also invalidates its affected appointment queries.
+Manual creation invalidates `sessionKeys.byPatient(patientId)` and `patientKeys.overview(patientId)`. It does not invalidate appointments. Appointment-backed creation also invalidates its affected appointment queries. Both creation paths navigate to the new detail route after success. Updates invalidate detail, history and overview only.
 
 ## 13. Backend changes required
 
@@ -149,8 +155,9 @@ Future frontend code belongs in separate `features/clinical-record` and `feature
 - **5.1:** implemented longitudinal clinical-record route and explicit create/edit flow.
 - **5.2:** implemented paginated patient session history.
 - **5.3:** implemented manual new-session form using the documented prototype mapping.
-- **5.4:** confirmed-appointment handoff to the session form.
-- **5.5:** clinical-note detail and author-only editing.
+- **5.4:** implemented appointment handoff to the existing session form and
+  atomic appointment-backed endpoint.
+- **5.5:** implemented patient-qualified clinical-note detail and author-only editing. The detail page separates ECOS analysis from professional content and preserves former-author read continuity through a narrow RLS context projection, without broadening normal Patient Workspace access.
 - **5.6:** end-to-end integration, query invalidations, and validation.
 
 ## 16. Risks
@@ -166,5 +173,5 @@ Future frontend code belongs in separate `features/clinical-record` and `feature
 1. Complete and validate Phase 5.0.
 2. Complete and validate the Phase 5.1 clinical-record route, contract updates, and audit events.
 3. Complete and validate the Phase 5.3 manual session form and hybrid note model.
-4. Add Phase 5.4 appointment handoff and Phase 5.5 detail/edit.
+4. Complete Phase 5.5 detail/edit.
 5. Finish with Phase 5.6 integration validation.

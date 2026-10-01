@@ -3,7 +3,8 @@ import type { PatientSessionsParams } from "@/features/sessions/types/session.ty
 export const sessionKeys = {
   all: ["sessions"] as const,
   details: () => [...sessionKeys.all, "detail"] as const,
-  detail: (noteId: number) => [...sessionKeys.details(), noteId] as const,
+  detail: (patientId: number, noteId: number) =>
+    [...sessionKeys.details(), patientId, noteId] as const,
   lists: () => [...sessionKeys.all, "list"] as const,
   byPatient: (patientId: number) =>
     [...sessionKeys.lists(), patientId] as const,

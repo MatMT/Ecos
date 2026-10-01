@@ -36,6 +36,7 @@ export interface AppointmentResponse {
   sessionTitle: string | null
   sessionType: string | null
   appointmentDate: string | null
+  hasClinicalNote: boolean
   status: "pending" | "confirmed" | "completed" | "cancelled" | "no_show" | "rescheduled"
   durationMinutes: number | null
   endAt: string | null

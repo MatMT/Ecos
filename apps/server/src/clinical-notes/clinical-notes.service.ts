@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus, Prisma, type ClinicalNote } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
@@ -14,9 +14,23 @@ import { CreateManualClinicalNoteDto } from './dto/create-manual-clinical-note.d
 import { UpdateClinicalNoteDto } from './dto/update-clinical-note.dto';
 import { VoidClinicalNoteDto } from './dto/void-clinical-note.dto';
 import { ClinicalNoteListQueryDto } from './dto/clinical-note-list-query.dto';
+import { ClinicalNoteDetailResponseDto } from './dto/clinical-note-detail-response.dto';
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_TIMEZONE = 'America/El_Salvador';
+
+interface ClinicalNoteDetailContext {
+  assigned_therapist_full_name: string | null;
+  assigned_therapist_email: string | null;
+  assigned_therapist_id: string | null;
+  author_full_name: string | null;
+  author_id: string | null;
+  institution_timezone: string;
+  patient_email: string | null;
+  patient_full_name: string | null;
+  patient_id: number;
+  student_code: string | null;
+}
 
 @Injectable()
 export class ClinicalNotesService {
@@ -169,6 +183,31 @@ export class ClinicalNotesService {
     return note;
   }
 
+  async findOneByStudent(
+    studentId: number,
+    id: number,
+  ): Promise<ClinicalNoteDetailResponseDto> {
+    return this.prisma.withRls(async (tx) => {
+      const note = await tx.clinicalNote.findFirst({
+        where: { id, studentId },
+      });
+      if (!note) {
+        throw new NotFoundException(
+          'No se ha encontrado la nota clínica solicitada.',
+        );
+      }
+
+      const context = await this.getDetailContext(tx, studentId, id);
+      if (!context) {
+        throw new NotFoundException(
+          'No se ha encontrado la nota clínica solicitada.',
+        );
+      }
+
+      return this.toDetailResponse(note, context);
+    });
+  }
+
   async findByStudent(
     studentId: number,
     query: ClinicalNoteListQueryDto,
@@ -286,6 +325,19 @@ export class ClinicalNotesService {
         data: dto,
       });
 
+      if (!updated.studentId) {
+        throw new NotFoundException(
+          'No se ha encontrado el contexto clínico de la nota solicitada.',
+        );
+      }
+
+      const context = await this.getDetailContext(tx, updated.studentId, id);
+      if (!context) {
+        throw new NotFoundException(
+          'No se ha encontrado el contexto clínico de la nota solicitada.',
+        );
+      }
+
       await this.auditService.log(tx, {
         userId: currentUser.id,
         institutionId: currentUser.institutionId,
@@ -294,7 +346,7 @@ export class ClinicalNotesService {
         entityId: String(id),
       });
 
-      return updated;
+      return this.toDetailResponse(updated, context);
     });
   }
 
@@ -340,5 +392,72 @@ export class ClinicalNotesService {
 
       return voided;
     });
+  }
+
+  private async getDetailContext(
+    tx: Prisma.TransactionClient,
+    studentId: number,
+    noteId: number,
+  ): Promise<ClinicalNoteDetailContext | null> {
+    const contexts = await tx.$queryRaw<ClinicalNoteDetailContext[]>`
+      SELECT *
+      FROM app_private.get_clinical_note_detail_context(${studentId}, ${noteId})
+    `;
+
+    return contexts[0] ?? null;
+  }
+
+  private toDetailResponse(
+    note: ClinicalNote,
+    context: ClinicalNoteDetailContext,
+  ): ClinicalNoteDetailResponseDto {
+    return {
+      id: note.id,
+      patient: {
+        id: context.patient_id,
+        fullName: context.patient_full_name,
+        email: context.patient_email,
+        studentCode: context.student_code,
+        assignedTherapist: context.assigned_therapist_id
+          ? {
+              id: context.assigned_therapist_id,
+              fullName: context.assigned_therapist_full_name,
+              email: context.assigned_therapist_email,
+            }
+          : null,
+        institutionTimezone:
+          context.institution_timezone || DEFAULT_TIMEZONE,
+      },
+      therapist: {
+        id: context.author_id ?? note.doctorId ?? 'unknown',
+        fullName: context.author_full_name,
+      },
+      appointment: note.appointmentId
+        ? {
+            id: note.appointmentId,
+            appointmentDate: note.sessionDate,
+            sessionType: note.sessionType,
+            durationMinutes: note.durationMinutes,
+            modality: note.modality,
+          }
+        : null,
+      sessionDate: note.sessionDate,
+      sessionType: note.sessionType,
+      durationMinutes: note.durationMinutes,
+      modality: note.modality,
+      sessionDiagnosis: note.sessionDiagnosis,
+      observedEmotionalState: note.observedEmotionalState,
+      sessionSummary: note.sessionSummary,
+      observations: note.observations,
+      clinicalImpression: note.clinicalImpression,
+      interventions: note.interventions,
+      agreements: note.agreements,
+      followUpPlan: note.followUpPlan,
+      aiAssistantAnalysis: note.aiAssistantAnalysis,
+      isVoided: note.voidedAt !== null,
+      voidedAt: note.voidedAt,
+      createdAt: note.createdAt,
+      updatedAt: note.updatedAt,
+    };
   }
 }

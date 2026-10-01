@@ -26,8 +26,8 @@ export function useAppointments(filters: FindAllAppointmentsParams = {}) {
 export function useAppointment(id: number) {
   return useQuery({
     queryKey: appointmentsKeys.detail(id),
-    queryFn: async () => {
-      return await appointmentsApi.findOne(id)
+    queryFn: ({ signal }) => {
+      return appointmentsApi.findOne(id, signal)
     },
     enabled: !!id,
   })

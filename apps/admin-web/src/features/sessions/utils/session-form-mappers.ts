@@ -1,7 +1,10 @@
 import type {
+  CreateAppointmentSessionInput,
   CreateManualSessionInput,
   ObservedEmotionalState,
+  SessionDetail,
   SessionModality,
+  UpdateSessionInput,
 } from "@/features/sessions/types/session.types"
 import type { SessionFormValues } from "@/features/sessions/schemas/session-form.schema"
 
@@ -21,6 +24,46 @@ export const EMPTY_SESSION_FORM_VALUES: SessionFormValues = {
 }
 
 export function getDefaultSessionDate(timeZone: string): string {
+  return formatDateTimeInputValue(new Date(), timeZone)
+}
+
+export function getAppointmentSessionDate(
+  value: string,
+  timeZone: string,
+): string {
+  return formatDateTimeInputValue(new Date(value), timeZone)
+}
+
+export function toSessionFormValues(
+  session: SessionDetail,
+  timeZone: string,
+): SessionFormValues {
+  return {
+    agreements: session.agreements ?? "",
+    clinicalImpression: session.clinicalImpression ?? "",
+    durationMinutes:
+      session.durationMinutes === null ? "" : String(session.durationMinutes),
+    followUpPlan: session.followUpPlan ?? "",
+    interventions: session.interventions ?? "",
+    modality: session.modality === "in_person" || session.modality === "virtual"
+      ? session.modality
+      : "",
+    observations: session.observations ?? "",
+    observedEmotionalState: session.observedEmotionalState ?? "",
+    sessionDate: session.sessionDate
+      ? getAppointmentSessionDate(session.sessionDate, timeZone)
+      : "",
+    sessionDiagnosis: session.sessionDiagnosis ?? "",
+    sessionSummary: session.sessionSummary ?? "",
+    sessionType: session.sessionType ?? "",
+  }
+}
+
+function formatDateTimeInputValue(date: Date, timeZone: string): string {
+  if (Number.isNaN(date.getTime())) {
+    return ""
+  }
+
   const dateParts = new Intl.DateTimeFormat("en-CA", {
     day: "2-digit",
     hour: "2-digit",
@@ -29,7 +72,7 @@ export function getDefaultSessionDate(timeZone: string): string {
     month: "2-digit",
     timeZone,
     year: "numeric",
-  }).formatToParts(new Date())
+  }).formatToParts(date)
   const values = Object.fromEntries(
     dateParts
       .filter((part) => part.type !== "literal")
@@ -44,24 +87,59 @@ export function toCreateManualSessionInput(
   timeZone: string,
 ): CreateManualSessionInput {
   return {
+    ...toClinicalSessionContent(values),
+    durationMinutes: toOptionalPositiveInteger(values.durationMinutes),
+    modality: toOptionalModality(values.modality),
+    sessionDate: zonedDateTimeToIso(values.sessionDate, timeZone),
+    sessionType: toOptionalText(values.sessionType),
+  }
+}
+
+export function toCreateAppointmentSessionInput(
+  values: SessionFormValues,
+  appointmentId: number,
+): CreateAppointmentSessionInput {
+  return {
+    appointmentId,
+    ...toClinicalSessionContent(values),
+  }
+}
+
+export function toUpdateSessionInput(
+  values: SessionFormValues,
+): UpdateSessionInput {
+  return {
+    agreements: toNullableText(values.agreements),
+    clinicalImpression: toNullableText(values.clinicalImpression),
+    followUpPlan: toNullableText(values.followUpPlan),
+    interventions: toNullableText(values.interventions),
+    observations: toNullableText(values.observations),
+    observedEmotionalState: values.observedEmotionalState || null,
+    sessionDiagnosis: toNullableText(values.sessionDiagnosis),
+    sessionSummary: toNullableText(values.sessionSummary),
+  }
+}
+
+function toClinicalSessionContent(values: SessionFormValues) {
+  return {
     agreements: toOptionalText(values.agreements),
     clinicalImpression: toOptionalText(values.clinicalImpression),
-    durationMinutes: toOptionalPositiveInteger(values.durationMinutes),
     followUpPlan: toOptionalText(values.followUpPlan),
     interventions: toOptionalText(values.interventions),
-    modality: toOptionalModality(values.modality),
     observations: toOptionalText(values.observations),
     observedEmotionalState: toOptionalEmotionalState(values.observedEmotionalState),
-    sessionDate: zonedDateTimeToIso(values.sessionDate, timeZone),
     sessionDiagnosis: toOptionalText(values.sessionDiagnosis),
     sessionSummary: toOptionalText(values.sessionSummary),
-    sessionType: toOptionalText(values.sessionType),
   }
 }
 
 function toOptionalText(value: string): string | undefined {
   const normalized = value.trim()
   return normalized.length > 0 ? normalized : undefined
+}
+
+function toNullableText(value: string): string | null {
+  return value.trim() || null
 }
 
 function toOptionalPositiveInteger(value: string): number | undefined {

@@ -90,6 +90,7 @@ export const routeAccess: readonly RouteAccessRule[] = [
   { path: "/patients/:id/edit", permission: "patients.manage" },
   { path: "/patients/:id/clinical-record", permission: "clinical-record.view" },
   { path: "/patients/:id/sessions/new", permission: "clinical-notes.manage" },
+  { path: "/patients/:id/sessions/:noteId", permission: "clinical-notes.view" },
   { path: "/patients/:id/sessions", permission: "clinical-notes.view" },
   { path: "/patients", permission: "patients.view" },
   { path: "/administration", permission: "administration.view" },

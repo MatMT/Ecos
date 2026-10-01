@@ -163,6 +163,21 @@ export function getBreadcrumbDefinitions(
     ]
   }
 
+  const sessionDetailMatch = pathname.match(
+    /^\/patients\/([^/]+)\/sessions\/([^/]+)$/,
+  )
+  if (sessionDetailMatch) {
+    const patientPath = `/patients/${sessionDetailMatch[1]}`
+    const sessionsPath = `${patientPath}/sessions`
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { href: patientPath, label: "Detalle", path: patientPath },
+      { href: sessionsPath, label: "Sesiones", path: sessionsPath },
+      { label: "Sesión", path: pathname },
+    ]
+  }
+
   if (/^\/patients\/[^/]+$/.test(pathname)) {
     return [breadcrumbDefinitions[0], breadcrumbDefinitions[2], { label: "Detalle", path: pathname }]
   }

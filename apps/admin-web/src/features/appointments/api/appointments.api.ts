@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/client"
+import type { QueryParams } from "@/lib/api/types"
 import type { 
   AppointmentResponse, 
   CreateAppointmentInput, 
@@ -6,21 +7,20 @@ import type {
   RescheduleAppointmentInput 
 } from "../dto/appointments.dto"
 
-export interface FindAllAppointmentsParams {
+export interface FindAllAppointmentsParams extends QueryParams {
   studentId?: number
   doctorId?: string
   status?: string
   skip?: number
   take?: number
-  [key: string]: any
 }
 
 export const appointmentsApi = {
   findAll: (params?: FindAllAppointmentsParams) => 
     api.get<AppointmentResponse[]>("/appointments", { params }),
 
-  findOne: (id: number) => 
-    api.get<AppointmentResponse>(`/appointments/${id}`),
+  findOne: (id: number, signal?: AbortSignal) =>
+    api.get<AppointmentResponse>(`/appointments/${id}`, { signal }),
 
   create: (data: CreateAppointmentInput) => 
     api.post<AppointmentResponse, CreateAppointmentInput>("/appointments", data),

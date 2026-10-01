@@ -619,7 +619,12 @@ Creation must run in a transaction: validate institution, validate email, create
 | PATCH | `/appointments/:id/reschedule` | Reschedule. |
 | PATCH | `/appointments/:id/cancel` | Cancel with a reason. |
 | PATCH | `/appointments/:id/no-show` | Mark as a no-show. |
-| PATCH | `/appointments/:id/complete` | Mark as completed; may require a `ClinicalNote`. |
+
+List and detail responses include `hasClinicalNote`, a boolean indicator with
+no clinical content. There is no separate clinical-completion endpoint:
+`POST /clinical-notes` creates the note for a confirmed appointment and marks
+it `completed` in the same transaction. A historical completed appointment
+without a note may be documented once.
 
 `CreateAppointmentDto` — example JSON:
 
@@ -651,14 +656,23 @@ is in the future.
 
 | Method | Endpoint | Use |
 |---|---|---|
-| POST | `/clinical-notes` | Log a note for a completed appointment. |
+| POST | `/clinical-notes` | Log a note for a confirmed appointment and complete it atomically. |
+| POST | `/students/:id/clinical-notes` | Log a manual session for the currently assigned patient. |
 | GET | `/clinical-notes/:id` | Get note. |
-| PATCH | `/clinical-notes/:id` | Update while the edit policy allows it. |
+| GET | `/students/:studentId/clinical-notes/:id` | Get patient-qualified detail, including only the workspace context authorized for that note. |
+| PATCH | `/clinical-notes/:id` | Update allowed professional content only; the original author is the sole editor and a voided note conflicts. |
 | GET | `/students/:id/clinical-notes?skip=0&take=20` | Paginated, minimized patient note history; returns `{ data, meta }`. |
 
 > **Deletion.** A physical `DELETE` on `ClinicalNote` is not recommended. If a note needs to be
 > voided or corrected, use `voidedAt`, `voidedBy`, and `voidReason`, or an equivalent strategy that
 > preserves traceability.
+
+Session detail separates professional content from supplementary ECOS analysis.
+`aiAssistantAnalysis` is read-only in this surface and is never merged with the therapist's
+assessment. Read continuity is preserved for the original author and current assigned therapist;
+a narrow RLS projection provides only the context necessary for that detail, without broadening a
+former author's access to the complete patient profile. Updates record `CLINICAL_NOTE_UPDATED`
+without writing clinical text to the audit log.
 
 ### 7.7 Treatment plan and goals
 
@@ -979,7 +993,7 @@ _This table is the original proposal, not the executed plan.)_
 | Assignments | `POST /therapist-assignments` · `GET /students/:id/therapist-assignments` · `PATCH /therapist-assignments/:id/end` |
 | Schedules | `GET/POST /psychologists/:id/schedules` · `PATCH /schedules/:id` · `POST /psychologists/:id/schedule-exceptions` |
 | Availability | `GET /psychologists/:id/availability` |
-| Appointments | `GET/POST /appointments` · `GET /appointments/:id` · confirm · reschedule · cancel · no-show · complete |
+| Appointments | `GET/POST /appointments` · `GET /appointments/:id` · confirm · reschedule · cancel · no-show |
 | Record | `GET/POST/PATCH /students/:id/clinical-record` |
 | Notes | `POST /clinical-notes` · `GET/PATCH /clinical-notes/:id` · `GET /students/:id/clinical-notes?skip&take` |
 | Plans | `POST /treatment-plans` · `GET /students/:id/treatment-plans` · `PATCH /treatment-plans/:id` |

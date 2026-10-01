@@ -61,12 +61,19 @@ contextual es `PatientSectionNav`: su configuración tipada centraliza etiqueta,
 icono, permiso, estrategia de coincidencia, disponibilidad y helper de ruta.
 La visibilidad siempre es `available && can(role, permission)`.
 
-En Fase 5.2, **Resumen**, **Expediente** y **Sesiones** están disponibles para
+En Fases 5.2–5.5, **Resumen**, **Expediente** y **Sesiones** están disponibles para
 psicología. `/patients/[id]/sessions` muestra únicamente metadata paginada de
 las notas clínicas: fecha de atención, terapeuta, tipo, modalidad, estado de
 anulación y metadata de cita. No descarga ni presenta cuerpos clínicos. La
-ausencia de sesiones es un estado vacío válido; las rutas de nueva sesión y
-detalle continúan fuera de alcance.
+ausencia de sesiones es un estado vacío válido. `/patients/[id]/sessions/new`
+registra sesiones manuales o vinculadas a cita; `/patients/[id]/sessions/[noteId]`
+presenta el detalle autorizado y mantiene Sesiones activa en la navegación.
+
+La ruta de detalle obtiene su propio contexto mínimo de paciente junto con la
+nota. Esto permite que el autor histórico consulte una nota tras una
+reasignación sin ampliar el acceso general de ese psicólogo a la ficha u otras
+secciones del Patient Workspace. Solo el autor puede editar y únicamente el
+contenido profesional permitido; administradores no reciben acceso clínico.
 
 `/patients/[id]/clinical-record` consulta y mantiene exclusivamente el
 expediente clínico longitudinal mediante los contratos explícitos de creación,

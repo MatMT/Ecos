@@ -18,10 +18,12 @@ describe('ClinicalNotesService', () => {
     clinicalNote: {
       count: jest.Mock;
       create: jest.Mock;
+      findFirst: jest.Mock;
       findUnique: jest.Mock;
       findMany: jest.Mock;
       update: jest.Mock;
     };
+    $queryRaw: jest.Mock;
   };
   let prisma: { withRls: jest.Mock };
   let auditService: { log: jest.Mock };
@@ -40,10 +42,12 @@ describe('ClinicalNotesService', () => {
       clinicalNote: {
         count: jest.fn(),
         create: jest.fn(),
+        findFirst: jest.fn(),
         findUnique: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
       },
+      $queryRaw: jest.fn(),
     };
     prisma = { withRls: jest.fn((fn: (tx: unknown) => unknown) => fn(tx)) };
     auditService = { log: jest.fn() };
@@ -76,10 +80,14 @@ describe('ClinicalNotesService', () => {
       );
     });
 
-    it('throws ConflictException when the appointment cannot receive a note', async () => {
+    it.each([
+      AppointmentStatus.cancelled,
+      AppointmentStatus.no_show,
+      AppointmentStatus.rescheduled,
+    ])('throws ConflictException when a %s appointment cannot receive a note', async (status) => {
       tx.appointment.findUnique.mockResolvedValue({
         id: 75,
-        status: AppointmentStatus.cancelled,
+        status,
         doctorId: DOCTOR_ID,
         studentId: 8,
       });
@@ -274,8 +282,27 @@ describe('ClinicalNotesService', () => {
       });
       tx.clinicalNote.update.mockResolvedValue({
         id: 31,
+        studentId: 8,
+        doctorId: DOCTOR_ID,
+        appointmentId: null,
+        sessionDate: new Date('2026-09-30T09:00:00.000Z'),
+        sessionType: 'follow_up',
+        durationMinutes: 50,
+        modality: 'virtual',
+        sessionDiagnosis: null,
+        observedEmotionalState: null,
         observations: 'updated',
+        aiAssistantAnalysis: null,
+        sessionSummary: null,
+        clinicalImpression: null,
+        interventions: null,
+        agreements: null,
+        followUpPlan: null,
+        voidedAt: null,
+        createdAt: new Date('2026-09-30T09:00:00.000Z'),
+        updatedAt: new Date('2026-09-30T09:00:00.000Z'),
       });
+      tx.$queryRaw.mockResolvedValue([detailContext()]);
 
       const result = await service.update(
         31,
@@ -283,10 +310,134 @@ describe('ClinicalNotesService', () => {
         CURRENT_USER,
       );
 
-      expect(result).toEqual({ id: 31, observations: 'updated' });
+      expect(result).toEqual(
+        expect.objectContaining({ id: 31, observations: 'updated' }),
+      );
       expect(auditService.log).toHaveBeenCalledWith(
         tx,
         expect.objectContaining({ action: 'CLINICAL_NOTE_UPDATED' }),
+      );
+    });
+
+    it('denies an update from a psychologist other than the original author', async () => {
+      tx.clinicalNote.findUnique.mockResolvedValue({
+        id: 31,
+        doctorId: 'another-doctor',
+        voidedAt: null,
+      });
+
+      await expect(
+        service.update(31, { observations: 'No autorizado' }, CURRENT_USER),
+      ).rejects.toThrow(ForbiddenException);
+      expect(tx.clinicalNote.update).not.toHaveBeenCalled();
+      expect(auditService.log).not.toHaveBeenCalled();
+    });
+
+    it('persists explicit nulls when the author clears professional content', async () => {
+      tx.clinicalNote.findUnique.mockResolvedValue({
+        id: 31,
+        doctorId: DOCTOR_ID,
+        voidedAt: null,
+      });
+      tx.clinicalNote.update.mockResolvedValue({
+        id: 31,
+        studentId: 8,
+        doctorId: DOCTOR_ID,
+        appointmentId: null,
+        sessionDate: new Date('2026-09-30T09:00:00.000Z'),
+        sessionType: null,
+        durationMinutes: null,
+        modality: null,
+        sessionDiagnosis: null,
+        observedEmotionalState: null,
+        observations: null,
+        aiAssistantAnalysis: null,
+        sessionSummary: null,
+        clinicalImpression: null,
+        interventions: null,
+        agreements: null,
+        followUpPlan: null,
+        voidedAt: null,
+        createdAt: new Date('2026-09-30T09:00:00.000Z'),
+        updatedAt: new Date('2026-09-30T09:00:00.000Z'),
+      });
+      tx.$queryRaw.mockResolvedValue([detailContext()]);
+
+      await service.update(
+        31,
+        {
+          observations: null,
+          sessionDiagnosis: null,
+          sessionSummary: null,
+        },
+        CURRENT_USER,
+      );
+
+      expect(tx.clinicalNote.update).toHaveBeenCalledWith({
+        where: { id: 31 },
+        data: {
+          observations: null,
+          sessionDiagnosis: null,
+          sessionSummary: null,
+        },
+      });
+    });
+  });
+
+  describe('findOneByStudent', () => {
+    it('returns a typed detail only when the note belongs to the requested patient', async () => {
+      const now = new Date('2026-09-30T09:00:00.000Z');
+      tx.clinicalNote.findFirst.mockResolvedValue({
+        id: 31,
+        studentId: 8,
+        doctorId: DOCTOR_ID,
+        appointmentId: 75,
+        sessionDate: now,
+        sessionType: 'follow_up',
+        durationMinutes: 50,
+        modality: 'virtual',
+        sessionDiagnosis: 'Diagnóstico',
+        observedEmotionalState: 'calm',
+        observations: 'Observaciones',
+        aiAssistantAnalysis: 'Análisis existente',
+        sessionSummary: 'Resumen',
+        clinicalImpression: 'Impresión',
+        interventions: 'Intervenciones',
+        agreements: 'Acuerdos',
+        followUpPlan: 'Seguimiento',
+        voidedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      tx.$queryRaw.mockResolvedValue([detailContext()]);
+
+      await expect(service.findOneByStudent(8, 31)).resolves.toEqual(
+        expect.objectContaining({
+          appointment: expect.objectContaining({ id: 75 }),
+          patient: expect.objectContaining({ id: 8 }),
+          therapist: expect.objectContaining({ id: DOCTOR_ID }),
+        }),
+      );
+      expect(tx.clinicalNote.findFirst).toHaveBeenCalledWith({
+        where: { id: 31, studentId: 8 },
+      });
+    });
+
+    it('returns not found when the note does not belong to the requested patient', async () => {
+      tx.clinicalNote.findFirst.mockResolvedValue(null);
+
+      await expect(service.findOneByStudent(8, 31)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(tx.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('returns not found when the detail context rejects the caller', async () => {
+      tx.clinicalNote.findFirst.mockResolvedValue({ id: 31, studentId: 8 });
+      tx.$queryRaw.mockResolvedValue([]);
+
+      await expect(service.findOneByStudent(8, 31)).rejects.toThrow(
+        NotFoundException,
       );
     });
   });
@@ -444,3 +595,18 @@ describe('ClinicalNotesService', () => {
     });
   });
 });
+
+function detailContext() {
+  return {
+    assigned_therapist_email: 'assigned@example.com',
+    assigned_therapist_full_name: 'Dra. Rivera',
+    assigned_therapist_id: 'doctor-uuid',
+    author_full_name: 'Dra. Rivera',
+    author_id: 'doctor-uuid',
+    institution_timezone: 'America/El_Salvador',
+    patient_email: 'patient@example.com',
+    patient_full_name: 'Paciente de prueba',
+    patient_id: 8,
+    student_code: 'P-008',
+  };
+}

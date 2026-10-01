@@ -39,6 +39,14 @@ Un 401 representa sesión inválida y finaliza la sesión según Fase 1.6. Un 40
 
 El frontend no compara instituciones ni mantiene listas locales de pacientes permitidos como defensa. Nest y RLS validan institución, asignación terapéutica, propiedad y estado de cada operación.
 
+Las notas clínicas conservan continuidad de lectura para el autor original y
+el psicólogo actualmente asignado. La ruta de detalle calificada por paciente
+recibe una proyección mínima y RLS-validada para su propia nota; esta excepción
+no concede al autor histórico acceso general a la ficha, overview ni otras
+secciones del paciente. La edición continúa limitada al autor y a
+`clinical-notes.manage`; la interfaz solo oculta la acción, nunca sustituye la
+validación del servidor.
+
 La separación clínica es también efectiva en datos: RLS limita alertas, bandas
 y biometría al estudiante propietario o al psicólogo actualmente asignado. Un
 administrador conserva el listado, la ficha institucional y las operaciones de
