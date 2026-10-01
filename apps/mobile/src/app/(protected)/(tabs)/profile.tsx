@@ -33,6 +33,7 @@ import { useStudent, type SimulationScenario } from '@/hooks/use-student';
 import { useTheme } from '@/context/theme-context';
 import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
 import { useEsp32Ble } from '@/hooks/use-esp32-ble';
+import { useTreatmentPlan } from '@/hooks/use-treatment-plan';
 
 function getScenarioLabel(scenario: SimulationScenario | undefined): string {
   switch (scenario) {
@@ -85,6 +86,7 @@ export default function Profile() {
   const { user, logout } = useAuth();
   const { student, displayName, preferences, refreshStudent } = useStudent();
   const { colors } = useTheme();
+  const { activeCount, plan, activities } = useTreatmentPlan();
   const { bpm, spo2, isBleConnected, isDemoMode, trafficState } = useBiometricMonitor();
   const { bondedDeviceId, bondedDeviceName, unpair } = useEsp32Ble();
 
@@ -283,9 +285,11 @@ export default function Profile() {
           <View style={styles.detailRow}>
             <Text style={styles.detailKey}>Plan de atención: </Text>
             <Text style={styles.detailValGreen}>
-              {student && student.activeGoalsCount > 0
+              {plan
+                ? `${plan.status === 'ACTIVE' ? 'Activo' : 'Archivado'} · ${activities.length} pauta(s)`
+                : student && student.activeGoalsCount > 0
                 ? `Activo · ${student.activeGoalsCount} meta(s) en curso`
-                : 'Activo · 3 metas en curso'}
+                : 'Activo · Pautas en seguimiento'}
             </Text>
           </View>
 
@@ -296,7 +300,7 @@ export default function Profile() {
             activeOpacity={0.7}
           >
             <Text style={styles.planActionText}>
-              Ver Objetivos del Plan ({student?.activeGoalsCount || 3})
+              Ver Objetivos del Plan ({activities.length > 0 ? activeCount : (student?.activeGoalsCount || 0)})
             </Text>
             <ChevronRightIcon size={14} color="#0F766E" />
           </TouchableOpacity>

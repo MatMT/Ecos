@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 
 import CustomTopBar from '@/components/custom-top-bar';
 import { Colors, Radius } from '@/constants/theme';
@@ -219,11 +220,27 @@ export default function ChatScreen() {
   const [journalEntries, setJournalEntries] = useState<LocalJournalEntry[]>([]);
   const [showNewEntryModal, setShowNewEntryModal] = useState(false);
 
+  // Deep Link params from therapeutic activities
+  const params = useLocalSearchParams<{ newEntry?: string; tag?: string }>();
+
   // Form State for New Entry
   const [newMoodScore, setNewMoodScore] = useState<number>(4);
   const [newEmotion, setNewEmotion] = useState<string>('calma');
   const [newNarrative, setNewNarrative] = useState<string>('');
   const [showBiometricTooltip, setShowBiometricTooltip] = useState(false);
+
+  useEffect(() => {
+    if (params.newEntry === 'true') {
+      const timer = setTimeout(() => {
+        setShowNewEntryModal(true);
+        if (params.tag) {
+          const prefix = `[${params.tag}] `;
+          setNewNarrative((prev) => (prev.startsWith(prefix) ? prev : `${prefix}${prev}`));
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [params.newEntry, params.tag]);
 
   const refreshJournal = useCallback(async () => {
     try {

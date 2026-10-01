@@ -1,4 +1,12 @@
 import * as SQLite from 'expo-sqlite';
+import type {
+  TherapeuticPlan,
+  PrescribedActivity,
+  ActivityStatus,
+  SyncStatus,
+  ActivityCategory,
+  TherapeuticPlanStatus,
+} from '@/types/clinical';
 
 const DB_NAME = 'ecos_local.db';
 
@@ -31,6 +39,7 @@ export interface LocalSyncQueueItem {
   id?: number;
   endpoint: string;
   payload: string; // JSON stringified
+  method?: string; // GET, POST, PATCH, etc.
   created_at?: string;
   attempts: number;
   last_error?: string | null;
@@ -45,6 +54,33 @@ export interface LocalAppointmentRecord {
   doctor_id?: string | null;
   modality?: string | null;
   synced?: number; // 1 = confirmed with backend, 0 = local draft / pending queue
+}
+
+export interface LocalTreatmentPlanRecord {
+  id: string;
+  therapist_id: string;
+  therapist_name: string;
+  title: string;
+  summary: string;
+  start_date: string;
+  target_date: string;
+  status: string;
+  synced: number;
+  updated_at?: string;
+}
+
+export interface LocalPrescribedActivityRecord {
+  id: string;
+  plan_id: string;
+  title: string;
+  description: string;
+  category: string;
+  frequency: string;
+  status: string;
+  last_completed_at: string | null;
+  sync_status: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
@@ -91,6 +127,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       endpoint TEXT NOT NULL,
       payload TEXT NOT NULL,
+      method TEXT DEFAULT 'POST',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       attempts INTEGER DEFAULT 0,
       last_error TEXT
@@ -108,7 +145,42 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS local_treatment_plans (
+      id TEXT PRIMARY KEY,
+      therapist_id TEXT,
+      therapist_name TEXT,
+      title TEXT NOT NULL,
+      summary TEXT,
+      start_date TEXT,
+      target_date TEXT,
+      status TEXT NOT NULL DEFAULT 'ACTIVE',
+      synced INTEGER DEFAULT 1,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS local_prescribed_activities (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      category TEXT NOT NULL,
+      frequency TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      last_completed_at TEXT,
+      sync_status TEXT DEFAULT 'SYNCED',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_prescribed_activities_plan ON local_prescribed_activities(plan_id);
   `);
+
+  try {
+    await db.execAsync(`ALTER TABLE local_sync_queue ADD COLUMN method TEXT DEFAULT 'POST';`);
+  } catch {
+    // Column already exists
+  }
 
   dbInstance = db;
   return db;
@@ -142,12 +214,16 @@ export async function saveBiometricSample(sample: LocalBiometricSample): Promise
 /**
  * Enqueues a payload for background sync to the central server.
  */
-export async function enqueueSync(endpoint: string, payload: unknown): Promise<number> {
+export async function enqueueSync(
+  endpoint: string,
+  payload: unknown,
+  method: string = 'POST'
+): Promise<number> {
   const db = await getDatabase();
   const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
   const result = await db.runAsync(
-    `INSERT INTO local_sync_queue (endpoint, payload, attempts) VALUES (?, ?, 0);`,
-    [endpoint, payloadStr]
+    `INSERT INTO local_sync_queue (endpoint, payload, method, attempts) VALUES (?, ?, ?, 0);`,
+    [endpoint, payloadStr, method]
   );
   return result.lastInsertRowId;
 }
@@ -158,7 +234,7 @@ export async function enqueueSync(endpoint: string, payload: unknown): Promise<n
 export async function getPendingSyncItems(limit = 20): Promise<LocalSyncQueueItem[]> {
   const db = await getDatabase();
   return db.getAllAsync<LocalSyncQueueItem>(
-    `SELECT id, endpoint, payload, created_at, attempts, last_error
+    `SELECT id, endpoint, payload, method, created_at, attempts, last_error
      FROM local_sync_queue
      ORDER BY id ASC
      LIMIT ?;`,
@@ -238,8 +314,8 @@ export async function saveSingleLocalAppointment(
 }
 
 /**
- * Retrieves cached appointments from local SQLite ordered by appointment date descending.
- */
+  * Retrieves cached appointments from local SQLite ordered by appointment date descending.
+  */
 export async function getLocalAppointments(): Promise<LocalAppointmentRecord[]> {
   const db = await getDatabase();
   return db.getAllAsync<LocalAppointmentRecord>(
@@ -248,4 +324,177 @@ export async function getLocalAppointments(): Promise<LocalAppointmentRecord[]> 
      ORDER BY appointment_date DESC;`
   );
 }
+
+/**
+  * Persists the active therapeutic plan and its activities into local SQLite storage.
+  */
+export async function saveLocalTreatmentPlan(plan: TherapeuticPlan): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO local_treatment_plans (
+       id, therapist_id, therapist_name, title, summary, start_date, target_date, status, synced, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'));`,
+    [
+      plan.id,
+      plan.therapistId,
+      plan.therapistName,
+      plan.title,
+      plan.summary,
+      plan.startDate,
+      plan.targetDate,
+      plan.status,
+    ]
+  );
+
+  if (plan.activities && plan.activities.length > 0) {
+    await saveLocalPrescribedActivities(plan.activities);
+  }
+}
+
+/**
+ * Retrieves the currently active therapeutic plan and its associated activities from local SQLite.
+ */
+export async function getLocalActiveTreatmentPlan(): Promise<TherapeuticPlan | null> {
+  const db = await getDatabase();
+  const planRow = await db.getFirstAsync<LocalTreatmentPlanRecord>(
+    `SELECT id, therapist_id, therapist_name, title, summary, start_date, target_date, status, synced
+     FROM local_treatment_plans
+     WHERE status = 'ACTIVE'
+     ORDER BY updated_at DESC
+     LIMIT 1;`
+  );
+
+  if (!planRow) {
+    return null;
+  }
+
+  const activities = await getLocalPrescribedActivities(planRow.id);
+
+  return {
+    id: planRow.id,
+    therapistId: planRow.therapist_id,
+    therapistName: planRow.therapist_name,
+    title: planRow.title,
+    summary: planRow.summary,
+    startDate: planRow.start_date,
+    targetDate: planRow.target_date,
+    status: (planRow.status as TherapeuticPlanStatus) || 'ACTIVE',
+    activities,
+  };
+}
+
+/**
+ * Persists an array of prescribed activities in local SQLite storage.
+ */
+export async function saveLocalPrescribedActivities(
+  activities: PrescribedActivity[]
+): Promise<void> {
+  const db = await getDatabase();
+  for (const act of activities) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO local_prescribed_activities (
+         id, plan_id, title, description, category, frequency, status, last_completed_at, sync_status, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'));`,
+      [
+        act.id,
+        act.planId,
+        act.title,
+        act.description,
+        act.category,
+        act.frequency,
+        act.status,
+        act.lastCompletedAt ?? null,
+        act.syncStatus ?? 'SYNCED',
+      ]
+    );
+  }
+}
+
+/**
+ * Retrieves prescribed activities for a plan or all active activities from local SQLite.
+ */
+export async function getLocalPrescribedActivities(
+  planId?: string
+): Promise<PrescribedActivity[]> {
+  const db = await getDatabase();
+  const rows = planId
+    ? await db.getAllAsync<LocalPrescribedActivityRecord>(
+        `SELECT id, plan_id, title, description, category, frequency, status, last_completed_at, sync_status
+         FROM local_prescribed_activities
+         WHERE plan_id = ?
+         ORDER BY id ASC;`,
+        [planId]
+      )
+    : await db.getAllAsync<LocalPrescribedActivityRecord>(
+        `SELECT id, plan_id, title, description, category, frequency, status, last_completed_at, sync_status
+         FROM local_prescribed_activities
+         ORDER BY id ASC;`
+      );
+
+  return rows.map((r) => ({
+    id: r.id,
+    planId: r.plan_id,
+    title: r.title,
+    description: r.description,
+    category: (r.category as ActivityCategory) || 'OTHER',
+    frequency: r.frequency,
+    status: (r.status as ActivityStatus) || 'PENDING',
+    lastCompletedAt: r.last_completed_at,
+    syncStatus: (r.sync_status as SyncStatus) || 'SYNCED',
+  }));
+}
+
+/**
+ * Updates an activity's completion status in local SQLite.
+ */
+export async function updateLocalActivityStatus(
+  activityId: string,
+  status: ActivityStatus,
+  syncStatus: SyncStatus = 'PENDING_UPLOAD'
+): Promise<PrescribedActivity | null> {
+  const db = await getDatabase();
+  const nowIso = status === 'COMPLETED' ? new Date().toISOString() : null;
+
+  await db.runAsync(
+    `UPDATE local_prescribed_activities
+     SET status = ?, last_completed_at = COALESCE(?, last_completed_at), sync_status = ?, updated_at = datetime('now')
+     WHERE id = ?;`,
+    [status, nowIso, syncStatus, activityId]
+  );
+
+  const updated = await db.getFirstAsync<LocalPrescribedActivityRecord>(
+    `SELECT id, plan_id, title, description, category, frequency, status, last_completed_at, sync_status
+     FROM local_prescribed_activities
+     WHERE id = ?;`,
+    [activityId]
+  );
+
+  if (!updated) return null;
+
+  return {
+    id: updated.id,
+    planId: updated.plan_id,
+    title: updated.title,
+    description: updated.description,
+    category: (updated.category as ActivityCategory) || 'OTHER',
+    frequency: updated.frequency,
+    status: (updated.status as ActivityStatus) || 'PENDING',
+    lastCompletedAt: updated.last_completed_at,
+    syncStatus: (updated.sync_status as SyncStatus) || 'SYNCED',
+  };
+}
+
+/**
+ * Marks a local activity as successfully synced with the server.
+ */
+export async function markLocalActivitySynced(activityId: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE local_prescribed_activities
+     SET sync_status = 'SYNCED', updated_at = datetime('now')
+     WHERE id = ?;`,
+    [activityId]
+  );
+}
+
 
