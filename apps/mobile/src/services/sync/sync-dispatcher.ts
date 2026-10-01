@@ -71,8 +71,9 @@ export class SyncDispatcher {
 
         try {
           const payload = JSON.parse(item.payload);
+          const method = item.method || 'POST';
           const res = await authClient.apiFetch(item.endpoint, {
-            method: 'POST',
+            method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });

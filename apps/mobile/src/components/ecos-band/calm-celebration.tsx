@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
@@ -141,6 +141,10 @@ export function CalmCelebration({ active, onFinish }: CalmCelebrationProps) {
   const containerOpacity = useSharedValue(0);
   const progress = useSharedValue(0);
 
+  const handleCompletion = useCallback(() => {
+    onFinishRef.current?.();
+  }, []);
+
   useEffect(() => {
     if (!active) {
       containerOpacity.value = 0;
@@ -212,11 +216,7 @@ export function CalmCelebration({ active, onFinish }: CalmCelebrationProps) {
       clearTimeout(b4_dub);
       clearTimeout(safetyTimer);
     };
-  }, [active]);
-
-  const handleCompletion = () => {
-    onFinishRef.current?.();
-  };
+  }, [active, containerOpacity, progress, handleCompletion]);
 
   const containerStyle = useAnimatedStyle(() => {
     return {
