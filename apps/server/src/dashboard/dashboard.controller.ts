@@ -35,7 +35,11 @@ export class DashboardController {
   @ApiOperation({
     summary: "Aggregated view for a patient's clinical header",
     description:
-      "Only the patient's current assigned therapist (RLS). One round trip with purpose-specific summaries of the next appointment, active treatment plan, latest biometrics, open alerts, pending activities, follow-up metadata, and shared-content metadata. Sensitive clinical bodies are excluded.",
+<<<<<<< Updated upstream
+      "Only the patient's current assigned therapist (RLS). One round trip: next appointment, active treatment plan, latest biometrics, open alerts, pending activities, recent notes, recent shared content.",
+=======
+      "Only the patient's current assigned therapist (RLS). One round trip with purpose-specific summaries of the next appointment, active treatment plan, latest biometrics, open alerts, activity counts and recent incomplete assignments, follow-up metadata, and shared-content metadata. Sensitive clinical bodies are excluded.",
+>>>>>>> Stashed changes
   })
   @ApiResponse({
     status: 200,

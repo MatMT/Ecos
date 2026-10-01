@@ -122,3 +122,15 @@ overview. It never invalidates appointments because editing a note does not
 alter appointment state. Failed writes retain form values; there is no autosave,
 ordinary delete, void UI, version history, activity assignment, treatment-plan
 editing, EmotionalJournal query, or AI generation.
+
+## Therapeutic activity assignment
+
+While Session Detail is in read mode, the current assigned therapist with
+`patient-activities.manage` can open the existing manual **Asignar actividad**
+dialog. The action creates an independent `StudentActivity` through the Phase
+7.3 contract and remains on the session page after success.
+
+`ClinicalNote` does not contain an activity assignment, activity picker, or
+activity fields in its create/update DTOs. No session-to-assignment relation,
+combined transaction, AI recommendation, notification, or automatic assignment
+is introduced by this contextual entry point.

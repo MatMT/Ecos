@@ -22,8 +22,14 @@ import { UpdateActivityDto } from './dto/update-activity.dto';
 import { ActivityResponseDto } from './dto/activity-response.dto';
 import { CreateStudentActivityDto } from './dto/create-student-activity.dto';
 import { StudentActivityResponseDto } from './dto/student-activity-response.dto';
+<<<<<<< Updated upstream
+=======
 import { ActivityCatalogListQueryDto } from './dto/activity-catalog-list-query.dto';
 import { ActivityCatalogListResponseDto } from './dto/activity-catalog-list-response.dto';
+import { PatientActivityAssignmentListQueryDto } from './dto/patient-activity-assignment-list-query.dto';
+import { PatientActivityAssignmentListResponseDto } from './dto/patient-activity-assignment-list-response.dto';
+import { PatientActivityAssignmentDetailResponseDto } from './dto/patient-activity-assignment-detail-response.dto';
+>>>>>>> Stashed changes
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -134,6 +140,14 @@ export class ActivitiesController {
     type: StudentActivityResponseDto,
   })
   @ApiResponse({
+    status: 400,
+    description: 'The editable assignment payload is invalid.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Only psychologists can assign patient activities.',
+  })
+  @ApiResponse({
     status: 404,
     description: 'The patient or the activity does not exist.',
   })
@@ -150,22 +164,56 @@ export class ActivitiesController {
   }
 
   @Get('students/:studentId/activities')
+  @UseGuards(RolesGuard)
+  @Roles(Role.psychologist)
   @ApiOperation({ summary: "List a patient's assigned activities" })
   @ApiResponse({
     status: 200,
     description: 'Assignments, most recently assigned first.',
-    type: [StudentActivityResponseDto],
+    type: PatientActivityAssignmentListResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'The caller does not have patient-activity permissions.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'The patient does not exist or is not visible to the caller.',
   })
   findByStudent(
     @Param('studentId', ParseIntPipe) studentId: number,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
+    @Query() query: PatientActivityAssignmentListQueryDto,
   ) {
-    return this.activitiesService.findByStudent(
-      studentId,
-      skip ? Number(skip) : undefined,
-      take ? Number(take) : undefined,
-    );
+    return this.activitiesService.findByStudent(studentId, query);
+  }
+
+  @Get('students/:studentId/activities/:assignmentId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.psychologist)
+  @ApiOperation({
+    summary: "Get a patient's assigned activity detail",
+    description:
+      'Only the current assigned therapist can access the assignment through the patient-qualified route.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Read-only assignment detail and current catalog content.',
+    type: PatientActivityAssignmentDetailResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Only psychologists can access patient activity details.',
+  })
+  @ApiResponse({
+    status: 404,
+    description:
+      'The patient or assignment does not exist, is not related, or is not visible to the caller.',
+  })
+  findOneByStudent(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Param('assignmentId', ParseIntPipe) assignmentId: number,
+  ) {
+    return this.activitiesService.findOneByStudent(studentId, assignmentId);
   }
 
   @Get('student-activities/:id')
