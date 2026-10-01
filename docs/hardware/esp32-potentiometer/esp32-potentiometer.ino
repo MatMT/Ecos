@@ -134,13 +134,6 @@ void loop() {
     dispositivoConectadoAnterior = dispositivoConectado;
   }
 
-  // Keep-alive de publicidad: si no hay enlace, asegurar que el radio siga transmitiendo
-  static unsigned long ultimaVerificacionAdv = 0;
-  if (!dispositivoConectado && (millis() - ultimaVerificacionAdv >= 2500)) {
-    ultimaVerificacionAdv = millis();
-    pServer->getAdvertising()->start();
-  }
-
   // 1. Lecturas analógicas de 12 bits
   int rawBpm = analogRead(pinPotBpm);
   int rawAct = analogRead(pinPotAct);
