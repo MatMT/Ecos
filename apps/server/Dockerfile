@@ -26,7 +26,7 @@ WORKDIR /app
 # Install dependencies based on the pruned lockfile and package.jsons
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy the actual source code of the pruned app
 COPY --from=builder /app/out/full/ .
