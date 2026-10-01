@@ -110,8 +110,8 @@ function PatientSessionsContent({ patientId }: { patientId: number }) {
   }, [pathname, router, searchParams])
 
   const response = sessionsQuery.data
-  const totalPages = Math.max(1, response?.meta.totalPages ?? 1)
-  const isPageOutOfRange = Boolean(response && response.meta.total > 0 && page > totalPages)
+  const totalPages = Math.max(1, response?.meta?.totalPages ?? 1)
+  const isPageOutOfRange = Boolean(response && (response.meta?.total ?? 0) > 0 && page > totalPages)
 
   useEffect(() => {
     if (isPageOutOfRange) {
@@ -164,7 +164,7 @@ function PatientSessionsContent({ patientId }: { patientId: number }) {
         description="Consulte las sesiones clínicas registradas en orden cronológico descendente."
         title="Sesiones"
       />
-      {response.data.length === 0 ? (
+      {(response?.data || []).length === 0 ? (
         <Card>
           <EmptyState
             action={
@@ -182,9 +182,8 @@ function PatientSessionsContent({ patientId }: { patientId: number }) {
       ) : (
         <>
           <SessionTimeline
-            patientId={patientId}
-            sessions={response.data}
-            timeZone={response.meta.institutionTimezone}
+            sessions={response?.data || []}
+            timeZone={response?.meta?.institutionTimezone || "America/El_Salvador"}
           />
           <PaginationControls
             pagination={{
@@ -193,7 +192,7 @@ function PatientSessionsContent({ patientId }: { patientId: number }) {
               page,
               pageSize: take,
               pageSizeOptions: SESSIONS_PAGE_SIZE_OPTIONS,
-              total: response.meta.total,
+              total: response?.meta?.total ?? ((response?.data || []).length),
             }}
           />
         </>
@@ -236,3 +235,4 @@ function SessionsContentSkeleton() {
     </div>
   )
 }
+

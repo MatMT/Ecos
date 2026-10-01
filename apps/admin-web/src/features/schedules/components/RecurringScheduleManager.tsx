@@ -42,7 +42,7 @@ export function RecurringScheduleManager({ therapistId }: RecurringScheduleManag
 
   const handlePreSave = () => {
     if (!dayOfWeek || !startTime || !endTime) return
-    const existing = schedules?.find((s: any) => s.dayOfWeek.toString() === dayOfWeek)
+    const existing = schedules?.find((s: unknown) => s.dayOfWeek.toString() === dayOfWeek)
     if (existing) {
       setConfirmReplaceId(existing.id)
     } else {
@@ -78,7 +78,7 @@ export function RecurringScheduleManager({ therapistId }: RecurringScheduleManag
             toast.success("Horario agregado")
             resetAndClose()
           },
-          onError: (err: any) => toast.error(err?.response?.data?.message || "Error al agregar horario"),
+          onError: (err: unknown) => toast.error(err?.response?.data?.message || "Error al agregar horario"),
         }
       )
     }
@@ -182,7 +182,7 @@ export function RecurringScheduleManager({ therapistId }: RecurringScheduleManag
           <div className="text-sm text-muted-foreground p-6 text-center">No tienes horarios configurados.</div>
         ) : (
           <div className="p-4 space-y-3">
-            {schedules?.map((schedule: any) => {
+            {schedules?.map((schedule: unknown) => {
               const dayLabel = DAYS_OF_WEEK.find((d) => d.value === schedule.dayOfWeek.toString())?.label
               return (
                 <div key={schedule.id} className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
@@ -228,3 +228,4 @@ export function RecurringScheduleManager({ therapistId }: RecurringScheduleManag
     </div>
   )
 }
+

@@ -30,6 +30,8 @@ interface AppointmentFilters {
   studentId?: number;
   doctorId?: string;
   status?: AppointmentStatus;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 @Injectable()
@@ -186,13 +188,22 @@ export class AppointmentsService {
   }
 
   findAll(filters: AppointmentFilters, skip = 0, take = 20) {
-    return this.prisma.withRls(async (tx) => {
-      const appointments = await tx.appointment.findMany({
-        where: {
-          studentId: filters.studentId,
-          doctorId: filters.doctorId,
-          status: filters.status,
-        },
+    const whereClause: Prisma.AppointmentWhereInput = {
+      studentId: filters.studentId,
+      doctorId: filters.doctorId,
+      status: filters.status,
+    };
+
+    if (filters.startDate || filters.endDate) {
+      whereClause.appointmentDate = {
+        ...(filters.startDate ? { gte: filters.startDate } : {}),
+        ...(filters.endDate ? { lte: filters.endDate } : {}),
+      };
+    }
+
+    return this.prisma.withRls((tx) =>
+      tx.appointment.findMany({
+        where: whereClause,
         include: {
           student: { include: { user: true } },
           doctor: true,

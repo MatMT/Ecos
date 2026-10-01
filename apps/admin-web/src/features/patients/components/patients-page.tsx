@@ -13,7 +13,7 @@ import Link from "next/link"
 import {
   ChevronLeft,
   ChevronRight,
-  Filter,
+
   Plus,
   Search,
   UserCheck,
@@ -32,12 +32,11 @@ import { AssignTherapistDialog } from "@/features/patients/components/AssignTher
 import type { PatientListItem } from "@/features/patients/types/patient.types"
 import { ApiError } from "@/lib/api"
 import {
-  PatientCard,
-  PatientCardsSkeleton,
+
 } from "@/features/patients/components/patient-card"
 import { usePatients } from "@/features/patients/hooks/use-patients"
 import { patientRoutes } from "@/features/patients/routes/patient-routes"
-import { INITIAL_PATIENTS_LIST_PARAMS } from "@/features/patients/types/patient.types"
+
 
 export function PatientsPage() {
   const [search, setSearch] = useState("")
@@ -265,3 +264,4 @@ export function PatientsPage() {
     </div>
   )
 }
+

@@ -53,7 +53,7 @@ export function RescheduleModal({ appointment, open, onOpenChange }: RescheduleM
           setDate("")
           setTimeIso("")
         },
-        onError: (err: any) => {
+        onError: (err: unknown) => {
           const msg = err?.response?.data?.message || "Ocurrió un error al reagendar la cita."
           toast.error(msg)
         }
@@ -134,3 +134,4 @@ export function RescheduleModal({ appointment, open, onOpenChange }: RescheduleM
     </Dialog>
   )
 }
+

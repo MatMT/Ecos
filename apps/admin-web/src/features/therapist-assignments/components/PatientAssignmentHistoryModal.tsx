@@ -76,7 +76,7 @@ export function PatientAssignmentHistoryModal({ patientId, onClose, therapists }
           setStartsAt(new Date().toISOString().split("T")[0])
           setEndsAt("")
         },
-        onError: (err: any) => {
+        onError: (err: unknown) => {
           toast.error(err?.response?.data?.message || "Ocurrió un error al asignar")
           setShowConfirm(false)
         }
@@ -231,3 +231,4 @@ export function PatientAssignmentHistoryModal({ patientId, onClose, therapists }
     </>
   )
 }
+

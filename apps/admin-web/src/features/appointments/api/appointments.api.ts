@@ -11,8 +11,11 @@ export interface FindAllAppointmentsParams extends QueryParams {
   studentId?: number
   doctorId?: string
   status?: string
+  startDate?: string
+  endDate?: string
   skip?: number
   take?: number
+  [key: string]: unknown
 }
 
 export const appointmentsApi = {

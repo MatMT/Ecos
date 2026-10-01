@@ -26,10 +26,18 @@ export function AppointmentsCalendar() {
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false)
   const session = useSession()
   
-  const { data: appointments, isLoading } = useAppointments({ skip: 0, take: 100 })
-
   const currentYear = currentDate.getFullYear()
   const currentMonth = currentDate.getMonth()
+
+  const startDate = new Date(currentYear, currentMonth, 1).toISOString()
+  const endDate = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59).toISOString()
+
+  const { data: appointments, isLoading } = useAppointments({ 
+    startDate,
+    endDate,
+    skip: 0, 
+    take: 100 
+  })
 
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1)
   const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0)
@@ -280,3 +288,4 @@ export function AppointmentsCalendar() {
     </div>
   )
 }
+

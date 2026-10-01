@@ -25,22 +25,35 @@ type CombinedPatientItem = {
   therapistId: string | null
   therapistName: string
   therapistSpecialty: string
-  rawPatient: any
+  rawPatient: unknown
 }
 
 export function AssignmentsManager() {
   const [searchPatient, setSearchPatient] = useState("")
   const [filterTherapistId, setFilterTherapistId] = useState("all")
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null)
+  
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
-  const { data: patients, isLoading: isLoadingPatients } = usePatients({ skip: 0, take: 100 })
+  const skip = (page - 1) * pageSize
+  const take = pageSize
+
+  const queryParams = {
+    skip,
+    take,
+    ...(searchPatient ? { search: searchPatient } : {}),
+    ...(filterTherapistId !== "all" && filterTherapistId !== "unassigned" ? { therapistId: filterTherapistId } : {})
+  }
+
+  const { data: patients, isLoading: isLoadingPatients } = usePatients(queryParams)
   const { data: therapists, isLoading: isLoadingTherapists } = useTherapists(0, 100)
 
   // Join patients with therapists
-  const combinedData: CombinedPatientItem[] = useMemo(() => {
+  const filteredData: CombinedPatientItem[] = useMemo(() => {
     if (!patients) return []
     
-    return patients.map(patient => {
+    let result = patients.map(patient => {
       const therapist = patient.assignedDoctorId 
         ? therapists?.find(t => t.userId === patient.assignedDoctorId) 
         : null
@@ -57,22 +70,14 @@ export function AssignmentsManager() {
         rawPatient: patient
       }
     })
-  }, [patients, therapists])
 
-  // Filter combined data
-  const filteredData = useMemo(() => {
-    return combinedData.filter(item => {
-      const matchPatient = item.name.toLowerCase().includes(searchPatient.toLowerCase()) ||
-                           item.studentCode.toLowerCase().includes(searchPatient.toLowerCase()) ||
-                           item.email.toLowerCase().includes(searchPatient.toLowerCase())
-      
-      const matchTherapist = filterTherapistId === "all" || 
-                             (filterTherapistId === "unassigned" && !item.therapistId) ||
-                             item.therapistId === filterTherapistId
+    // If "unassigned" filter is selected, we filter on the client since the API might not support `therapistId=null`
+    if (filterTherapistId === "unassigned") {
+      result = result.filter(item => !item.therapistId)
+    }
 
-      return matchPatient && matchTherapist
-    })
-  }, [combinedData, searchPatient, filterTherapistId])
+    return result
+  }, [patients, therapists, filterTherapistId])
 
   const columns: DataTableColumn<CombinedPatientItem>[] = [
     {
@@ -133,7 +138,7 @@ export function AssignmentsManager() {
           onChange={(e) => setSearchPatient(e.target.value)}
           className="max-w-sm"
         />
-        <Select value={filterTherapistId} onValueChange={setFilterTherapistId}>
+        <Select value={filterTherapistId} onValueChange={(val) => { setFilterTherapistId(val); setPage(1); }}>
           <SelectTrigger className="w-[280px]">
             <SelectValue placeholder={isLoadingTherapists ? "Cargando terapeutas..." : "Filtrar por terapeuta"} />
           </SelectTrigger>
@@ -155,6 +160,17 @@ export function AssignmentsManager() {
           data={filteredData}
           getRowId={(row) => row.id}
           isLoading={isLoadingPatients || isLoadingTherapists}
+          pagination={{
+            page,
+            pageSize,
+            total: patients?.length === pageSize ? page * pageSize + 1 : skip + (patients?.length || 0),
+            onPageChange: setPage,
+            onPageSizeChange: (size) => {
+              setPageSize(size)
+              setPage(1)
+            },
+            pageSizeOptions: [10, 20, 50],
+          }}
           emptyState={
             <div className="py-12 text-center text-sm text-muted-foreground">
               No se encontraron pacientes con esos filtros.

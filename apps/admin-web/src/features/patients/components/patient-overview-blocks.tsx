@@ -230,7 +230,7 @@ export function TreatmentPlan({ overview }: { overview: StudentOverview }) {
 }
 
 export function PendingActivities({ overview }: { overview: StudentOverview }) {
-  const recentActivities = overview.pendingActivities.slice(0, MAX_RECENT_ITEMS)
+  const recentActivities = (overview.pendingActivities || []).slice(0, MAX_RECENT_ITEMS)
 
   return (
     <OverviewSection
@@ -278,7 +278,7 @@ export function PendingActivities({ overview }: { overview: StudentOverview }) {
 }
 
 export function RecentFollowUp({ overview }: { overview: StudentOverview }) {
-  const recentFollowUps = overview.recentFollowUps.slice(0, MAX_RECENT_ITEMS)
+  const recentFollowUps = (overview.recentFollowUps || []).slice(0, MAX_RECENT_ITEMS)
 
   return (
     <OverviewSection icon={FileText} title="Seguimiento reciente">
@@ -322,7 +322,7 @@ export function RecentSharedContent({
 }: {
   overview: StudentOverview
 }) {
-  const recentContent = overview.recentSharedContent.slice(0, MAX_RECENT_ITEMS)
+  const recentContent = (overview.recentSharedContent || []).slice(0, MAX_RECENT_ITEMS)
 
   return (
     <OverviewSection icon={Share2} title="Contenido compartido reciente">

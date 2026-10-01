@@ -9,9 +9,11 @@ import { useSession } from "@/features/auth/hooks/use-session"
 import type { AppointmentResponse } from "../dto/appointments.dto"
 
 export function AppointmentsTable() {
-  const skip = 0
-  const take = 20
-  const session = useSession()
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+
+  const skip = (page - 1) * pageSize
+  const take = pageSize
 
   const { data, isLoading, error, refetch } = useAppointments({ skip, take })
 
@@ -134,6 +136,17 @@ export function AppointmentsTable() {
       data={data ?? []}
       getRowId={(row) => row.id}
       isLoading={isLoading}
+      pagination={{
+        page,
+        pageSize,
+        total: data?.length === pageSize ? page * pageSize + 1 : skip + (data?.length || 0),
+        onPageChange: setPage,
+        onPageSizeChange: (size) => {
+          setPageSize(size)
+          setPage(1)
+        },
+        pageSizeOptions: [10, 20, 50],
+      }}
       emptyState={
         <div className="py-12 text-center">
           <p className="text-muted-foreground">No hay citas registradas en el sistema.</p>

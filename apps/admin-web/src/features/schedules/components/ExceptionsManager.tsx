@@ -49,7 +49,7 @@ export function ExceptionsManager({ therapistId }: ExceptionsManagerProps) {
           setEndTime("")
           setIsOpen(false)
         },
-        onError: (err: any) => {
+        onError: (err: unknown) => {
           toast.error(err?.response?.data?.message || "Error al registrar excepción")
         },
       }
@@ -147,7 +147,7 @@ export function ExceptionsManager({ therapistId }: ExceptionsManagerProps) {
           <div className="text-sm text-muted-foreground p-6 text-center">No hay excepciones registradas.</div>
         ) : (
           <div className="p-4 space-y-3">
-            {exceptions?.map((exc: any) => (
+            {exceptions?.map((exc: unknown) => (
               <div key={exc.id} className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -181,3 +181,4 @@ export function ExceptionsManager({ therapistId }: ExceptionsManagerProps) {
     </div>
   )
 }
+

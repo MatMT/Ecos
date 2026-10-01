@@ -37,3 +37,5 @@ export const therapistsApi = {
     return api.patch(`/psychologists/${id}`, data);
   },
 };
+
+

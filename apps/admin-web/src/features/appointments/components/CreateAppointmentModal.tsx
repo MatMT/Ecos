@@ -19,6 +19,7 @@ interface CreateAppointmentModalProps {
 
 export function CreateAppointmentModal({ open, onOpenChange }: CreateAppointmentModalProps) {
   const [patientId, setPatientId] = useState<string>("")
+  const [patientSearch, setPatientSearch] = useState<string>("")
   const [therapistId, setTherapistId] = useState<string>("")
   const [date, setDate] = useState<string>("")
   // time will store the exact UTC ISO string from the slot start
@@ -27,7 +28,7 @@ export function CreateAppointmentModal({ open, onOpenChange }: CreateAppointment
   const [reason, setReason] = useState<string>("")
 
   // Fetch data
-  const { data: patientsResponse, isLoading: isLoadingPatients } = usePatients({ skip: 0, take: 100 })
+  const { data: patientsResponse, isLoading: isLoadingPatients } = usePatients({ skip: 0, take: 50, search: patientSearch })
   const { data: therapistsResponse, isLoading: isLoadingTherapists } = useTherapists(0, 100)
   const { data: availableSlots = [], isLoading: isLoadingSlots } = useAvailability(therapistId, date)
   
@@ -73,15 +74,16 @@ export function CreateAppointmentModal({ open, onOpenChange }: CreateAppointment
           
           // Reset form
           setPatientId("")
+          setPatientSearch("")
           setTherapistId("")
           setDate("")
           setTimeIso("")
           setModality("virtual")
           setReason("")
         },
-        onError: (err: any) => {
+        onError: (err: unknown) => {
           console.error("Error creating appointment:", err)
-          const errorMsg = err?.response?.data?.message || err?.message || "Ocurrió un error al agendar la cita. Verifica la disponibilidad del terapeuta."
+          const errorMsg = (err as Error)?.response?.data?.message || (err as Error)?.message || "Ocurrió un error al agendar la cita. Verifica la disponibilidad del terapeuta."
           toast.error(errorMsg)
         }
       }
@@ -104,7 +106,15 @@ export function CreateAppointmentModal({ open, onOpenChange }: CreateAppointment
 
         <div className="space-y-4 py-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Paciente *</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">Paciente *</label>
+              <Input 
+                placeholder="Buscar..." 
+                className="h-6 w-32 text-xs" 
+                value={patientSearch}
+                onChange={e => setPatientSearch(e.target.value)}
+              />
+            </div>
             <Select value={patientId} onValueChange={setPatientId} disabled={isLoadingPatients}>
               <SelectTrigger>
                 <SelectValue placeholder={isLoadingPatients ? "Cargando..." : "Selecciona un paciente"} />
@@ -213,3 +223,5 @@ export function CreateAppointmentModal({ open, onOpenChange }: CreateAppointment
     </Dialog>
   )
 }
+
+
