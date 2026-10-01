@@ -297,13 +297,7 @@ describe('ActivitiesService', () => {
       });
       expect(result).toEqual({ id: 1 });
     });
-  });
 
-<<<<<<< Updated upstream
-  describe('updateAssignment', () => {
-    it('throws NotFoundException when the assignment does not exist', async () => {
-      tx.studentActivity.findUnique.mockResolvedValue(null);
-=======
     it('persists an optional ISO deadline without changing server-owned fields', async () => {
       tx.studentProfile.findUnique.mockResolvedValue({ id: 8 });
       tx.activity.findUnique.mockResolvedValue({ id: 3, active: true });
@@ -329,54 +323,16 @@ describe('ActivitiesService', () => {
     it('rejects an inactive activity', async () => {
       tx.studentProfile.findUnique.mockResolvedValue({ id: 8 });
       tx.activity.findUnique.mockResolvedValue({ id: 3, active: false });
->>>>>>> Stashed changes
 
       await expect(
-        service.updateAssignment(1, { status: 'completed' }),
-      ).rejects.toThrow(NotFoundException);
+        service.assign(8, dto, CURRENT_USER),
+      ).rejects.toThrow(ConflictException);
+
+      expect(tx.studentActivity.create).not.toHaveBeenCalled();
     });
+  });
 
-    it('sets completedAt when transitioning to completed', async () => {
-      tx.studentActivity.findUnique.mockResolvedValue({
-        id: 1,
-        status: 'pending',
-      });
-      tx.studentActivity.update.mockResolvedValue({
-        id: 1,
-        status: 'completed',
-      });
-
-      await service.updateAssignment(1, { status: 'completed' });
-
-      expect(tx.studentActivity.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: expect.objectContaining({
-          status: 'completed',
-          completedAt: expect.any(Date) as unknown,
-        }) as unknown,
-      });
-    });
-
-    it('does not re-set completedAt when already completed', async () => {
-      tx.studentActivity.findUnique.mockResolvedValue({
-        id: 1,
-        status: 'completed',
-      });
-      tx.studentActivity.update.mockResolvedValue({
-        id: 1,
-        status: 'completed',
-      });
-
-      await service.updateAssignment(1, { response: 'Listo' });
-
-      expect(tx.studentActivity.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: expect.objectContaining({
-          completedAt: undefined,
-        }) as unknown,
-      });
-    });
-
+  describe('findOneByStudent', () => {
     it('returns NotFoundException when RLS hides the patient', async () => {
       tx.studentProfile.findUnique.mockResolvedValue(null);
 

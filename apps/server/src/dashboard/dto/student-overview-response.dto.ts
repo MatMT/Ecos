@@ -29,8 +29,6 @@ export class OverviewTherapistDto {
 
   @ApiPropertyOptional({ nullable: true })
   email!: string | null;
-<<<<<<< Updated upstream
-=======
 
   @ApiPropertyOptional({ nullable: true })
   specialty!: string | null;
@@ -190,7 +188,6 @@ export class OverviewSharedContentDto {
 
   @ApiProperty()
   sharedAt!: Date;
->>>>>>> Stashed changes
 }
 
 export class StudentOverviewResponseDto {
@@ -215,10 +212,6 @@ export class StudentOverviewResponseDto {
   @ApiProperty({ type: OverviewAlertsSummaryDto })
   alertsSummary!: OverviewAlertsSummaryDto;
 
-<<<<<<< Updated upstream
-  @ApiProperty({ type: [StudentActivityResponseDto] })
-  pendingActivities!: StudentActivityResponseDto[];
-=======
   @ApiProperty({ type: OverviewActivitiesSummaryDto })
   activitiesSummary!: OverviewActivitiesSummaryDto;
 
@@ -228,7 +221,6 @@ export class StudentOverviewResponseDto {
     description: 'Deprecated compatibility field. Use activitiesSummary.',
   })
   pendingActivities!: OverviewActivityDto[];
->>>>>>> Stashed changes
 
   @ApiProperty({ type: [OverviewFollowUpDto] })
   recentFollowUps!: OverviewFollowUpDto[];

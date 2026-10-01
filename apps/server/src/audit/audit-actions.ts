@@ -8,13 +8,10 @@ export type AuditAction =
   | 'ALERT_REVIEWED'
   | 'ALERT_CLOSED'
   | 'ALERT_ACTION_CREATED'
-<<<<<<< Updated upstream
-=======
   | 'ACTIVITY_CREATED'
   | 'ACTIVITY_UPDATED'
   | 'ACTIVITY_ACTIVATED'
   | 'ACTIVITY_DEACTIVATED'
   | 'ACTIVITY_ASSIGNED'
->>>>>>> Stashed changes
   | 'SHARED_CONTENT_VIEWED'
   | 'THERAPIST_ASSIGNED';

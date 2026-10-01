@@ -24,15 +24,12 @@ const OPEN_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.pending,
   AppointmentStatus.confirmed,
 ];
-<<<<<<< Updated upstream
-=======
 const OPEN_ALERT_STATUSES: AlertStatus[] = [
   AlertStatus.new,
   AlertStatus.reviewed,
   AlertStatus.in_follow_up,
 ];
 const INCOMPLETE_ACTIVITY_STATUSES: string[] = ['pending', 'in_progress'];
->>>>>>> Stashed changes
 
 function todayIsoDate(timezone: string): string {
   const iso = DateTime.now().setZone(timezone).toISODate();
@@ -108,11 +105,6 @@ export class DashboardService {
         nextAppointment,
         activeTreatmentPlan,
         recentBiometricSummary,
-<<<<<<< Updated upstream
-        openAlerts,
-        pendingActivities,
-        recentClinicalNotes,
-=======
         openAlertsCount,
         recentOpenAlerts,
         [
@@ -121,7 +113,6 @@ export class DashboardService {
           recentIncompleteActivities,
         ],
         recentFollowUps,
->>>>>>> Stashed changes
         recentSharedContent,
       ] = await Promise.all([
         tx.appointment.findFirst({
@@ -183,15 +174,7 @@ export class DashboardService {
             createdAt: true,
           },
         }),
-<<<<<<< Updated upstream
-        tx.studentActivity.findMany({
-          where: { studentId, status: { not: 'completed' } },
-          orderBy: { assignedAt: 'desc' },
-          take: RECENT_TAKE,
-        }),
-=======
         activitiesSummaryPromise,
->>>>>>> Stashed changes
         tx.clinicalNote.findMany({
           where: { studentId, voidedAt: null },
           orderBy: [
@@ -240,45 +223,6 @@ export class DashboardService {
                 profile.assignedDoctor.psychologistProfile?.specialty ?? null,
             }
           : null,
-        nextAppointment: nextAppointment
-          ? {
-              id: nextAppointment.id,
-              appointmentDate: nextAppointment.appointmentDate,
-              endAt: nextAppointment.endAt,
-              durationMinutes: nextAppointment.durationMinutes,
-              sessionType: nextAppointment.sessionType,
-              modality: nextAppointment.modality,
-              status: nextAppointment.status,
-            }
-          : null,
-        activeTreatmentPlan: activeTreatmentPlan
-          ? {
-              id: activeTreatmentPlan.id,
-              title: activeTreatmentPlan.title,
-              generalGoal: activeTreatmentPlan.generalGoal,
-              startsAt: activeTreatmentPlan.startsAt,
-              endsAt: activeTreatmentPlan.endsAt,
-              status: activeTreatmentPlan.status,
-            }
-          : null,
-        recentBiometricSummary: recentBiometricSummary
-          ? {
-              id: recentBiometricSummary.id,
-              avgHeartRate: recentBiometricSummary.avgHeartRate,
-              stressLevel: recentBiometricSummary.stressLevel,
-              bloodOxygen: recentBiometricSummary.bloodOxygen,
-              timestamp: recentBiometricSummary.timestamp,
-            }
-          : null,
-<<<<<<< Updated upstream
-        nextAppointment,
-        activeTreatmentPlan,
-        recentBiometricSummary,
-        openAlerts,
-        pendingActivities,
-        recentClinicalNotes,
-        recentSharedContent,
-=======
         nextAppointment: nextAppointment
           ? {
               id: nextAppointment.id,
@@ -362,7 +306,6 @@ export class DashboardService {
           contentType: content.contentType,
           sharedAt: content.sharedAt,
         })),
->>>>>>> Stashed changes
       };
     });
   }

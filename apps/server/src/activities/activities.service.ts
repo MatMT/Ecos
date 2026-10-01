@@ -11,13 +11,9 @@ import type { RequestUser } from '../common/decorators/current-user.decorator';
 import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
 import { CreateStudentActivityDto } from './dto/create-student-activity.dto';
-<<<<<<< Updated upstream
-import { UpdateStudentActivityDto } from './dto/update-student-activity.dto';
-=======
 import { ActivityCatalogListQueryDto } from './dto/activity-catalog-list-query.dto';
 import { PatientActivityAssignmentListQueryDto } from './dto/patient-activity-assignment-list-query.dto';
 import { PatientActivityAssignmentDetailResponseDto } from './dto/patient-activity-assignment-detail-response.dto';
->>>>>>> Stashed changes
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_TIMEZONE = 'America/El_Salvador';

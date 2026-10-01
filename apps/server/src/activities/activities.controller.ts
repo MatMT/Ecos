@@ -22,14 +22,11 @@ import { UpdateActivityDto } from './dto/update-activity.dto';
 import { ActivityResponseDto } from './dto/activity-response.dto';
 import { CreateStudentActivityDto } from './dto/create-student-activity.dto';
 import { StudentActivityResponseDto } from './dto/student-activity-response.dto';
-<<<<<<< Updated upstream
-=======
 import { ActivityCatalogListQueryDto } from './dto/activity-catalog-list-query.dto';
 import { ActivityCatalogListResponseDto } from './dto/activity-catalog-list-response.dto';
 import { PatientActivityAssignmentListQueryDto } from './dto/patient-activity-assignment-list-query.dto';
 import { PatientActivityAssignmentListResponseDto } from './dto/patient-activity-assignment-list-response.dto';
 import { PatientActivityAssignmentDetailResponseDto } from './dto/patient-activity-assignment-detail-response.dto';
->>>>>>> Stashed changes
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';

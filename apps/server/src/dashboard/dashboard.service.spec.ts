@@ -15,13 +15,8 @@ describe('DashboardService', () => {
     };
     treatmentPlan: { findFirst: jest.Mock };
     biometricRecord: { findFirst: jest.Mock };
-<<<<<<< Updated upstream
-    alert: { findMany: jest.Mock };
-    studentActivity: { findMany: jest.Mock };
-=======
     alert: { count: jest.Mock; findMany: jest.Mock };
     studentActivity: { count: jest.Mock; findMany: jest.Mock };
->>>>>>> Stashed changes
     clinicalNote: { findMany: jest.Mock };
     sharedPatientContent: { findMany: jest.Mock };
     alertAction: { findMany: jest.Mock };
@@ -48,13 +43,8 @@ describe('DashboardService', () => {
       },
       treatmentPlan: { findFirst: jest.fn() },
       biometricRecord: { findFirst: jest.fn() },
-<<<<<<< Updated upstream
-      alert: { findMany: jest.fn() },
-      studentActivity: { findMany: jest.fn() },
-=======
       alert: { count: jest.fn(), findMany: jest.fn() },
       studentActivity: { count: jest.fn(), findMany: jest.fn() },
->>>>>>> Stashed changes
       clinicalNote: { findMany: jest.fn() },
       sharedPatientContent: { findMany: jest.fn() },
       alertAction: { findMany: jest.fn() },
@@ -102,12 +92,18 @@ describe('DashboardService', () => {
       tx.studentProfile.findUnique.mockResolvedValue({
         id: 8,
         studentCode: 'STU-1',
-        primaryDiagnosis: null,
-        user: { fullName: 'Ana', email: 'ana@example.com' },
-        assignedDoctor: { id: 'doc-uuid', fullName: 'Dr. X', email: 'x@e.com' },
+        user: {
+          fullName: 'Ana',
+          email: 'ana@example.com',
+          institution: { timezone: 'America/Guatemala' },
+        },
+        assignedDoctor: {
+          id: 'doc-uuid',
+          fullName: 'Dra. X',
+          email: 'x@e.com',
+          psychologistProfile: { specialty: 'Terapia familiar' },
+        },
       });
-<<<<<<< Updated upstream
-=======
       tx.studentActivity.findMany.mockResolvedValue([
         {
           id: 21,
@@ -178,7 +174,6 @@ describe('DashboardService', () => {
           sharedAt: new Date('2026-09-03T10:00:00.000Z'),
         },
       ]);
->>>>>>> Stashed changes
 
       const result = await service.getStudentOverview(8);
 
@@ -195,9 +190,6 @@ describe('DashboardService', () => {
         email: 'x@e.com',
         specialty: 'Terapia familiar',
       });
-<<<<<<< Updated upstream
-      expect(result.openAlerts).toEqual([]);
-=======
       expect(result.pendingActivities).toEqual([
         {
           id: 21,
@@ -440,7 +432,6 @@ describe('DashboardService', () => {
       const result = await service.getStudentOverview(8);
 
       expect(result.institutionTimezone).toBe('America/El_Salvador');
->>>>>>> Stashed changes
     });
 
     it('excludes completed assignments from the incomplete summary', async () => {
