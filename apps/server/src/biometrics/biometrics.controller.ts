@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -17,14 +18,18 @@ import {
 import { BiometricsService } from './biometrics.service';
 import { BandDeviceResponseDto } from './dto/band-device-response.dto';
 import { BiometricRecordResponseDto } from './dto/biometric-record-response.dto';
+import { BiometricRecordListQueryDto } from './dto/biometric-record-list-query.dto';
+import { BiometricRecordListResponseDto } from './dto/biometric-record-list-response.dto';
+import { BiometricSummaryQueryDto } from './dto/biometric-summary-query.dto';
+import { BiometricSummaryResponseDto } from './dto/biometric-summary-response.dto';
 import { BiometricTrendPointDto } from './dto/biometric-trend-point.dto';
 import { CreateBiometricSummaryDto } from './dto/create-biometric-summary.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Role } from '@prisma/client';
 
-// No @Roles guard anywhere here: every route is scoped by the existing
-// can_access_student_profile-based RLS on remote_band_devices/remote_biometric_records
-// (self/assigned-doctor/admin), unchanged by this phase.
 @ApiTags('biometrics')
 @ApiBearerAuth()
 @Controller()
@@ -61,27 +66,59 @@ export class BiometricsController {
   }
 
   @Get('students/:studentId/biometrics')
-  @ApiOperation({ summary: "List a patient's biometric readings" })
-  @ApiQuery({ name: 'from', required: false, description: 'ISO 8601' })
-  @ApiQuery({ name: 'to', required: false, description: 'ISO 8601' })
+  @UseGuards(RolesGuard)
+  @Roles(Role.psychologist, Role.student)
+  @ApiOperation({
+    summary: "List a patient's synchronized biometric records",
+    description:
+      'Returns a privacy-minimized, paginated history and a latest-record summary independent of pagination.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Readings, most recent first.',
-    type: [BiometricRecordResponseDto],
+    description: 'Paginated biometric records, ordered by record timestamp.',
+    type: BiometricRecordListResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'The caller is not a psychologist or student.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'The patient does not exist or is not visible to the caller.',
   })
   findRecords(
     @Param('studentId', ParseIntPipe) studentId: number,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
+    @Query() query: BiometricRecordListQueryDto,
   ) {
-    return this.biometricsService.findRecords(
-      studentId,
-      { from, to },
-      skip ? Number(skip) : undefined,
-      take ? Number(take) : undefined,
-    );
+    return this.biometricsService.findRecords(studentId, query);
+  }
+
+  @Get('students/:studentId/biometrics/summary')
+  @UseGuards(RolesGuard)
+  @Roles(Role.psychologist, Role.student)
+  @ApiOperation({
+    summary: "Get a patient's descriptive biometric summary for a preset range",
+    description:
+      'Returns aggregated synchronized biometric data without exposing individual records outside the selected range.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Descriptive biometric summary and chronological series.',
+    type: BiometricSummaryResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'The caller is not a psychologist or student.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'The patient does not exist or is not visible to the caller.',
+  })
+  findSummary(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Query() query: BiometricSummaryQueryDto,
+  ) {
+    return this.biometricsService.findSummary(studentId, query);
   }
 
   @Get('students/:studentId/biometrics/latest')
@@ -100,6 +137,8 @@ export class BiometricsController {
   }
 
   @Get('students/:studentId/biometrics/trends')
+  @UseGuards(RolesGuard)
+  @Roles(Role.psychologist, Role.student)
   @ApiOperation({
     summary: "Daily-bucketed trends for a patient's biometrics",
     description: 'Defaults to the last 30 days when from/to are omitted.',
@@ -110,6 +149,10 @@ export class BiometricsController {
     status: 200,
     description: 'Daily averages, ascending.',
     type: [BiometricTrendPointDto],
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'The caller is not a psychologist or student.',
   })
   findTrends(
     @Param('studentId', ParseIntPipe) studentId: number,

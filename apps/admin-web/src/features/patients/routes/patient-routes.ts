@@ -17,6 +17,8 @@ export const patientRoutes = {
   sharedContent: (patientId: number) => `/patients/${patientId}/shared-content`,
   treatmentPlan: (patientId: number) => `/patients/${patientId}/treatment-plan`,
   alerts: (patientId: number) => `/patients/${patientId}/alerts`,
+  alertDetail: (patientId: number, alertId: number) =>
+    `/patients/${patientId}/alerts/${alertId}`,
 } as const
 
 export type PatientRouteSection = "overview" | "clinicalRecord" | "sessions" | "appointments" | "biometrics" | "alerts" | "treatmentPlan" | "activities" | "sharedContent"

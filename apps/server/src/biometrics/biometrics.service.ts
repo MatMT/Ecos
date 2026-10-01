@@ -3,12 +3,50 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
 import { CreateBiometricSummaryDto } from './dto/create-biometric-summary.dto';
+import {
+  BIOMETRIC_RANGE_KEYS,
+  type BiometricRangeKey,
+} from './dto/biometric-range.dto';
+import { BiometricRecordListQueryDto } from './dto/biometric-record-list-query.dto';
+import { BiometricSummaryQueryDto } from './dto/biometric-summary-query.dto';
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_TRENDS_RANGE_DAYS = 30;
+const DEFAULT_TIMEZONE = 'America/El_Salvador';
+const DEFAULT_SUMMARY_RANGE: BiometricRangeKey = '7d';
+const HOUR_IN_MILLISECONDS = 60 * 60 * 1000;
+
+interface ResolvedBiometricRange {
+  bucket: 'hour' | 'day';
+  from: Date;
+  key: BiometricRangeKey;
+  to: Date;
+}
+
+interface BiometricSummaryRawRow {
+  avgHeartRateAverage: number | null;
+  avgHeartRateCount: bigint | number;
+  avgHeartRateMaximum: number | null;
+  avgHeartRateMinimum: number | null;
+  bloodOxygenAverage: number | null;
+  bloodOxygenCount: bigint | number;
+  bloodOxygenMaximum: number | null;
+  bloodOxygenMinimum: number | null;
+  sampleCount: bigint | number;
+  seriesAvgHeartRate: number | null;
+  seriesBloodOxygen: number | null;
+  seriesSampleCount: bigint | number | null;
+  seriesStressLevel: number | null;
+  stressLevelAverage: number | null;
+  stressLevelCount: bigint | number;
+  stressLevelMaximum: number | null;
+  stressLevelMinimum: number | null;
+  timestamp: Date | null;
+}
 
 interface DateRange {
   from?: string;
@@ -79,18 +117,191 @@ export class BiometricsService {
     );
   }
 
-  findRecords(studentId: number, range: DateRange, skip = 0, take = 20) {
-    return this.prisma.withRls((tx) =>
-      tx.biometricRecord.findMany({
-        where: {
-          device: { studentId },
-          timestamp: buildTimestampFilter(range),
+  async findRecords(studentId: number, query: BiometricRecordListQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = Math.min(query.take ?? 20, MAX_PAGE_SIZE);
+    const range = resolveBiometricRange(query.range);
+
+    return this.prisma.withRls(async (tx) => {
+      const patient = await tx.studentProfile.findUnique({
+        where: { id: studentId },
+        select: {
+          user: {
+            select: {
+              institution: { select: { timezone: true } },
+            },
+          },
         },
-        skip,
-        take: Math.min(take, MAX_PAGE_SIZE),
-        orderBy: { timestamp: 'desc' },
-      }),
-    );
+      });
+
+      if (!patient) {
+        throw new NotFoundException(
+          'No se ha encontrado el paciente solicitado.',
+        );
+      }
+
+      const select = {
+        id: true,
+        avgHeartRate: true,
+        stressLevel: true,
+        bloodOxygen: true,
+        timestamp: true,
+        createdAt: true,
+      };
+      const allTimeWhere: Prisma.BiometricRecordWhereInput = {
+        device: { studentId },
+      };
+      const where: Prisma.BiometricRecordWhereInput = {
+        ...allTimeWhere,
+        timestamp: { gte: range.from, lt: range.to },
+      };
+      const orderBy = [
+        { timestamp: { sort: 'desc' as const, nulls: 'last' as const } },
+        { createdAt: 'desc' as const },
+        { id: 'desc' as const },
+      ];
+
+      const [latest, data, total] = await Promise.all([
+        tx.biometricRecord.findFirst({
+          where: allTimeWhere,
+          orderBy,
+          select,
+        }),
+        tx.biometricRecord.findMany({ where, skip, take, orderBy, select }),
+        tx.biometricRecord.count({ where }),
+      ]);
+
+      return {
+        latest,
+        data,
+        meta: {
+          skip,
+          take,
+          total,
+          totalPages: Math.ceil(total / take),
+          institutionTimezone:
+            patient.user.institution?.timezone ?? DEFAULT_TIMEZONE,
+        },
+      };
+    });
+  }
+
+  async findSummary(studentId: number, query: BiometricSummaryQueryDto) {
+    const range = resolveBiometricRange(query.range);
+
+    return this.prisma.withRls(async (tx) => {
+      const patient = await tx.studentProfile.findUnique({
+        where: { id: studentId },
+        select: {
+          user: {
+            select: {
+              institution: { select: { timezone: true } },
+            },
+          },
+        },
+      });
+
+      if (!patient) {
+        throw new NotFoundException(
+          'No se ha encontrado el paciente solicitado.',
+        );
+      }
+
+      const institutionTimezone =
+        patient.user.institution?.timezone ?? DEFAULT_TIMEZONE;
+      const rows = await tx.$queryRaw<BiometricSummaryRawRow[]>`
+        WITH filtered_records AS (
+          SELECT
+            record."timestamp",
+            record.avg_heart_rate,
+            record.stress_level,
+            record.blood_oxygen
+          FROM public.remote_biometric_records AS record
+          INNER JOIN public.remote_band_devices AS device
+            ON device.id = record.device_id
+          WHERE device.student_id = ${studentId}
+            AND record."timestamp" IS NOT NULL
+            AND record."timestamp" >= ${range.from}
+            AND record."timestamp" < ${range.to}
+        ),
+        summary AS (
+          SELECT
+            COUNT(*) AS "sampleCount",
+            COUNT(avg_heart_rate) AS "avgHeartRateCount",
+            AVG(avg_heart_rate)::double precision AS "avgHeartRateAverage",
+            MIN(avg_heart_rate)::double precision AS "avgHeartRateMinimum",
+            MAX(avg_heart_rate)::double precision AS "avgHeartRateMaximum",
+            COUNT(stress_level) AS "stressLevelCount",
+            AVG(stress_level)::double precision AS "stressLevelAverage",
+            MIN(stress_level)::double precision AS "stressLevelMinimum",
+            MAX(stress_level)::double precision AS "stressLevelMaximum",
+            COUNT(blood_oxygen) AS "bloodOxygenCount",
+            AVG(blood_oxygen)::double precision AS "bloodOxygenAverage",
+            MIN(blood_oxygen)::double precision AS "bloodOxygenMinimum",
+            MAX(blood_oxygen)::double precision AS "bloodOxygenMaximum"
+          FROM filtered_records
+        ),
+        series AS (
+          SELECT
+            (
+              date_trunc(
+                ${range.bucket}::text,
+                ("timestamp" AT TIME ZONE 'UTC') AT TIME ZONE ${institutionTimezone}
+              ) AT TIME ZONE ${institutionTimezone}
+            ) AS "timestamp",
+            COUNT(*) AS "seriesSampleCount",
+            AVG(avg_heart_rate)::double precision AS "seriesAvgHeartRate",
+            AVG(stress_level)::double precision AS "seriesStressLevel",
+            AVG(blood_oxygen)::double precision AS "seriesBloodOxygen"
+          FROM filtered_records
+          GROUP BY 1
+        )
+        SELECT
+          summary.*,
+          series."timestamp",
+          series."seriesSampleCount",
+          series."seriesAvgHeartRate",
+          series."seriesStressLevel",
+          series."seriesBloodOxygen"
+        FROM summary
+        LEFT JOIN series ON TRUE
+        ORDER BY series."timestamp" ASC
+      `;
+
+      const firstRow = rows[0];
+      if (!firstRow) {
+        throw new Error('La agregación biométrica no produjo una respuesta.');
+      }
+
+      return {
+        range: {
+          key: range.key,
+          from: range.from,
+          to: range.to,
+          bucket: range.bucket,
+          institutionTimezone,
+        },
+        sampleCount: toNumber(firstRow.sampleCount),
+        metrics: {
+          avgHeartRate: toMetricSummary(firstRow, 'avgHeartRate'),
+          stressLevel: toMetricSummary(firstRow, 'stressLevel'),
+          bloodOxygen: toMetricSummary(firstRow, 'bloodOxygen'),
+        },
+        series: rows.flatMap((row) =>
+          row.timestamp === null || row.seriesSampleCount === null
+            ? []
+            : [
+                {
+                  timestamp: row.timestamp,
+                  sampleCount: toNumber(row.seriesSampleCount),
+                  avgHeartRate: row.seriesAvgHeartRate,
+                  stressLevel: row.seriesStressLevel,
+                  bloodOxygen: row.seriesBloodOxygen,
+                },
+              ],
+        ),
+      };
+    });
   }
 
   async findLatest(studentId: number) {
@@ -193,10 +404,71 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function buildTimestampFilter(range: DateRange) {
-  if (!range.from && !range.to) return undefined;
+function resolveBiometricRange(
+  rangeKey: BiometricRangeKey | undefined,
+): ResolvedBiometricRange {
+  const key = rangeKey ?? DEFAULT_SUMMARY_RANGE;
+  if (!BIOMETRIC_RANGE_KEYS.includes(key)) {
+    throw new BadRequestException(
+      'El período biométrico solicitado no es válido.',
+    );
+  }
+
+  const hoursByRange: Record<BiometricRangeKey, number> = {
+    '24h': 24,
+    '7d': 7 * 24,
+    '30d': 30 * 24,
+    '90d': 90 * 24,
+  };
+  const to = new Date();
+
   return {
-    gte: range.from ? new Date(range.from) : undefined,
-    lte: range.to ? new Date(range.to) : undefined,
+    key,
+    from: new Date(to.getTime() - hoursByRange[key] * HOUR_IN_MILLISECONDS),
+    to,
+    bucket: key === '24h' ? 'hour' : 'day',
+  };
+}
+
+function toNumber(value: bigint | number): number {
+  return typeof value === 'bigint' ? Number(value) : value;
+}
+
+function toMetricSummary(
+  row: BiometricSummaryRawRow,
+  metric: 'avgHeartRate' | 'stressLevel' | 'bloodOxygen',
+) {
+  const values = {
+    avgHeartRate: {
+      count: row.avgHeartRateCount,
+      average: row.avgHeartRateAverage,
+      minimum: row.avgHeartRateMinimum,
+      maximum: row.avgHeartRateMaximum,
+    },
+    stressLevel: {
+      count: row.stressLevelCount,
+      average: row.stressLevelAverage,
+      minimum: row.stressLevelMinimum,
+      maximum: row.stressLevelMaximum,
+    },
+    bloodOxygen: {
+      count: row.bloodOxygenCount,
+      average: row.bloodOxygenAverage,
+      minimum: row.bloodOxygenMinimum,
+      maximum: row.bloodOxygenMaximum,
+    },
+  } satisfies Record<
+    'avgHeartRate' | 'stressLevel' | 'bloodOxygen',
+    {
+      average: number | null;
+      count: bigint | number;
+      maximum: number | null;
+      minimum: number | null;
+    }
+  >;
+
+  return {
+    ...values[metric],
+    count: toNumber(values[metric].count),
   };
 }

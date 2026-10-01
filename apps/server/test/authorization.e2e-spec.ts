@@ -541,6 +541,46 @@ describe('Authorization (RLS) e2e', () => {
       expect(asAdmin).toHaveLength(0);
     });
 
+    it('remote_alerts: the patient-qualified detail lookup is visible only to the assigned doctor', async () => {
+      const asDoctor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) =>
+          tx.alert.findFirst({
+            where: {
+              id: fixture.alertA.id,
+              studentId: fixture.studentA.profileId,
+            },
+          }),
+      );
+      const asUnrelated = await withRlsAs(
+        fixture.psychA2.id,
+        'authenticated',
+        (tx) =>
+          tx.alert.findFirst({
+            where: {
+              id: fixture.alertA.id,
+              studentId: fixture.studentA.profileId,
+            },
+          }),
+      );
+      const asAdmin = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.alert.findFirst({
+            where: {
+              id: fixture.alertA.id,
+              studentId: fixture.studentA.profileId,
+            },
+          }),
+      );
+
+      expect(asDoctor?.id).toBe(fixture.alertA.id);
+      expect(asUnrelated).toBeNull();
+      expect(asAdmin).toBeNull();
+    });
+
     it('remote_alerts: an unrelated psychologist and a different institution cannot read', async () => {
       const asUnrelated = await withRlsAs(
         fixture.psychA2.id,
@@ -743,6 +783,46 @@ describe('Authorization (RLS) e2e', () => {
       );
       expect(asDoctor.length).toBeGreaterThan(0);
       expect(asUnrelated).toHaveLength(0);
+    });
+
+    it('remote_student_activities: only the current assigned therapist can read assignments', async () => {
+      const asDoctor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) =>
+          tx.studentActivity.findUnique({
+            where: { id: fixture.studentActivityA.id },
+          }),
+      );
+      const asUnrelated = await withRlsAs(
+        fixture.psychA2.id,
+        'authenticated',
+        (tx) =>
+          tx.studentActivity.findUnique({
+            where: { id: fixture.studentActivityA.id },
+          }),
+      );
+      const asAdministrator = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.studentActivity.findUnique({
+            where: { id: fixture.studentActivityA.id },
+          }),
+      );
+      const asOtherInstitutionPsychologist = await withRlsAs(
+        fixture.psychB1.id,
+        'authenticated',
+        (tx) =>
+          tx.studentActivity.findUnique({
+            where: { id: fixture.studentActivityA.id },
+          }),
+      );
+
+      expect(asDoctor?.id).toBe(fixture.studentActivityA.id);
+      expect(asUnrelated).toBeNull();
+      expect(asAdministrator).toBeNull();
+      expect(asOtherInstitutionPsychologist).toBeNull();
     });
   });
 
@@ -1028,6 +1108,17 @@ describe('Authorization (RLS) e2e', () => {
           }),
       );
       expect(created.id).toBeDefined();
+    });
+
+    it('denies an administrator from updating another institution activity', async () => {
+      await expect(
+        withRlsAs(fixture.adminB.id, 'authenticated', (tx) =>
+          tx.activity.update({
+            where: { id: fixture.activityInstitutionA.id },
+            data: { title: '[RLS-TEST] cross-institution update attempt' },
+          }),
+        ),
+      ).rejects.toThrow();
     });
   });
 

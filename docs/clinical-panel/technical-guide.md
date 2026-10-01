@@ -708,7 +708,10 @@ y documentar el periodo o ventana que representa.
 | Método | Endpoint | Uso |
 |---|---|---|
 | GET | `/students/:id/bands` | Consultar Ecos Band vinculadas. |
-| GET | `/students/:id/biometrics` | Consultar series/resúmenes por rango de fecha. |
+| GET | `/students/:id/biometrics?range&skip&take` | Historial biométrico paginado y minimizado; `latest` siempre representa el último registro global. `range` admite `24h`, `7d`, `30d` y `90d`. |
+| GET | `/students/:id/biometrics/summary?range` | Estadísticas descriptivas y serie agregada para los rangos predefinidos; agrupa 24 horas por hora local institucional y los demás rangos por día local. |
+| GET | `/students/:id/alerts?skip&take&status&alertType&priority` | Historial paginado y minimizado de alertas persistidas. Verifica acceso al paciente, ordena por creación descendente y no expone texto contextual SOS. |
+| GET | `/students/:id/alerts/:alertId` | Detalle de alerta calificado por paciente para psicología. Verifica relación alerta-paciente y RLS antes de exponer contexto SOS autorizado y actores resumidos. |
 | GET | `/students/:id/biometrics/latest` | Último resumen disponible. |
 | GET | `/students/:id/biometrics/trends` | Tendencias preparadas para gráficas. |
 
@@ -727,6 +730,13 @@ y documentar el periodo o ventana que representa.
 | POST | `/alerts/:id/actions` | Registrar acción tomada. |
 | PATCH | `/alerts/:id/close` | Cerrar alerta. |
 | GET | `/students/:id/alerts` | Historial del paciente. |
+
+El detalle del portal usa `GET /students/:id/alerts/:alertId`; el administrador recibe `403` y
+los recursos inaccesibles o no coincidentes retornan `404`. La transición es
+`new → reviewed → in_follow_up → closed`: review admite únicamente `new`, mientras close admite
+`reviewed` o `in_follow_up`. Las escrituras condicionales rechazan cambios concurrentes con `409`.
+`reviewedBy` se guarda en la alerta; `closedBy` se proyecta desde la acción terminal `closed`.
+No se agrega columna, migración ni un mecanismo de notificaciones en esta fase.
 
 El terapeuta puede decidir contactar al paciente, programar cita, planificar sesión o recomendar
 una referencia. La alerta no debe convertirse automáticamente en diagnóstico ni modificar el
@@ -766,13 +776,20 @@ El contrato es deliberadamente reducido:
   "currentTherapist": { "id": "uuid", "fullName": "string|null", "email": "string|null", "specialty": "string|null" },
   "nextAppointment": { "id": 0, "appointmentDate": "date|null", "endAt": "date|null", "durationMinutes": 0, "sessionType": "string|null", "modality": "string|null", "status": "string|null" },
   "activeTreatmentPlan": { "id": 0, "title": "string|null", "generalGoal": "string|null", "startsAt": "date", "endsAt": "date|null", "status": "string" },
-  "recentBiometricSummary": {},
-  "openAlerts": [],
+  "recentBiometricSummary": { "id": 0, "avgHeartRate": 0, "stressLevel": 0, "bloodOxygen": 0, "timestamp": "date|null" },
+  "alertsSummary": { "openCount": 0, "recentAlerts": [{ "id": 0, "alertType": "panic_button|null", "priority": "critical|null", "status": "new", "createdAt": "date" }] },
   "pendingActivities": [],
   "recentFollowUps": [],
   "recentSharedContent": []
 }
 ```
+
+`recentBiometricSummary` es el último registro sincronizado, ordenado por
+timestamp, creación e identificador; no constituye telemetría en vivo.
+`alertsSummary.openCount` contabiliza exactamente las alertas `new`, `reviewed`
+e `in_follow_up`, mientras `recentAlerts` contiene como máximo tres resúmenes
+minimizados, ordenados por creación e identificador. No se incluyen
+descripciones de alertas ni contexto SOS.
 
 Las colecciones recientes se limitan a tres registros. `pendingActivities` entrega título, origen,
 estado, asignación y vencimiento; `recentFollowUps` aporta solo fecha, cita asociada, tipo, estado
@@ -940,6 +957,7 @@ acceso a notas terapéuticas, antecedentes o contenido compartido.
 | `CLINICAL_NOTE_CREATED` | Creación de nota de sesión. |
 | `CLINICAL_NOTE_UPDATED` | Modificación posterior. |
 | `ALERT_REVIEWED` | Primera revisión de alerta. |
+| `ALERT_CLOSED` | Cierre de alerta, con metadata de identificadores y sin texto SOS. |
 | `ALERT_ACTION_CREATED` | Acción tomada sobre alerta. |
 | `THERAPIST_ASSIGNED` | Asignación/reasignación. |
 | `SHARED_CONTENT_VIEWED` | Consulta de contenido expresamente compartido. |
@@ -1005,8 +1023,8 @@ _original, no el plan ejecutado.)_
 | Planes | `POST /treatment-plans` · `GET /students/:id/treatment-plans` · `PATCH /treatment-plans/:id` |
 | Objetivos | `POST /treatment-plans/:id/goals` · `PATCH /treatment-goals/:id` |
 | Actividades | `GET/POST /activities` · `POST/GET /students/:id/activities` · `PATCH /student-activities/:id` |
-| Biometría | `GET /students/:id/biometrics` · latest · trends |
-| Alertas | `GET /alerts` · `GET /alerts/:id` · review · actions · close · `GET /students/:id/alerts` |
+| Biometría | `GET /students/:id/biometrics?range&skip&take` · `summary?range` · latest · trends |
+| Alertas | `GET /alerts` · `GET /students/:id/alerts?skip&take&status&alertType&priority` · `GET /students/:id/alerts/:alertId` · review/actions/close |
 | Compartido | `GET /students/:id/shared-content` · `GET /shared-content/:id` |
 | Dashboards | `GET /dashboard/psychologist` · `GET /dashboard/administrator` |
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { usePathname } from "next/navigation"
 import type { ReactNode } from "react"
 import { useDashboardBreadcrumbLabel } from "@/components/common/DashboardBreadcrumbs"
 import type { UserRole } from "@/features/auth/types/auth.types"
@@ -27,6 +28,9 @@ export function PatientWorkspace({
   context,
   role,
 }: PatientWorkspaceProps) {
+  const pathname = usePathname()
+  const isOverview = pathname === patientRoutes.overview(context.patientId)
+  
   const displayName = context.fullName?.trim() || "Nombre no registrado"
   useDashboardBreadcrumbLabel(
     displayName,
@@ -34,8 +38,8 @@ export function PatientWorkspace({
   )
 
   return (
-    <div className="space-y-6">
-      <PatientHeader {...context} />
+    <div className={isOverview ? "space-y-6" : "space-y-4"}>
+      <PatientHeader {...context} isCompact={!isOverview} />
       <PatientSectionNav patientId={context.patientId} role={role} />
       {children}
     </div>

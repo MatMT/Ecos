@@ -47,10 +47,30 @@ secciones del paciente. La edición continúa limitada al autor y a
 `clinical-notes.manage`; la interfaz solo oculta la acción, nunca sustituye la
 validación del servidor.
 
+El overview clínico del paciente exige el rol `psychologist` y el alcance de
+asignación vigente mediante RLS. Administradores no reciben esta proyección.
+En la matriz actual, los psicólogos autorizados poseen `biometrics.view` y
+`alerts.view`; los bloques siguen protegidos en la interfaz y el servidor no
+expone el overview clínico a roles que carecen de ambos ámbitos.
+
 La separación clínica es también efectiva en datos: RLS limita alertas, bandas
 y biometría al estudiante propietario o al psicólogo actualmente asignado. Un
 administrador conserva el listado, la ficha institucional y las operaciones de
 citas autorizadas, pero no puede recuperar esos recursos clínicos directamente.
+
+El historial de alertas por paciente aplica esta misma política: la guardia del
+endpoint permite solamente `psychologist` o `student`, por lo que un
+administrador recibe `403`; un psicólogo sin acceso a `StudentProfile` recibe
+`404` antes de que se consulte cualquier alerta. El portal administra únicamente
+la experiencia visual mediante `alerts.view`.
+
+El detalle clínico de alerta del portal usa `GET /students/:studentId/alerts/:alertId`
+y admite solo `psychologist`; el administrador recibe `403`. La ruta comprueba
+la relación paciente-alerta y la visibilidad RLS, por lo que un psicólogo sin
+asignación vigente, una alerta inexistente o una relación no coincidente reciben
+`404`. `alerts.manage` únicamente habilita la experiencia de revisión/cierre;
+los endpoints mantienen guardia de rol, RLS y validación de transición como
+autoridad final.
 
 No hay polling de roles. Cuando la sesión se reconstruya, la matriz tomará el rol actualizado; logout limpia la caché y elimina inmediatamente los permisos efectivos del usuario anterior.
 

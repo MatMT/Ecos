@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AppointmentStatus, Role } from '@prisma/client';
+import { AlertStatus, AppointmentStatus, Role } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
@@ -23,6 +23,11 @@ const MAX_TIMELINE_TAKE = 100;
 const OPEN_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.pending,
   AppointmentStatus.confirmed,
+];
+const OPEN_ALERT_STATUSES: AlertStatus[] = [
+  AlertStatus.new,
+  AlertStatus.reviewed,
+  AlertStatus.in_follow_up,
 ];
 
 function todayIsoDate(timezone: string): string {
@@ -73,7 +78,8 @@ export class DashboardService {
         nextAppointment,
         activeTreatmentPlan,
         recentBiometricSummary,
-        openAlerts,
+        openAlertsCount,
+        recentOpenAlerts,
         pendingActivities,
         recentFollowUps,
         recentSharedContent,
@@ -109,25 +115,29 @@ export class DashboardService {
         }),
         tx.biometricRecord.findFirst({
           where: { device: { studentId } },
-          orderBy: { timestamp: 'desc' },
+          orderBy: [
+            { timestamp: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
           select: {
             id: true,
             avgHeartRate: true,
             stressLevel: true,
-            sleepQualityHours: true,
             bloodOxygen: true,
-            bodyTemperature: true,
             timestamp: true,
           },
         }),
+        tx.alert.count({
+          where: { studentId, status: { in: OPEN_ALERT_STATUSES } },
+        }),
         tx.alert.findMany({
-          where: { studentId, status: { not: 'closed' } },
-          orderBy: { createdAt: 'desc' },
+          where: { studentId, status: { in: OPEN_ALERT_STATUSES } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: OVERVIEW_RECENT_TAKE,
           select: {
             id: true,
             alertType: true,
-            description: true,
             priority: true,
             status: true,
             createdAt: true,
@@ -221,20 +231,20 @@ export class DashboardService {
               id: recentBiometricSummary.id,
               avgHeartRate: recentBiometricSummary.avgHeartRate,
               stressLevel: recentBiometricSummary.stressLevel,
-              sleepQualityHours: recentBiometricSummary.sleepQualityHours,
               bloodOxygen: recentBiometricSummary.bloodOxygen,
-              bodyTemperature: recentBiometricSummary.bodyTemperature,
               timestamp: recentBiometricSummary.timestamp,
             }
           : null,
-        openAlerts: openAlerts.map((alert) => ({
-          id: alert.id,
-          alertType: alert.alertType,
-          description: alert.description,
-          priority: alert.priority,
-          status: alert.status,
-          createdAt: alert.createdAt,
-        })),
+        alertsSummary: {
+          openCount: openAlertsCount,
+          recentAlerts: recentOpenAlerts.map((alert) => ({
+            id: alert.id,
+            alertType: alert.alertType,
+            priority: alert.priority,
+            status: alert.status,
+            createdAt: alert.createdAt,
+          })),
+        },
         pendingActivities: pendingActivities.map((activity) => ({
           id: activity.id,
           activityId: activity.activityId,

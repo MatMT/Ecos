@@ -72,7 +72,7 @@ export const patientNavigation: readonly PatientNavigationItem[] = [
   },
   {
     activeMatch: "exact",
-    availability: "future",
+    availability: "available",
     getHref: patientRoutes.biometrics,
     icon: HeartPulse,
     label: "Biometría",
@@ -80,8 +80,8 @@ export const patientNavigation: readonly PatientNavigationItem[] = [
     section: "biometrics",
   },
   {
-    activeMatch: "exact",
-    availability: "future",
+    activeMatch: "prefix",
+    availability: "available",
     getHref: patientRoutes.alerts,
     icon: TriangleAlert,
     label: "Alertas",

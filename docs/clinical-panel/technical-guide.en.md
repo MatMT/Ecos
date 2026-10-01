@@ -705,7 +705,10 @@ the period/window it represents.
 | Method | Endpoint | Use |
 |---|---|---|
 | GET | `/students/:id/bands` | Query linked Ecos Bands. |
-| GET | `/students/:id/biometrics` | Query series/summaries by date range. |
+| GET | `/students/:id/biometrics?range&skip&take` | Paginated, minimized biometric history; `latest` always represents the global latest record. `range` accepts `24h`, `7d`, `30d`, and `90d`. |
+| GET | `/students/:id/biometrics/summary?range` | Descriptive statistics and an aggregate series for preset ranges; 24 hours uses institution-local hourly buckets and other ranges use local daily buckets. |
+| GET | `/students/:id/alerts?skip&take&status&alertType&priority` | Paginated, minimized persisted-alert history. It verifies patient access, orders by newest creation time, and excludes SOS contextual text. |
+| GET | `/students/:id/alerts/:alertId` | Patient-qualified alert detail for psychologists. It verifies the alert-patient relation and RLS before exposing authorized SOS context and summarized actors. |
 | GET | `/students/:id/biometrics/latest` | Latest available summary. |
 | GET | `/students/:id/biometrics/trends` | Trends prepared for charts. |
 
@@ -724,6 +727,13 @@ the period/window it represents.
 | POST | `/alerts/:id/actions` | Log an action taken. |
 | PATCH | `/alerts/:id/close` | Close the alert. |
 | GET | `/students/:id/alerts` | Patient's history. |
+
+The portal uses `GET /students/:id/alerts/:alertId`; administrators receive `403` and
+inaccessible or mismatched resources return `404`. The transition path is
+`new → reviewed → in_follow_up → closed`: review accepts only `new`, while close accepts
+`reviewed` or `in_follow_up`. Conditional writes reject concurrent changes with `409`.
+`reviewedBy` is stored on the alert; `closedBy` is projected from the terminal `closed` action.
+This phase adds no column, migration, or notification mechanism.
 
 The therapist may decide to contact the patient, schedule an appointment, plan a session, or
 recommend a referral. An alert must not automatically turn into a diagnosis, nor modify the clinical
@@ -763,13 +773,19 @@ The contract is intentionally minimal:
   "currentTherapist": { "id": "uuid", "fullName": "string|null", "email": "string|null", "specialty": "string|null" },
   "nextAppointment": { "id": 0, "appointmentDate": "date|null", "endAt": "date|null", "durationMinutes": 0, "sessionType": "string|null", "modality": "string|null", "status": "string|null" },
   "activeTreatmentPlan": { "id": 0, "title": "string|null", "generalGoal": "string|null", "startsAt": "date", "endsAt": "date|null", "status": "string" },
-  "recentBiometricSummary": {},
-  "openAlerts": [],
+  "recentBiometricSummary": { "id": 0, "avgHeartRate": 0, "stressLevel": 0, "bloodOxygen": 0, "timestamp": "date|null" },
+  "alertsSummary": { "openCount": 0, "recentAlerts": [{ "id": 0, "alertType": "panic_button|null", "priority": "critical|null", "status": "new", "createdAt": "date" }] },
   "pendingActivities": [],
   "recentFollowUps": [],
   "recentSharedContent": []
 }
 ```
+
+`recentBiometricSummary` is the latest synchronized record ordered by timestamp,
+creation time, and identifier; it is not live telemetry. `alertsSummary.openCount`
+counts `new`, `reviewed`, and `in_follow_up` alerts exactly, while
+`recentAlerts` contains at most three minimized summaries ordered by creation
+time and identifier. Neither alert descriptions nor SOS context are included.
 
 Recent collections are limited to three records. `pendingActivities` contains title, origin,
 status, assignment and due date; `recentFollowUps` provides only date, linked appointment, type,
@@ -937,6 +953,7 @@ therapeutic notes, history, or shared content.
 | `CLINICAL_NOTE_CREATED` | Creating a session note. |
 | `CLINICAL_NOTE_UPDATED` | A later edit. |
 | `ALERT_REVIEWED` | First review of an alert. |
+| `ALERT_CLOSED` | Alert closure, with identifier-only metadata and no SOS text. |
 | `ALERT_ACTION_CREATED` | An action taken on an alert. |
 | `THERAPIST_ASSIGNED` | Assignment/reassignment. |
 | `SHARED_CONTENT_VIEWED` | Viewing explicitly shared content. |
@@ -999,8 +1016,8 @@ _This table is the original proposal, not the executed plan.)_
 | Plans | `POST /treatment-plans` · `GET /students/:id/treatment-plans` · `PATCH /treatment-plans/:id` |
 | Goals | `POST /treatment-plans/:id/goals` · `PATCH /treatment-goals/:id` |
 | Activities | `GET/POST /activities` · `POST/GET /students/:id/activities` · `PATCH /student-activities/:id` |
-| Biometrics | `GET /students/:id/biometrics` · latest · trends |
-| Alerts | `GET /alerts` · `GET /alerts/:id` · review · actions · close · `GET /students/:id/alerts` |
+| Biometrics | `GET /students/:id/biometrics?range&skip&take` · `summary?range` · latest · trends |
+| Alerts | `GET /alerts` · `GET /students/:id/alerts?skip&take&status&alertType&priority` · `GET /students/:id/alerts/:alertId` · review/actions/close |
 | Shared | `GET /students/:id/shared-content` · `GET /shared-content/:id` |
 | Dashboards | `GET /dashboard/psychologist` · `GET /dashboard/administrator` |
 

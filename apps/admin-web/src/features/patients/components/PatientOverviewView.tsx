@@ -152,6 +152,7 @@ function ClinicalPatientOverview({ patientId, role }: PatientDetailViewProps) {
       <PermissionGate permission="biometrics.view">
         <BiometricSummary
           biometrics={overview.recentBiometricSummary}
+          patientId={overview.student.id}
           timeZone={overview.institutionTimezone}
         />
       </PermissionGate>

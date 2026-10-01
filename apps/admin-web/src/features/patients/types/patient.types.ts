@@ -1,3 +1,9 @@
+import type {
+  AlertPriority,
+  AlertStatus,
+  AlertType,
+} from "@/features/alerts/types/alert.types"
+
 export type PatientUserRole = "administrator" | "psychologist" | "student" | null
 
 export interface PatientAccount {
@@ -99,20 +105,22 @@ export interface OverviewTreatmentPlan {
 export interface OverviewBiometrics {
   avgHeartRate: number | null
   bloodOxygen: number | null
-  bodyTemperature: number | null
   id: number
-  sleepQualityHours: number | null
   stressLevel: number | null
   timestamp: string | null
 }
 
 export interface OverviewAlert {
-  alertType: string | null
+  alertType: AlertType | null
   createdAt: string
-  description: string | null
   id: number
-  priority: string | null
-  status: string
+  priority: AlertPriority | null
+  status: AlertStatus
+}
+
+export interface OverviewAlertsSummary {
+  openCount: number
+  recentAlerts: OverviewAlert[]
 }
 
 export interface OverviewActivity {
@@ -146,7 +154,7 @@ export interface StudentOverview {
   currentTherapist: AssignedTherapistSummary | null
   institutionTimezone: string
   nextAppointment: OverviewAppointment | null
-  openAlerts: OverviewAlert[]
+  alertsSummary: OverviewAlertsSummary
   pendingActivities: OverviewActivity[]
   recentBiometricSummary: OverviewBiometrics | null
   recentFollowUps: OverviewFollowUp[]

@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { AlertPriority, AlertStatus, AlertType, Role } from '@prisma/client';
 import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -15,7 +15,7 @@ describe('DashboardService', () => {
     };
     treatmentPlan: { findFirst: jest.Mock };
     biometricRecord: { findFirst: jest.Mock };
-    alert: { findMany: jest.Mock };
+    alert: { count: jest.Mock; findMany: jest.Mock };
     studentActivity: { findMany: jest.Mock };
     clinicalNote: { findMany: jest.Mock };
     sharedPatientContent: { findMany: jest.Mock };
@@ -43,7 +43,7 @@ describe('DashboardService', () => {
       },
       treatmentPlan: { findFirst: jest.fn() },
       biometricRecord: { findFirst: jest.fn() },
-      alert: { findMany: jest.fn() },
+      alert: { count: jest.fn(), findMany: jest.fn() },
       studentActivity: { findMany: jest.fn() },
       clinicalNote: { findMany: jest.fn() },
       sharedPatientContent: { findMany: jest.fn() },
@@ -67,6 +67,7 @@ describe('DashboardService', () => {
     tx.appointment.findFirst.mockResolvedValue(null);
     tx.treatmentPlan.findFirst.mockResolvedValue(null);
     tx.biometricRecord.findFirst.mockResolvedValue(null);
+    tx.alert.count.mockResolvedValue(0);
     tx.alert.findMany.mockResolvedValue([]);
     tx.studentActivity.findMany.mockResolvedValue([]);
     tx.clinicalNote.findMany.mockResolvedValue([]);
@@ -123,6 +124,26 @@ describe('DashboardService', () => {
         status: 'active',
         notes: 'Notas clínicas privadas',
       });
+      tx.biometricRecord.findFirst.mockResolvedValue({
+        id: 61,
+        avgHeartRate: 72,
+        stressLevel: 18.5,
+        bloodOxygen: null,
+        timestamp: new Date('2026-09-04T10:00:00.000Z'),
+        sleepQualityHours: 7,
+        bodyTemperature: 36.5,
+      });
+      tx.alert.count.mockResolvedValue(4);
+      tx.alert.findMany.mockResolvedValue([
+        {
+          id: 71,
+          alertType: AlertType.panic_button,
+          priority: AlertPriority.critical,
+          status: AlertStatus.new,
+          createdAt: new Date('2026-09-05T10:00:00.000Z'),
+          description: 'Contexto SOS sensible.',
+        },
+      ]);
       tx.clinicalNote.findMany.mockResolvedValue([
         {
           id: 31,
@@ -207,6 +228,25 @@ describe('DashboardService', () => {
           sharedAt: new Date('2026-09-03T10:00:00.000Z'),
         },
       ]);
+      expect(result.recentBiometricSummary).toEqual({
+        id: 61,
+        avgHeartRate: 72,
+        stressLevel: 18.5,
+        bloodOxygen: null,
+        timestamp: new Date('2026-09-04T10:00:00.000Z'),
+      });
+      expect(result.alertsSummary).toEqual({
+        openCount: 4,
+        recentAlerts: [
+          {
+            id: 71,
+            alertType: AlertType.panic_button,
+            priority: AlertPriority.critical,
+            status: AlertStatus.new,
+            createdAt: new Date('2026-09-05T10:00:00.000Z'),
+          },
+        ],
+      });
       expect(result).not.toHaveProperty('recentClinicalNotes');
       expect(result.student).not.toHaveProperty('primaryDiagnosis');
       expect(result.recentSharedContent[0]).not.toHaveProperty('content');
@@ -216,7 +256,15 @@ describe('DashboardService', () => {
       expect(result.recentFollowUps[0]).not.toHaveProperty(
         'aiAssistantAnalysis',
       );
-      expect(result.openAlerts).toEqual([]);
+      expect(result.recentBiometricSummary).not.toHaveProperty(
+        'sleepQualityHours',
+      );
+      expect(result.recentBiometricSummary).not.toHaveProperty(
+        'bodyTemperature',
+      );
+      expect(result.alertsSummary.recentAlerts[0]).not.toHaveProperty(
+        'description',
+      );
 
       expect(tx.studentProfile.findUnique).toHaveBeenCalledWith({
         where: { id: 8 },
@@ -241,16 +289,51 @@ describe('DashboardService', () => {
         },
       });
       expect(tx.alert.findMany).toHaveBeenCalledWith({
-        where: { studentId: 8, status: { not: 'closed' } },
-        orderBy: { createdAt: 'desc' },
+        where: {
+          studentId: 8,
+          status: {
+            in: [
+              AlertStatus.new,
+              AlertStatus.reviewed,
+              AlertStatus.in_follow_up,
+            ],
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 3,
         select: {
           id: true,
           alertType: true,
-          description: true,
           priority: true,
           status: true,
           createdAt: true,
+        },
+      });
+      expect(tx.alert.count).toHaveBeenCalledWith({
+        where: {
+          studentId: 8,
+          status: {
+            in: [
+              AlertStatus.new,
+              AlertStatus.reviewed,
+              AlertStatus.in_follow_up,
+            ],
+          },
+        },
+      });
+      expect(tx.biometricRecord.findFirst).toHaveBeenCalledWith({
+        where: { device: { studentId: 8 } },
+        orderBy: [
+          { timestamp: { sort: 'desc', nulls: 'last' } },
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
+        select: {
+          id: true,
+          avgHeartRate: true,
+          stressLevel: true,
+          bloodOxygen: true,
+          timestamp: true,
         },
       });
       expect(tx.studentActivity.findMany).toHaveBeenCalledWith({

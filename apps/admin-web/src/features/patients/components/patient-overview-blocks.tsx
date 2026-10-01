@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
+import Link from "next/link"
 import {
   Activity,
   AlertTriangle,
@@ -9,98 +10,91 @@ import {
   HeartPulse,
   Share2,
   Stethoscope,
+  Waves,
 } from "lucide-react"
 import { StatCard } from "@/components/common/StatCard"
 import { StatusBadge } from "@/components/common/StatusBadge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { formatMetric } from "@/features/biometrics/components/latest-biometric-metrics"
+import {
+  formatAlertType,
+  getAlertPriorityPresentation,
+  getAlertStatusPresentation,
+} from "@/features/alerts/utils/alert-formatters"
+import { patientRoutes } from "@/features/patients/routes/patient-routes"
 import type { StudentOverview } from "@/features/patients/types/patient.types"
 import {
   formatAppointmentModality,
   formatAppointmentType,
   formatOverviewDate,
   formatOverviewDateTime,
-  formatOverviewNumber,
   formatSharedContentType,
   getActivityOriginPresentation,
   getOverviewStatusPresentation,
-  getPriorityPresentation,
 } from "@/features/patients/utils/patient-overview-formatters"
 
 const MAX_RECENT_ITEMS = 3
 
 export function BiometricSummary({
   biometrics,
+  patientId,
   timeZone,
 }: {
   biometrics: StudentOverview["recentBiometricSummary"]
+  patientId: number
   timeZone: string
 }) {
-  const metrics = biometrics
-    ? [
-        {
-          icon: HeartPulse,
-          label: "Frecuencia cardíaca",
-          suffix: " bpm",
-          value: biometrics.avgHeartRate,
-        },
-        {
-          icon: Activity,
-          label: "Nivel de estrés",
-          suffix: "",
-          value: biometrics.stressLevel,
-        },
-        {
-          icon: HeartPulse,
-          label: "Oxígeno en sangre",
-          suffix: "%",
-          value: biometrics.bloodOxygen,
-        },
-        {
-          icon: Activity,
-          label: "Sueño",
-          suffix: " h",
-          value: biometrics.sleepQualityHours,
-        },
-        {
-          icon: HeartPulse,
-          label: "Temperatura corporal",
-          suffix: " °C",
-          value: biometrics.bodyTemperature,
-        },
-      ].filter((metric) => metric.value !== null)
-    : []
+  const recordDate = biometrics?.timestamp
+    ? formatOverviewDateTime(biometrics.timestamp, timeZone)
+    : "Fecha y hora no registradas"
 
   return (
     <section aria-labelledby="biometrics-heading" className="space-y-3">
-      <div>
-        <h2
-          className="text-lg font-semibold tracking-tight"
-          id="biometrics-heading"
-        >
-          Seguimiento biométrico reciente
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Información de seguimiento; no constituye un diagnóstico.
-        </p>
-      </div>
-      {metrics.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {metrics.map((metric) => (
-            <StatCard
-              description={
-                biometrics?.timestamp
-                  ? `Registrado ${formatOverviewDateTime(biometrics.timestamp, timeZone)}`
-                  : "Fecha de registro no disponible"
-              }
-              icon={metric.icon}
-              key={metric.label}
-              label={metric.label}
-              value={`${formatOverviewNumber(metric.value)}${metric.suffix}`}
-            />
-          ))}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2
+            className="text-lg font-semibold tracking-tight"
+            id="biometrics-heading"
+          >
+            Biometría reciente
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Últimos datos biométricos sincronizados.
+          </p>
         </div>
+        <Button asChild size="sm" type="button" variant="outline">
+          <Link href={patientRoutes.biometrics(patientId)}>Ver biometría</Link>
+        </Button>
+      </div>
+      {biometrics ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Último registro: {recordDate}.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <StatCard
+              description="Promedio registrado en la ventana sincronizada."
+              icon={HeartPulse}
+              label="Frecuencia cardíaca"
+              value={formatMetric(biometrics.avgHeartRate, " bpm")}
+            />
+            <StatCard
+              description="Índice numérico registrado en la ventana sincronizada."
+              icon={Activity}
+              label="Índice de estrés"
+              value={formatMetric(biometrics.stressLevel)}
+            />
+            <StatCard
+              description="Promedio registrado en la ventana sincronizada."
+              icon={Waves}
+              label="Oxígeno en sangre"
+              value={formatMetric(biometrics.bloodOxygen, "%")}
+            />
+          </div>
+        </>
       ) : (
-        <CompactEmptyState message="Sin datos biométricos recientes." />
+        <CompactEmptyState message="Sin datos biométricos registrados." />
       )}
     </section>
   )
@@ -148,24 +142,29 @@ export function NextAppointment({ overview }: { overview: StudentOverview }) {
 }
 
 export function OpenAlerts({ overview }: { overview: StudentOverview }) {
-  const { institutionTimezone, openAlerts: alerts } = overview
-  const recentAlerts = alerts.slice(0, MAX_RECENT_ITEMS)
+  const { institutionTimezone, alertsSummary } = overview
+  const { openCount, recentAlerts } = alertsSummary
 
   return (
     <OverviewSection
-      description={
-        alerts.length > 0
-          ? `${recentAlerts.length} alertas recientes mostradas.`
-          : undefined
+      actions={
+        <Button asChild size="sm" type="button" variant="outline">
+          <Link href={patientRoutes.alerts(overview.student.id)}>Ver alertas</Link>
+        </Button>
       }
+      description={`${openCount} ${openCount === 1 ? "alerta abierta" : "alertas abiertas"}.`}
       icon={AlertTriangle}
-      title="Alertas abiertas"
+      title="Alertas"
     >
-      {recentAlerts.length > 0 ? (
-        <ul className="space-y-3">
+      {openCount > 0 ? (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-foreground">
+            {openCount === 1 ? "1 alerta abierta." : `${openCount} alertas abiertas.`}
+          </p>
+          <ul className="space-y-3">
           {recentAlerts.map((alert) => {
-            const priority = getPriorityPresentation(alert.priority)
-            const status = getOverviewStatusPresentation(alert.status)
+            const priority = getAlertPriorityPresentation(alert.priority)
+            const status = getAlertStatusPresentation(alert.status)
 
             return (
               <li
@@ -173,9 +172,17 @@ export function OpenAlerts({ overview }: { overview: StudentOverview }) {
                 key={alert.id}
               >
                 <div className="min-w-0">
-                  <p className="text-sm text-foreground">
-                    {alert.description ?? "Alerta sin descripción disponible"}
-                  </p>
+                  <Link
+                    className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    href={patientRoutes.alertDetail(overview.student.id, alert.id)}
+                  >
+                    {formatAlertType(alert.alertType)}
+                  </Link>
+                  {alert.alertType === "panic_button" ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Origen: Aplicación móvil / Botón SOS
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-xs text-muted-foreground">
                     Registrada{" "}
                     {formatOverviewDateTime(
@@ -185,15 +192,16 @@ export function OpenAlerts({ overview }: { overview: StudentOverview }) {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
-                  <StatusBadge {...priority} />
+                  {priority ? <StatusBadge {...priority} /> : null}
                   <StatusBadge {...status} />
                 </div>
               </li>
             )
           })}
-        </ul>
+          </ul>
+        </div>
       ) : (
-        <CompactEmptyState message="Sin alertas pendientes." />
+        <CompactEmptyState message="Sin alertas abiertas." />
       )}
     </OverviewSection>
   )
@@ -346,6 +354,7 @@ export function RecentSharedContent({
 }
 
 interface OverviewSectionProps {
+  actions?: ReactNode
   children: ReactNode
   description?: string
   icon: LucideIcon
@@ -353,6 +362,7 @@ interface OverviewSectionProps {
 }
 
 export function OverviewSection({
+  actions,
   children,
   description,
   icon: Icon,
@@ -360,7 +370,7 @@ export function OverviewSection({
 }: OverviewSectionProps) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start gap-2 space-y-0">
+      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
         <Icon aria-hidden="true" className="mt-0.5 size-5 text-primary" />
         <div className="min-w-0">
           <CardTitle className="text-base">{title}</CardTitle>
@@ -368,6 +378,7 @@ export function OverviewSection({
             <p className="mt-1 text-xs text-muted-foreground">{description}</p>
           ) : null}
         </div>
+        {actions}
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>

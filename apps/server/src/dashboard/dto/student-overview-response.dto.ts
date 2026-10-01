@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AlertPriority, AlertStatus, AppointmentStatus } from '@prisma/client';
+import {
+  AlertPriority,
+  AlertStatus,
+  AlertType,
+  AppointmentStatus,
+} from '@prisma/client';
 
 export class OverviewStudentDto {
   @ApiProperty()
@@ -83,13 +88,7 @@ export class OverviewBiometricSummaryDto {
   stressLevel!: number | null;
 
   @ApiPropertyOptional({ nullable: true })
-  sleepQualityHours!: number | null;
-
-  @ApiPropertyOptional({ nullable: true })
   bloodOxygen!: number | null;
-
-  @ApiPropertyOptional({ nullable: true })
-  bodyTemperature!: number | null;
 
   @ApiPropertyOptional({ nullable: true })
   timestamp!: Date | null;
@@ -99,11 +98,8 @@ export class OverviewAlertDto {
   @ApiProperty()
   id!: number;
 
-  @ApiPropertyOptional({ nullable: true })
-  alertType!: string | null;
-
-  @ApiPropertyOptional({ nullable: true })
-  description!: string | null;
+  @ApiPropertyOptional({ enum: AlertType, nullable: true })
+  alertType!: AlertType | null;
 
   @ApiPropertyOptional({ enum: AlertPriority, nullable: true })
   priority!: AlertPriority | null;
@@ -113,6 +109,14 @@ export class OverviewAlertDto {
 
   @ApiProperty()
   createdAt!: Date;
+}
+
+export class OverviewAlertsSummaryDto {
+  @ApiProperty()
+  openCount!: number;
+
+  @ApiProperty({ type: [OverviewAlertDto] })
+  recentAlerts!: OverviewAlertDto[];
 }
 
 export class OverviewActivityDto {
@@ -191,8 +195,8 @@ export class StudentOverviewResponseDto {
   @ApiPropertyOptional({ type: OverviewBiometricSummaryDto, nullable: true })
   recentBiometricSummary!: OverviewBiometricSummaryDto | null;
 
-  @ApiProperty({ type: [OverviewAlertDto] })
-  openAlerts!: OverviewAlertDto[];
+  @ApiProperty({ type: OverviewAlertsSummaryDto })
+  alertsSummary!: OverviewAlertsSummaryDto;
 
   @ApiProperty({ type: [OverviewActivityDto] })
   pendingActivities!: OverviewActivityDto[];

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useAppointments } from "../hooks/use-appointments"
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { StatusBadge } from "@/components/common/StatusBadge"
@@ -11,6 +12,7 @@ import type { AppointmentResponse } from "../dto/appointments.dto"
 export function AppointmentsTable() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const session = useSession()
 
   const skip = (page - 1) * pageSize
   const take = pageSize

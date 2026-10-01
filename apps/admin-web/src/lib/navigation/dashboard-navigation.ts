@@ -67,6 +67,13 @@ export const dashboardNavigation: readonly NavigationItem[] = [
     label: "Horarios",
     permission: "therapists.view",
   },
+  {
+    activeMatch: "prefix",
+    href: "/activities",
+    icon: ClipboardList,
+    label: "Actividades",
+    permission: "activities.catalog.manage",
+  },
 ]
 
 const breadcrumbDefinitions: readonly BreadcrumbDefinition[] = [
@@ -76,6 +83,7 @@ const breadcrumbDefinitions: readonly BreadcrumbDefinition[] = [
   { href: "/therapists", label: "Terapeutas", path: "/therapists" },
   { href: "/assignments", label: "Asignaciones", path: "/assignments" },
   { href: "/schedules", label: "Horarios", path: "/schedules" },
+  { href: "/activities", label: "Actividades", path: "/activities" },
 ]
 
 export function getNavigationForRole(
@@ -145,6 +153,43 @@ export function getBreadcrumbDefinitions(
       breadcrumbDefinitions[2],
       { href: patientPath, label: "Detalle", path: patientPath },
       { label: "Sesiones", path: pathname },
+    ]
+  }
+
+  const biometricsMatch = pathname.match(/^\/patients\/([^/]+)\/biometrics$/)
+  if (biometricsMatch) {
+    const patientPath = `/patients/${biometricsMatch[1]}`
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { href: patientPath, label: "Detalle", path: patientPath },
+      { label: "Biometría", path: pathname },
+    ]
+  }
+
+  const alertsMatch = pathname.match(/^\/patients\/([^/]+)\/alerts$/)
+  if (alertsMatch) {
+    const patientPath = `/patients/${alertsMatch[1]}`
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { href: patientPath, label: "Detalle", path: patientPath },
+      { label: "Alertas", path: pathname },
+    ]
+  }
+
+  const alertDetailMatch = pathname.match(
+    /^\/patients\/([^/]+)\/alerts\/([^/]+)$/,
+  )
+  if (alertDetailMatch) {
+    const patientPath = `/patients/${alertDetailMatch[1]}`
+    const alertsPath = `${patientPath}/alerts`
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[2],
+      { href: patientPath, label: "Detalle", path: patientPath },
+      { href: alertsPath, label: "Alertas", path: alertsPath },
+      { label: "Alerta", path: pathname },
     ]
   }
 
@@ -223,6 +268,26 @@ export function getBreadcrumbDefinitions(
 
   if (pathname === "/appointments") {
     return [breadcrumbDefinitions[0], breadcrumbDefinitions[1]]
+  }
+
+  if (pathname === "/activities") {
+    return [breadcrumbDefinitions[0], breadcrumbDefinitions[6]]
+  }
+
+  if (pathname === "/activities/new") {
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[6],
+      { label: "Nueva actividad", path: pathname },
+    ]
+  }
+
+  if (/^\/activities\/[^/]+\/edit$/.test(pathname)) {
+    return [
+      breadcrumbDefinitions[0],
+      breadcrumbDefinitions[6],
+      { label: "Editar actividad", path: pathname },
+    ]
   }
 
   return [{ label: "Inicio", path: "/dashboard", href: "/dashboard" }]

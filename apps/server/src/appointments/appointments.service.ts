@@ -201,8 +201,8 @@ export class AppointmentsService {
       };
     }
 
-    return this.prisma.withRls((tx) =>
-      tx.appointment.findMany({
+    return this.prisma.withRls(async (tx) => {
+      const appointments = await tx.appointment.findMany({
         where: whereClause,
         include: {
           student: { include: { user: true } },
