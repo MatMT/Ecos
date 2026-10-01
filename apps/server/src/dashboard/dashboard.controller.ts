@@ -29,6 +29,11 @@ import type { RequestUser } from '../common/decorators/current-user.decorator';
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
+    @Get('students/:studentId/test-overview')
+  getTestOverview(@Param('studentId', ParseIntPipe) studentId: number) {
+    return this.dashboardService.getStudentOverview(studentId);
+  }
+
   @Get('students/:studentId/overview')
   @UseGuards(RolesGuard)
   @Roles(Role.psychologist)
@@ -111,3 +116,4 @@ export class DashboardController {
     return this.dashboardService.getAdministratorDashboard(currentUser);
   }
 }
+

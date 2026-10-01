@@ -147,7 +147,7 @@ export class DashboardService {
         tx.biometricRecord.findFirst({
           where: { device: { studentId } },
           orderBy: [
-            { timestamp: { sort: 'desc', nulls: 'last' } },
+            { timestamp: 'desc' },
             { createdAt: 'desc' },
             { id: 'desc' },
           ],
@@ -178,7 +178,7 @@ export class DashboardService {
         tx.clinicalNote.findMany({
           where: { studentId, voidedAt: null },
           orderBy: [
-            { sessionDate: { sort: 'desc', nulls: 'last' } },
+            { sessionDate: 'desc' },
             { createdAt: 'desc' },
             { id: 'desc' },
           ],
@@ -331,7 +331,7 @@ export class DashboardService {
           tx.clinicalNote.findMany({
             where: { studentId },
             orderBy: [
-              { sessionDate: { sort: 'desc', nulls: 'last' } },
+              { sessionDate: 'desc' },
               { createdAt: 'desc' },
               { id: 'desc' },
             ],
@@ -552,3 +552,4 @@ export class DashboardService {
     });
   }
 }
+

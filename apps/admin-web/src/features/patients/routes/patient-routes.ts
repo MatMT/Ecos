@@ -19,6 +19,7 @@ export const patientRoutes = {
   alerts: (patientId: number) => `/patients/${patientId}/alerts`,
   alertDetail: (patientId: number, alertId: number) =>
     `/patients/${patientId}/alerts/${alertId}`,
+  timeline: (patientId: number) => `/patients/${patientId}/timeline`,
 } as const
 
-export type PatientRouteSection = "overview" | "clinicalRecord" | "sessions" | "appointments" | "biometrics" | "alerts" | "treatmentPlan" | "activities" | "sharedContent"
+export type PatientRouteSection = "overview" | "clinicalRecord" | "sessions" | "appointments" | "biometrics" | "alerts" | "treatmentPlan" | "activities" | "sharedContent" | "timeline"

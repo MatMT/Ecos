@@ -182,6 +182,7 @@ function PatientSessionsContent({ patientId }: { patientId: number }) {
       ) : (
         <>
           <SessionTimeline
+            patientId={patientId}
             sessions={response?.data || []}
             timeZone={response?.meta?.institutionTimezone || "America/El_Salvador"}
           />
