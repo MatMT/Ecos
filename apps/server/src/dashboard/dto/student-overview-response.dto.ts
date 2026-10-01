@@ -142,6 +142,20 @@ export class OverviewActivityDto {
   dueAt!: Date | null;
 }
 
+export class OverviewActivitiesSummaryDto {
+  @ApiProperty({ minimum: 0 })
+  totalCount!: number;
+
+  @ApiProperty({
+    minimum: 0,
+    description: 'Assignments whose status is pending or in_progress.',
+  })
+  incompleteCount!: number;
+
+  @ApiProperty({ type: [OverviewActivityDto] })
+  recentAssignments!: OverviewActivityDto[];
+}
+
 export class OverviewFollowUpDto {
   @ApiProperty()
   id!: number;
@@ -198,7 +212,14 @@ export class StudentOverviewResponseDto {
   @ApiProperty({ type: OverviewAlertsSummaryDto })
   alertsSummary!: OverviewAlertsSummaryDto;
 
-  @ApiProperty({ type: [OverviewActivityDto] })
+  @ApiProperty({ type: OverviewActivitiesSummaryDto })
+  activitiesSummary!: OverviewActivitiesSummaryDto;
+
+  @ApiProperty({
+    type: [OverviewActivityDto],
+    deprecated: true,
+    description: 'Deprecated compatibility field. Use activitiesSummary.',
+  })
   pendingActivities!: OverviewActivityDto[];
 
   @ApiProperty({ type: [OverviewFollowUpDto] })

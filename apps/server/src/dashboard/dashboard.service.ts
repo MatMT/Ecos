@@ -29,6 +29,7 @@ const OPEN_ALERT_STATUSES: AlertStatus[] = [
   AlertStatus.reviewed,
   AlertStatus.in_follow_up,
 ];
+const INCOMPLETE_ACTIVITY_STATUSES: string[] = ['pending', 'in_progress'];
 
 function todayIsoDate(timezone: string): string {
   const iso = DateTime.now().setZone(timezone).toISODate();
@@ -73,6 +74,32 @@ export class DashboardService {
       }
 
       const now = new Date();
+      const activitiesSummaryPromise = Promise.all([
+        tx.studentActivity.count({ where: { studentId } }),
+        tx.studentActivity.count({
+          where: {
+            studentId,
+            status: { in: INCOMPLETE_ACTIVITY_STATUSES },
+          },
+        }),
+        tx.studentActivity.findMany({
+          where: {
+            studentId,
+            status: { in: INCOMPLETE_ACTIVITY_STATUSES },
+          },
+          orderBy: [{ assignedAt: 'desc' }, { id: 'desc' }],
+          take: OVERVIEW_RECENT_TAKE,
+          select: {
+            id: true,
+            activityId: true,
+            origin: true,
+            status: true,
+            assignedAt: true,
+            dueAt: true,
+            activity: { select: { title: true } },
+          },
+        }),
+      ]);
 
       const [
         nextAppointment,
@@ -80,7 +107,11 @@ export class DashboardService {
         recentBiometricSummary,
         openAlertsCount,
         recentOpenAlerts,
-        pendingActivities,
+        [
+          totalActivitiesCount,
+          incompleteActivitiesCount,
+          recentIncompleteActivities,
+        ],
         recentFollowUps,
         recentSharedContent,
       ] = await Promise.all([
@@ -143,20 +174,7 @@ export class DashboardService {
             createdAt: true,
           },
         }),
-        tx.studentActivity.findMany({
-          where: { studentId, status: { not: 'completed' } },
-          orderBy: { assignedAt: 'desc' },
-          take: OVERVIEW_RECENT_TAKE,
-          select: {
-            id: true,
-            activityId: true,
-            origin: true,
-            status: true,
-            assignedAt: true,
-            dueAt: true,
-            activity: { select: { title: true } },
-          },
-        }),
+        activitiesSummaryPromise,
         tx.clinicalNote.findMany({
           where: { studentId, voidedAt: null },
           orderBy: [
@@ -245,7 +263,20 @@ export class DashboardService {
             createdAt: alert.createdAt,
           })),
         },
-        pendingActivities: pendingActivities.map((activity) => ({
+        activitiesSummary: {
+          totalCount: totalActivitiesCount,
+          incompleteCount: incompleteActivitiesCount,
+          recentAssignments: recentIncompleteActivities.map((activity) => ({
+            id: activity.id,
+            activityId: activity.activityId,
+            title: activity.activity.title,
+            origin: activity.origin,
+            status: activity.status,
+            assignedAt: activity.assignedAt,
+            dueAt: activity.dueAt,
+          })),
+        },
+        pendingActivities: recentIncompleteActivities.map((activity) => ({
           id: activity.id,
           activityId: activity.activityId,
           title: activity.activity.title,

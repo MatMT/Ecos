@@ -22,6 +22,8 @@ describe('ActivitiesService', () => {
     studentProfile: { findUnique: jest.Mock };
     studentActivity: {
       create: jest.Mock;
+      count: jest.Mock;
+      findFirst: jest.Mock;
       findUnique: jest.Mock;
       findMany: jest.Mock;
     };
@@ -54,6 +56,8 @@ describe('ActivitiesService', () => {
       studentProfile: { findUnique: jest.fn() },
       studentActivity: {
         create: jest.fn(),
+        count: jest.fn(),
+        findFirst: jest.fn(),
         findUnique: jest.fn(),
         findMany: jest.fn(),
       },
@@ -283,18 +287,357 @@ describe('ActivitiesService', () => {
           dueAt: undefined,
         },
       });
+      expect(auditService.log).toHaveBeenCalledWith(tx, {
+        userId: CURRENT_USER.id,
+        institutionId: CURRENT_USER.institutionId,
+        action: 'ACTIVITY_ASSIGNED',
+        entity: 'StudentActivity',
+        entityId: '1',
+        metadata: { activityId: 3, patientId: 8 },
+      });
       expect(result).toEqual({ id: 1 });
+    });
+
+    it('persists an optional ISO deadline without changing server-owned fields', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({ id: 8 });
+      tx.activity.findUnique.mockResolvedValue({ id: 3, active: true });
+      tx.studentActivity.create.mockResolvedValue({ id: 2 });
+
+      await service.assign(
+        8,
+        { activityId: 3, dueAt: '2026-10-01T15:30:00.000Z' },
+        CURRENT_USER,
+      );
+
+      expect(tx.studentActivity.create).toHaveBeenCalledWith({
+        data: {
+          studentId: 8,
+          activityId: 3,
+          therapistId: THERAPIST_ID,
+          origin: 'psychologist',
+          dueAt: new Date('2026-10-01T15:30:00.000Z'),
+        },
+      });
     });
 
     it('rejects an inactive activity', async () => {
       tx.studentProfile.findUnique.mockResolvedValue({ id: 8 });
       tx.activity.findUnique.mockResolvedValue({ id: 3, active: false });
 
-      await expect(service.assign(8, dto, CURRENT_USER)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.assign(8, dto, CURRENT_USER),
+      ).rejects.toThrow(ConflictException);
 
       expect(tx.studentActivity.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findOneByStudent', () => {
+    it('returns NotFoundException when RLS hides the patient', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOneByStudent(8, 9)).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(tx.studentActivity.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('returns NotFoundException when the assignment does not belong to the patient', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: 8,
+        studentCode: null,
+        user: { email: null, fullName: null, institution: null },
+        assignedDoctor: null,
+      });
+      tx.studentActivity.findFirst.mockResolvedValue(null);
+
+      await expect(service.findOneByStudent(8, 10)).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(tx.studentActivity.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 10, studentId: 8 } }),
+      );
+    });
+
+    it('preserves nullable assignment fields', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: 8,
+        studentCode: null,
+        user: { email: null, fullName: null, institution: null },
+        assignedDoctor: null,
+      });
+      tx.studentActivity.findFirst.mockResolvedValue({
+        id: 9,
+        activity: {
+          id: 3,
+          title: 'Respiración',
+          description: null,
+          instructions: null,
+          active: true,
+        },
+        therapist: null,
+        origin: 'ecos',
+        status: 'pending',
+        assignedAt: new Date('2026-09-20T10:00:00.000Z'),
+        dueAt: null,
+        response: null,
+        completedAt: null,
+        createdAt: new Date('2026-09-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-09-20T10:00:00.000Z'),
+      });
+
+      const result = await service.findOneByStudent(8, 9);
+
+      expect(result.patient.institutionTimezone).toBe('America/El_Salvador');
+      expect(result.therapist).toBeNull();
+      expect(result.dueAt).toBeNull();
+      expect(result.response).toBeNull();
+      expect(result.completedAt).toBeNull();
+    });
+  });
+
+  describe('findByStudent', () => {
+    it('returns compact assignment history with pagination and no response text', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        user: { institution: { timezone: 'America/Guatemala' } },
+      });
+      tx.studentActivity.findMany.mockResolvedValue([
+        {
+          id: 9,
+          activity: { id: 3, title: 'Respiración' },
+          therapist: { id: THERAPIST_ID, fullName: 'Dra. Pérez' },
+          origin: 'psychologist',
+          status: 'pending',
+          assignedAt: new Date('2026-09-20T10:00:00.000Z'),
+          dueAt: null,
+          completedAt: null,
+          response: 'Contenido privado',
+        },
+      ]);
+      tx.studentActivity.count.mockResolvedValue(21);
+
+      await expect(
+        service.findByStudent(8, { skip: 10, take: 10, status: 'pending' }),
+      ).resolves.toEqual({
+        data: [
+          {
+            id: 9,
+            activity: { id: 3, title: 'Respiración' },
+            therapist: { id: THERAPIST_ID, fullName: 'Dra. Pérez' },
+            origin: 'psychologist',
+            status: 'pending',
+            assignedAt: new Date('2026-09-20T10:00:00.000Z'),
+            dueAt: null,
+            completedAt: null,
+            hasResponse: true,
+          },
+        ],
+        meta: {
+          skip: 10,
+          take: 10,
+          total: 21,
+          totalPages: 3,
+          institutionTimezone: 'America/Guatemala',
+        },
+      });
+
+      expect(tx.studentActivity.findMany).toHaveBeenCalledWith({
+        where: { studentId: 8, status: 'pending' },
+        skip: 10,
+        take: 10,
+        orderBy: [{ assignedAt: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true,
+          origin: true,
+          status: true,
+          assignedAt: true,
+          dueAt: true,
+          completedAt: true,
+          response: true,
+          activity: { select: { id: true, title: true } },
+          therapist: { select: { id: true, fullName: true } },
+        },
+      });
+    });
+
+    it('returns NotFoundException when RLS hides the patient', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue(null);
+
+      await expect(service.findByStudent(8, {})).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(tx.studentActivity.findMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps historical assignments when the catalog activity is inactive', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        user: { institution: null },
+      });
+      tx.studentActivity.findMany.mockResolvedValue([]);
+      tx.studentActivity.count.mockResolvedValue(0);
+
+      await service.findByStudent(8, {});
+
+      expect(tx.studentActivity.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { studentId: 8 } }),
+      );
+    });
+  });
+
+  describe('findOneByStudent', () => {
+    it('returns the current catalog content and read-only assignment detail', async () => {
+      const assignedAt = new Date('2026-09-20T10:00:00.000Z');
+      const dueAt = new Date('2026-10-01T15:30:00.000Z');
+      const completedAt = new Date('2026-10-02T15:30:00.000Z');
+      const createdAt = new Date('2026-09-20T10:00:00.000Z');
+      const updatedAt = new Date('2026-10-02T15:30:00.000Z');
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: 8,
+        studentCode: 'PAC-008',
+        user: {
+          email: 'patient@example.com',
+          fullName: 'Paciente de prueba',
+          institution: { timezone: 'America/Guatemala' },
+        },
+        assignedDoctor: {
+          id: THERAPIST_ID,
+          fullName: 'Dra. Pérez',
+          email: 'therapist@example.com',
+        },
+      });
+      tx.studentActivity.findFirst.mockResolvedValue({
+        id: 9,
+        activity: {
+          id: 3,
+          title: 'Respiración',
+          description: 'Descripción actual',
+          instructions: 'Instrucciones actuales',
+          active: false,
+        },
+        therapist: { id: THERAPIST_ID, fullName: 'Dra. Pérez' },
+        origin: 'psychologist',
+        status: 'completed',
+        assignedAt,
+        dueAt,
+        response: 'Respuesta registrada',
+        completedAt,
+        createdAt,
+        updatedAt,
+      });
+
+      await expect(service.findOneByStudent(8, 9)).resolves.toEqual({
+        id: 9,
+        patient: {
+          id: 8,
+          studentCode: 'PAC-008',
+          fullName: 'Paciente de prueba',
+          email: 'patient@example.com',
+          assignedTherapist: {
+            id: THERAPIST_ID,
+            fullName: 'Dra. Pérez',
+            email: 'therapist@example.com',
+          },
+          institutionTimezone: 'America/Guatemala',
+        },
+        activity: {
+          id: 3,
+          title: 'Respiración',
+          description: 'Descripción actual',
+          instructions: 'Instrucciones actuales',
+          active: false,
+        },
+        therapist: { id: THERAPIST_ID, fullName: 'Dra. Pérez' },
+        origin: 'psychologist',
+        status: 'completed',
+        assignedAt,
+        dueAt,
+        response: 'Respuesta registrada',
+        completedAt,
+        createdAt,
+        updatedAt,
+      });
+
+      expect(tx.studentActivity.findFirst).toHaveBeenCalledWith({
+        where: { id: 9, studentId: 8 },
+        select: expect.objectContaining({
+          activity: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              instructions: true,
+              active: true,
+            },
+          },
+        }),
+      });
+    });
+
+    it('returns NotFoundException when RLS hides the patient', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOneByStudent(8, 9)).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(tx.studentActivity.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('returns NotFoundException when the assignment does not belong to the patient', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: 8,
+        studentCode: null,
+        user: { email: null, fullName: null, institution: null },
+        assignedDoctor: null,
+      });
+      tx.studentActivity.findFirst.mockResolvedValue(null);
+
+      await expect(service.findOneByStudent(8, 10)).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(tx.studentActivity.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 10, studentId: 8 } }),
+      );
+    });
+
+    it('preserves nullable assignment fields', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: 8,
+        studentCode: null,
+        user: { email: null, fullName: null, institution: null },
+        assignedDoctor: null,
+      });
+      tx.studentActivity.findFirst.mockResolvedValue({
+        id: 9,
+        activity: {
+          id: 3,
+          title: 'Respiración',
+          description: null,
+          instructions: null,
+          active: true,
+        },
+        therapist: null,
+        origin: 'ecos',
+        status: 'pending',
+        assignedAt: new Date('2026-09-20T10:00:00.000Z'),
+        dueAt: null,
+        response: null,
+        completedAt: null,
+        createdAt: new Date('2026-09-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-09-20T10:00:00.000Z'),
+      });
+
+      const result = await service.findOneByStudent(8, 9);
+
+      expect(result.patient.institutionTimezone).toBe('America/El_Salvador');
+      expect(result.therapist).toBeNull();
+      expect(result.dueAt).toBeNull();
+      expect(result.response).toBeNull();
+      expect(result.completedAt).toBeNull();
     });
   });
 });
