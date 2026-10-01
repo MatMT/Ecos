@@ -1,5 +1,5 @@
-import Patients from '@/app/views/Patients'
+import { PatientsPage } from "@/features/patients/components/patients-page"
 
-export default function PatientsPage() {
-  return <Patients />
+export default function Page() {
+  return <PatientsPage />
 }

@@ -38,6 +38,12 @@ export class AppointmentResponseDto {
   @ApiPropertyOptional({ enum: AppointmentStatus, nullable: true })
   status!: AppointmentStatus | null;
 
+  @ApiProperty({
+    description:
+      'Whether this appointment already has an associated clinical note. No clinical content is included.',
+  })
+  hasClinicalNote!: boolean;
+
   @ApiPropertyOptional({ nullable: true })
   createdById!: string | null;
 

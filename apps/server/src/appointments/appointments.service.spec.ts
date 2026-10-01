@@ -158,6 +158,63 @@ describe('AppointmentsService', () => {
     });
   });
 
+  describe('clinical-note summary', () => {
+    it('returns a non-clinical note-presence flag in appointment lists', async () => {
+      tx.appointment.findMany.mockResolvedValue([
+        {
+          id: 1,
+          clinicalNote: { id: 31 },
+          doctor: null,
+          student: null,
+        },
+        {
+          id: 2,
+          clinicalNote: null,
+          doctor: null,
+          student: null,
+        },
+      ]);
+
+      await expect(service.findAll({}, 0, 20)).resolves.toEqual([
+        {
+          id: 1,
+          hasClinicalNote: true,
+          doctor: null,
+          student: null,
+        },
+        {
+          id: 2,
+          hasClinicalNote: false,
+          doctor: null,
+          student: null,
+        },
+      ]);
+      expect(tx.appointment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            clinicalNote: { select: { id: true } },
+          }),
+        }),
+      );
+    });
+
+    it('returns the note-presence flag without the note relation in appointment detail', async () => {
+      tx.appointment.findUnique.mockResolvedValue({
+        id: 1,
+        clinicalNote: { id: 31 },
+        doctor: null,
+        student: null,
+      });
+
+      await expect(service.findOne(1)).resolves.toEqual({
+        id: 1,
+        hasClinicalNote: true,
+        doctor: null,
+        student: null,
+      });
+    });
+  });
+
   describe('reschedule', () => {
     it('creates a new linked appointment and marks the original as rescheduled', async () => {
       tx.appointment.findUnique.mockResolvedValue({

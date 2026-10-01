@@ -511,7 +511,7 @@ describe('Authorization (RLS) e2e', () => {
       expect(asOtherInstitutionDoctor).toBeNull();
     });
 
-    it('remote_alerts: self, assigned doctor, and same-institution admin can read', async () => {
+    it('remote_alerts: self and assigned doctor can read, but an administrator cannot', async () => {
       const asSelf = await withRlsAs(
         fixture.studentA.userId,
         'authenticated',
@@ -538,7 +538,47 @@ describe('Authorization (RLS) e2e', () => {
       );
       expect(asSelf.length).toBeGreaterThan(0);
       expect(asDoctor.length).toBeGreaterThan(0);
-      expect(asAdmin.length).toBeGreaterThan(0);
+      expect(asAdmin).toHaveLength(0);
+    });
+
+    it('remote_alerts: the patient-qualified detail lookup is visible only to the assigned doctor', async () => {
+      const asDoctor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) =>
+          tx.alert.findFirst({
+            where: {
+              id: fixture.alertA.id,
+              studentId: fixture.studentA.profileId,
+            },
+          }),
+      );
+      const asUnrelated = await withRlsAs(
+        fixture.psychA2.id,
+        'authenticated',
+        (tx) =>
+          tx.alert.findFirst({
+            where: {
+              id: fixture.alertA.id,
+              studentId: fixture.studentA.profileId,
+            },
+          }),
+      );
+      const asAdmin = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.alert.findFirst({
+            where: {
+              id: fixture.alertA.id,
+              studentId: fixture.studentA.profileId,
+            },
+          }),
+      );
+
+      expect(asDoctor?.id).toBe(fixture.alertA.id);
+      expect(asUnrelated).toBeNull();
+      expect(asAdmin).toBeNull();
     });
 
     it('remote_alerts: an unrelated psychologist and a different institution cannot read', async () => {
@@ -575,8 +615,40 @@ describe('Authorization (RLS) e2e', () => {
       ).rejects.toThrow();
     });
 
-    it('remote_biometric_records: assigned doctor can read, unrelated psychologist cannot', async () => {
-      const asDoctor = await withRlsAs(
+    it('remote_band_devices and remote_biometric_records: only the owner and assigned doctor can read', async () => {
+      const bandsAsSelf = await withRlsAs(
+        fixture.studentA.userId,
+        'authenticated',
+        (tx) =>
+          tx.bandDevice.findMany({
+            where: { studentId: fixture.studentA.profileId },
+          }),
+      );
+      const bandsAsDoctor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) =>
+          tx.bandDevice.findMany({
+            where: { studentId: fixture.studentA.profileId },
+          }),
+      );
+      const bandsAsAdmin = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.bandDevice.findMany({
+            where: { studentId: fixture.studentA.profileId },
+          }),
+      );
+      const recordsAsSelf = await withRlsAs(
+        fixture.studentA.userId,
+        'authenticated',
+        (tx) =>
+          tx.biometricRecord.findMany({
+            where: { device: { studentId: fixture.studentA.profileId } },
+          }),
+      );
+      const recordsAsDoctor = await withRlsAs(
         fixture.psychA1.id,
         'authenticated',
         (tx) =>
@@ -584,7 +656,7 @@ describe('Authorization (RLS) e2e', () => {
             where: { device: { studentId: fixture.studentA.profileId } },
           }),
       );
-      const asUnrelated = await withRlsAs(
+      const recordsAsUnrelated = await withRlsAs(
         fixture.psychA2.id,
         'authenticated',
         (tx) =>
@@ -592,12 +664,76 @@ describe('Authorization (RLS) e2e', () => {
             where: { device: { studentId: fixture.studentA.profileId } },
           }),
       );
-      expect(asDoctor.length).toBeGreaterThan(0);
-      expect(asUnrelated).toHaveLength(0);
+      const recordsAsAdmin = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.biometricRecord.findMany({
+            where: { device: { studentId: fixture.studentA.profileId } },
+          }),
+      );
+      const recordsAsOtherInstitutionDoctor = await withRlsAs(
+        fixture.psychB1.id,
+        'authenticated',
+        (tx) =>
+          tx.biometricRecord.findMany({
+            where: { device: { studentId: fixture.studentA.profileId } },
+          }),
+      );
+
+      expect(bandsAsSelf.length).toBeGreaterThan(0);
+      expect(bandsAsDoctor.length).toBeGreaterThan(0);
+      expect(bandsAsAdmin).toHaveLength(0);
+      expect(recordsAsSelf.length).toBeGreaterThan(0);
+      expect(recordsAsDoctor.length).toBeGreaterThan(0);
+      expect(recordsAsUnrelated).toHaveLength(0);
+      expect(recordsAsAdmin).toHaveLength(0);
+      expect(recordsAsOtherInstitutionDoctor).toHaveLength(0);
     });
   });
 
   describe('can_access_clinical_data shape (assigned doctor only, no self, no admin)', () => {
+    it('session-history inputs are visible only to the currently assigned psychologist', async () => {
+      const asAssigned = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        async (tx) => ({
+          notes: await tx.clinicalNote.findMany({
+            where: { studentId: fixture.studentA2.profileId },
+          }),
+          patient: await tx.studentProfile.findUnique({
+            where: { id: fixture.studentA2.profileId },
+          }),
+        }),
+      );
+      const asUnrelated = await withRlsAs(
+        fixture.psychA2.id,
+        'authenticated',
+        async (tx) => ({
+          notes: await tx.clinicalNote.findMany({
+            where: { studentId: fixture.studentA2.profileId },
+          }),
+          patient: await tx.studentProfile.findUnique({
+            where: { id: fixture.studentA2.profileId },
+          }),
+        }),
+      );
+      const asAdministrator = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.clinicalNote.findMany({
+            where: { studentId: fixture.studentA2.profileId },
+          }),
+      );
+
+      expect(asAssigned.patient).not.toBeNull();
+      expect(asAssigned.notes).toHaveLength(1);
+      expect(asUnrelated.patient).toBeNull();
+      expect(asUnrelated.notes).toHaveLength(0);
+      expect(asAdministrator).toHaveLength(0);
+    });
+
     it('remote_clinical_records: assigned doctor can read, self and admin cannot', async () => {
       const asDoctor = await withRlsAs(
         fixture.psychA1.id,
@@ -648,6 +784,46 @@ describe('Authorization (RLS) e2e', () => {
       expect(asDoctor.length).toBeGreaterThan(0);
       expect(asUnrelated).toHaveLength(0);
     });
+
+    it('remote_student_activities: only the current assigned therapist can read assignments', async () => {
+      const asDoctor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) =>
+          tx.studentActivity.findUnique({
+            where: { id: fixture.studentActivityA.id },
+          }),
+      );
+      const asUnrelated = await withRlsAs(
+        fixture.psychA2.id,
+        'authenticated',
+        (tx) =>
+          tx.studentActivity.findUnique({
+            where: { id: fixture.studentActivityA.id },
+          }),
+      );
+      const asAdministrator = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) =>
+          tx.studentActivity.findUnique({
+            where: { id: fixture.studentActivityA.id },
+          }),
+      );
+      const asOtherInstitutionPsychologist = await withRlsAs(
+        fixture.psychB1.id,
+        'authenticated',
+        (tx) =>
+          tx.studentActivity.findUnique({
+            where: { id: fixture.studentActivityA.id },
+          }),
+      );
+
+      expect(asDoctor?.id).toBe(fixture.studentActivityA.id);
+      expect(asUnrelated).toBeNull();
+      expect(asAdministrator).toBeNull();
+      expect(asOtherInstitutionPsychologist).toBeNull();
+    });
   });
 
   describe('Author-or-current-assigned shape (continuity of care)', () => {
@@ -680,6 +856,54 @@ describe('Authorization (RLS) e2e', () => {
       );
       expect(asAuthor).not.toBeNull();
       expect(asNewlyAssigned).not.toBeNull();
+    });
+
+    it('clinical-note detail context exposes the exact note only to its author or current assignee', async () => {
+      const loadContext = (tx: Prisma.TransactionClient, studentId: number) =>
+        tx.$queryRaw<{ author_id: string | null; patient_id: number }[]>`
+          SELECT author_id, patient_id
+          FROM app_private.get_clinical_note_detail_context(
+            ${studentId},
+            ${fixture.clinicalNoteA2.id}
+          )
+        `;
+
+      const asAuthor = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA2.profileId),
+      );
+      const asCurrentAssignee = await withRlsAs(
+        fixture.psychA2.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA2.profileId),
+      );
+      const asAdministrator = await withRlsAs(
+        fixture.adminA.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA2.profileId),
+      );
+      const asOtherInstitutionPsychologist = await withRlsAs(
+        fixture.psychB1.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA2.profileId),
+      );
+      const withMismatchedPatient = await withRlsAs(
+        fixture.psychA1.id,
+        'authenticated',
+        (tx) => loadContext(tx, fixture.studentA.profileId),
+      );
+
+      expect(asAuthor).toEqual([
+        {
+          author_id: fixture.psychA1.id,
+          patient_id: fixture.studentA2.profileId,
+        },
+      ]);
+      expect(asCurrentAssignee).toHaveLength(1);
+      expect(asAdministrator).toHaveLength(0);
+      expect(asOtherInstitutionPsychologist).toHaveLength(0);
+      expect(withMismatchedPatient).toHaveLength(0);
     });
 
     it('remote_clinical_notes: only the original author may update it, not the new assignee', async () => {
@@ -884,6 +1108,17 @@ describe('Authorization (RLS) e2e', () => {
           }),
       );
       expect(created.id).toBeDefined();
+    });
+
+    it('denies an administrator from updating another institution activity', async () => {
+      await expect(
+        withRlsAs(fixture.adminB.id, 'authenticated', (tx) =>
+          tx.activity.update({
+            where: { id: fixture.activityInstitutionA.id },
+            data: { title: '[RLS-TEST] cross-institution update attempt' },
+          }),
+        ),
+      ).rejects.toThrow();
     });
   });
 

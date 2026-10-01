@@ -24,6 +24,9 @@ import { CreateAlertActionDto } from './dto/create-alert-action.dto';
 import { CloseAlertDto } from './dto/close-alert.dto';
 import { AlertResponseDto } from './dto/alert-response.dto';
 import { AlertActionResponseDto } from './dto/alert-action-response.dto';
+import { PatientAlertListQueryDto } from './dto/patient-alert-list-query.dto';
+import { PatientAlertListResponseDto } from './dto/patient-alert-list-response.dto';
+import { AlertDetailResponseDto } from './dto/alert-detail-response.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -98,22 +101,60 @@ export class AlertsController {
   }
 
   @Get('students/:studentId/alerts')
-  @ApiOperation({ summary: "List a patient's alerts" })
+  @UseGuards(RolesGuard)
+  @Roles(Role.psychologist, Role.student)
+  @ApiOperation({
+    summary: "List a patient's persisted alerts",
+    description:
+      'Returns a privacy-minimized, paginated alert history for the visible patient.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Alerts, most recent first.',
-    type: [AlertResponseDto],
+    description: 'Paginated alerts, newest first.',
+    type: PatientAlertListResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'El usuario no tiene un rol autorizado para consultar alertas.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'El paciente no existe o no se encuentra disponible para el usuario.',
   })
   findByStudent(
     @Param('studentId', ParseIntPipe) studentId: number,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
+    @Query() query: PatientAlertListQueryDto,
   ) {
-    return this.alertsService.findByStudent(
-      studentId,
-      skip ? Number(skip) : undefined,
-      take ? Number(take) : undefined,
-    );
+    return this.alertsService.findByStudent(studentId, query);
+  }
+
+  @Get('students/:studentId/alerts/:alertId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.psychologist)
+  @ApiOperation({
+    summary: "Get a patient's alert detail",
+    description:
+      'Returns the authorized alert only when it belongs to the requested patient. Administrators do not have clinical-alert access.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Detalle de alerta disponible.',
+    type: AlertDetailResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'El usuario no tiene permisos para consultar alertas clínicas.',
+  })
+  @ApiResponse({
+    status: 404,
+    description:
+      'La alerta no existe, no pertenece al paciente o no se encuentra disponible para el usuario.',
+  })
+  findOneByStudent(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Param('alertId', ParseIntPipe) alertId: number,
+  ) {
+    return this.alertsService.findOneByStudent(studentId, alertId);
   }
 
   @Get('alerts/:id/actions')
@@ -148,7 +189,10 @@ export class AlertsController {
     description: 'Alert reviewed.',
     type: AlertResponseDto,
   })
-  @ApiResponse({ status: 409, description: 'The alert was already reviewed.' })
+  @ApiResponse({
+    status: 409,
+    description: 'La alerta ya fue revisada o cambió de estado.',
+  })
   @ApiResponse({
     status: 404,
     description: 'The alert does not exist, or is not visible to the caller.',
@@ -176,7 +220,7 @@ export class AlertsController {
   })
   @ApiResponse({
     status: 409,
-    description: 'The alert has not been reviewed yet, or is already closed.',
+    description: 'La alerta no puede cerrarse en su estado actual.',
   })
   @ApiResponse({
     status: 404,

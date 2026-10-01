@@ -53,8 +53,9 @@ export class ClinicalRecordsController {
   create(
     @Param('studentId', ParseIntPipe) studentId: number,
     @Body() dto: CreateClinicalRecordDto,
+    @CurrentUser() currentUser?: RequestUser,
   ) {
-    return this.clinicalRecordsService.create(studentId, dto);
+    return this.clinicalRecordsService.create(studentId, dto, currentUser);
   }
 
   @Get('students/:studentId/clinical-record')
@@ -90,7 +91,8 @@ export class ClinicalRecordsController {
   update(
     @Param('studentId', ParseIntPipe) studentId: number,
     @Body() dto: UpdateClinicalRecordDto,
+    @CurrentUser() currentUser?: RequestUser,
   ) {
-    return this.clinicalRecordsService.update(studentId, dto);
+    return this.clinicalRecordsService.update(studentId, dto, currentUser);
   }
 }

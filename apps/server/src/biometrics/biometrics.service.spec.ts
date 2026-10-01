@@ -6,15 +6,27 @@ import { PrismaService } from '../prisma/prisma.service';
 describe('BiometricsService', () => {
   let service: BiometricsService;
   let tx: {
+    $queryRaw: jest.Mock;
     bandDevice: { findMany: jest.Mock };
-    biometricRecord: { findMany: jest.Mock; findFirst: jest.Mock };
+    biometricRecord: {
+      count: jest.Mock;
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+    };
+    studentProfile: { findUnique: jest.Mock };
   };
   let prisma: { withRls: jest.Mock };
 
   beforeEach(async () => {
     tx = {
+      $queryRaw: jest.fn(),
       bandDevice: { findMany: jest.fn() },
-      biometricRecord: { findMany: jest.fn(), findFirst: jest.fn() },
+      biometricRecord: {
+        count: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+      },
+      studentProfile: { findUnique: jest.fn() },
     };
     prisma = { withRls: jest.fn((fn: (tx: unknown) => unknown) => fn(tx)) };
 
@@ -43,6 +55,220 @@ describe('BiometricsService', () => {
         where: { device: { studentId: 8 } },
         orderBy: { timestamp: 'desc' },
       });
+    });
+  });
+
+  describe('findRecords', () => {
+    it('returns a minimized paginated envelope with an independent latest record', async () => {
+      const latest = {
+        id: 9,
+        avgHeartRate: null,
+        stressLevel: 0,
+        bloodOxygen: 98,
+        timestamp: new Date('2026-09-30T10:00:00.000Z'),
+        createdAt: new Date('2026-09-30T10:01:00.000Z'),
+      };
+      const pageRecord = {
+        id: 8,
+        avgHeartRate: 72,
+        stressLevel: null,
+        bloodOxygen: null,
+        timestamp: new Date('2026-09-29T10:00:00.000Z'),
+        createdAt: new Date('2026-09-29T10:01:00.000Z'),
+      };
+      tx.studentProfile.findUnique.mockResolvedValue({
+        user: { institution: { timezone: 'America/Guatemala' } },
+      });
+      tx.biometricRecord.findFirst.mockResolvedValue(latest);
+      tx.biometricRecord.findMany.mockResolvedValue([pageRecord]);
+      tx.biometricRecord.count.mockResolvedValue(41);
+
+      await expect(
+        service.findRecords(8, { skip: 20, take: 20 }),
+      ).resolves.toEqual({
+        latest,
+        data: [pageRecord],
+        meta: {
+          skip: 20,
+          take: 20,
+          total: 41,
+          totalPages: 3,
+          institutionTimezone: 'America/Guatemala',
+        },
+      });
+
+      expect(tx.biometricRecord.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [
+            { timestamp: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
+          select: {
+            id: true,
+            avgHeartRate: true,
+            stressLevel: true,
+            bloodOxygen: true,
+            timestamp: true,
+            createdAt: true,
+          },
+        }),
+      );
+      expect(tx.biometricRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [
+            { timestamp: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
+          skip: 20,
+          take: 20,
+        }),
+      );
+      expect(tx.biometricRecord.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          device: { studentId: 8 },
+          timestamp: expect.objectContaining({ gte: expect.any(Date), lt: expect.any(Date) }),
+        }),
+      });
+    });
+
+    it('returns an empty history and a fallback institution timezone', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        user: { institution: null },
+      });
+      tx.biometricRecord.findFirst.mockResolvedValue(null);
+      tx.biometricRecord.findMany.mockResolvedValue([]);
+      tx.biometricRecord.count.mockResolvedValue(0);
+
+      await expect(service.findRecords(8, {})).resolves.toEqual({
+        latest: null,
+        data: [],
+        meta: {
+          skip: 0,
+          take: 20,
+          total: 0,
+          totalPages: 0,
+          institutionTimezone: 'America/El_Salvador',
+        },
+      });
+    });
+
+    it('returns not found before querying records when the patient is inaccessible', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue(null);
+
+      await expect(service.findRecords(8, {})).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(tx.biometricRecord.findFirst).not.toHaveBeenCalled();
+      expect(tx.biometricRecord.findMany).not.toHaveBeenCalled();
+      expect(tx.biometricRecord.count).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findSummary', () => {
+    it('maps a parameterized aggregate response with null metric values preserved', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        user: { institution: { timezone: 'America/Guatemala' } },
+      });
+      tx.$queryRaw.mockResolvedValue([
+        {
+          sampleCount: BigInt(2),
+          avgHeartRateCount: BigInt(2),
+          avgHeartRateAverage: 75,
+          avgHeartRateMinimum: 70,
+          avgHeartRateMaximum: 80,
+          stressLevelCount: BigInt(1),
+          stressLevelAverage: 0.4,
+          stressLevelMinimum: 0.4,
+          stressLevelMaximum: 0.4,
+          bloodOxygenCount: BigInt(0),
+          bloodOxygenAverage: null,
+          bloodOxygenMinimum: null,
+          bloodOxygenMaximum: null,
+          timestamp: new Date('2026-09-30T10:00:00.000Z'),
+          seriesSampleCount: BigInt(2),
+          seriesAvgHeartRate: 75,
+          seriesStressLevel: 0.4,
+          seriesBloodOxygen: null,
+        },
+      ]);
+
+      const result = await service.findSummary(8, { range: '7d' });
+
+      expect(result).toMatchObject({
+        range: {
+          key: '7d',
+          bucket: 'day',
+          institutionTimezone: 'America/Guatemala',
+        },
+        sampleCount: 2,
+        metrics: {
+          avgHeartRate: { count: 2, average: 75, minimum: 70, maximum: 80 },
+          stressLevel: { count: 1, average: 0.4, minimum: 0.4, maximum: 0.4 },
+          bloodOxygen: { count: 0, average: null, minimum: null, maximum: null },
+        },
+        series: [
+          {
+            timestamp: new Date('2026-09-30T10:00:00.000Z'),
+            sampleCount: 2,
+            avgHeartRate: 75,
+            stressLevel: 0.4,
+            bloodOxygen: null,
+          },
+        ],
+      });
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns an empty series without converting missing metrics to zero', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        user: { institution: null },
+      });
+      tx.$queryRaw.mockResolvedValue([
+        {
+          sampleCount: BigInt(0),
+          avgHeartRateCount: BigInt(0),
+          avgHeartRateAverage: null,
+          avgHeartRateMinimum: null,
+          avgHeartRateMaximum: null,
+          stressLevelCount: BigInt(0),
+          stressLevelAverage: null,
+          stressLevelMinimum: null,
+          stressLevelMaximum: null,
+          bloodOxygenCount: BigInt(0),
+          bloodOxygenAverage: null,
+          bloodOxygenMinimum: null,
+          bloodOxygenMaximum: null,
+          timestamp: null,
+          seriesSampleCount: null,
+          seriesAvgHeartRate: null,
+          seriesStressLevel: null,
+          seriesBloodOxygen: null,
+        },
+      ]);
+
+      await expect(service.findSummary(8, { range: '24h' })).resolves.toMatchObject({
+        range: {
+          key: '24h',
+          bucket: 'hour',
+          institutionTimezone: 'America/El_Salvador',
+        },
+        sampleCount: 0,
+        metrics: {
+          avgHeartRate: { count: 0, average: null },
+          stressLevel: { count: 0, average: null },
+          bloodOxygen: { count: 0, average: null },
+        },
+        series: [],
+      });
+    });
+
+    it('verifies the patient before executing the aggregation', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue(null);
+
+      await expect(service.findSummary(8, {})).rejects.toThrow(NotFoundException);
+      expect(tx.$queryRaw).not.toHaveBeenCalled();
     });
   });
 

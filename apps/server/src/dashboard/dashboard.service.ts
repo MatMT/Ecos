@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AppointmentStatus, Role } from '@prisma/client';
+import { AlertStatus, AppointmentStatus, Role } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
@@ -14,7 +14,8 @@ import {
 import { TimelineItemDto } from './dto/timeline-item.dto';
 
 const DEFAULT_TIMEZONE = 'America/El_Salvador';
-const RECENT_TAKE = 5;
+const OVERVIEW_RECENT_TAKE = 3;
+const DASHBOARD_RECENT_TAKE = 5;
 const TIMELINE_SOURCE_LIMIT = 50;
 const DEFAULT_TIMELINE_TAKE = 20;
 const MAX_TIMELINE_TAKE = 100;
@@ -22,6 +23,11 @@ const MAX_TIMELINE_TAKE = 100;
 const OPEN_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.pending,
   AppointmentStatus.confirmed,
+];
+const OPEN_ALERT_STATUSES: AlertStatus[] = [
+  AlertStatus.new,
+  AlertStatus.reviewed,
+  AlertStatus.in_follow_up,
 ];
 
 function todayIsoDate(timezone: string): string {
@@ -40,7 +46,25 @@ export class DashboardService {
     return this.prisma.withRls(async (tx) => {
       const profile = await tx.studentProfile.findUnique({
         where: { id: studentId },
-        include: { user: true, assignedDoctor: true },
+        select: {
+          id: true,
+          studentCode: true,
+          user: {
+            select: {
+              fullName: true,
+              email: true,
+              institution: { select: { timezone: true } },
+            },
+          },
+          assignedDoctor: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              psychologistProfile: { select: { specialty: true } },
+            },
+          },
+        },
       });
       if (!profile) {
         throw new NotFoundException(
@@ -54,9 +78,10 @@ export class DashboardService {
         nextAppointment,
         activeTreatmentPlan,
         recentBiometricSummary,
-        openAlerts,
+        openAlertsCount,
+        recentOpenAlerts,
         pendingActivities,
-        recentClinicalNotes,
+        recentFollowUps,
         recentSharedContent,
       ] = await Promise.all([
         tx.appointment.findFirst({
@@ -66,34 +91,99 @@ export class DashboardService {
             status: { in: OPEN_APPOINTMENT_STATUSES },
           },
           orderBy: { appointmentDate: 'asc' },
+          select: {
+            id: true,
+            appointmentDate: true,
+            endAt: true,
+            durationMinutes: true,
+            sessionType: true,
+            modality: true,
+            status: true,
+          },
         }),
         tx.treatmentPlan.findFirst({
           where: { studentId, status: 'active' },
           orderBy: { startsAt: 'desc' },
+          select: {
+            id: true,
+            title: true,
+            generalGoal: true,
+            startsAt: true,
+            endsAt: true,
+            status: true,
+          },
         }),
         tx.biometricRecord.findFirst({
           where: { device: { studentId } },
-          orderBy: { timestamp: 'desc' },
+          orderBy: [
+            { timestamp: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
+          select: {
+            id: true,
+            avgHeartRate: true,
+            stressLevel: true,
+            bloodOxygen: true,
+            timestamp: true,
+          },
+        }),
+        tx.alert.count({
+          where: { studentId, status: { in: OPEN_ALERT_STATUSES } },
         }),
         tx.alert.findMany({
-          where: { studentId, status: { not: 'closed' } },
-          orderBy: { createdAt: 'desc' },
-          take: RECENT_TAKE,
+          where: { studentId, status: { in: OPEN_ALERT_STATUSES } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: OVERVIEW_RECENT_TAKE,
+          select: {
+            id: true,
+            alertType: true,
+            priority: true,
+            status: true,
+            createdAt: true,
+          },
         }),
         tx.studentActivity.findMany({
           where: { studentId, status: { not: 'completed' } },
           orderBy: { assignedAt: 'desc' },
-          take: RECENT_TAKE,
+          take: OVERVIEW_RECENT_TAKE,
+          select: {
+            id: true,
+            activityId: true,
+            origin: true,
+            status: true,
+            assignedAt: true,
+            dueAt: true,
+            activity: { select: { title: true } },
+          },
         }),
         tx.clinicalNote.findMany({
           where: { studentId, voidedAt: null },
-          orderBy: { createdAt: 'desc' },
-          take: RECENT_TAKE,
+          orderBy: [
+            { sessionDate: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
+          take: OVERVIEW_RECENT_TAKE,
+          select: {
+            id: true,
+            appointmentId: true,
+            createdAt: true,
+            sessionDate: true,
+            sessionType: true,
+            doctor: { select: { id: true, fullName: true, email: true } },
+            appointment: {
+              select: {
+                status: true,
+              },
+            },
+          },
         }),
         tx.sharedPatientContent.findMany({
           where: { studentId, revokedAt: null },
           orderBy: { sharedAt: 'desc' },
-          take: RECENT_TAKE,
+          take: OVERVIEW_RECENT_TAKE,
+          select: { id: true, contentType: true, sharedAt: true },
         }),
       ]);
 
@@ -101,24 +191,90 @@ export class DashboardService {
         student: {
           id: profile.id,
           studentCode: profile.studentCode,
-          primaryDiagnosis: profile.primaryDiagnosis,
           fullName: profile.user.fullName,
           email: profile.user.email,
         },
+        institutionTimezone:
+          profile.user.institution?.timezone ?? DEFAULT_TIMEZONE,
         currentTherapist: profile.assignedDoctor
           ? {
               id: profile.assignedDoctor.id,
               fullName: profile.assignedDoctor.fullName,
               email: profile.assignedDoctor.email,
+              specialty:
+                profile.assignedDoctor.psychologistProfile?.specialty ?? null,
             }
           : null,
-        nextAppointment,
-        activeTreatmentPlan,
-        recentBiometricSummary,
-        openAlerts,
-        pendingActivities,
-        recentClinicalNotes,
-        recentSharedContent,
+        nextAppointment: nextAppointment
+          ? {
+              id: nextAppointment.id,
+              appointmentDate: nextAppointment.appointmentDate,
+              endAt: nextAppointment.endAt,
+              durationMinutes: nextAppointment.durationMinutes,
+              sessionType: nextAppointment.sessionType,
+              modality: nextAppointment.modality,
+              status: nextAppointment.status,
+            }
+          : null,
+        activeTreatmentPlan: activeTreatmentPlan
+          ? {
+              id: activeTreatmentPlan.id,
+              title: activeTreatmentPlan.title,
+              generalGoal: activeTreatmentPlan.generalGoal,
+              startsAt: activeTreatmentPlan.startsAt,
+              endsAt: activeTreatmentPlan.endsAt,
+              status: activeTreatmentPlan.status,
+            }
+          : null,
+        recentBiometricSummary: recentBiometricSummary
+          ? {
+              id: recentBiometricSummary.id,
+              avgHeartRate: recentBiometricSummary.avgHeartRate,
+              stressLevel: recentBiometricSummary.stressLevel,
+              bloodOxygen: recentBiometricSummary.bloodOxygen,
+              timestamp: recentBiometricSummary.timestamp,
+            }
+          : null,
+        alertsSummary: {
+          openCount: openAlertsCount,
+          recentAlerts: recentOpenAlerts.map((alert) => ({
+            id: alert.id,
+            alertType: alert.alertType,
+            priority: alert.priority,
+            status: alert.status,
+            createdAt: alert.createdAt,
+          })),
+        },
+        pendingActivities: pendingActivities.map((activity) => ({
+          id: activity.id,
+          activityId: activity.activityId,
+          title: activity.activity.title,
+          origin: activity.origin,
+          status: activity.status,
+          assignedAt: activity.assignedAt,
+          dueAt: activity.dueAt,
+        })),
+        recentFollowUps: recentFollowUps.map((followUp) => ({
+          id: followUp.id,
+          appointmentId: followUp.appointmentId,
+          createdAt: followUp.createdAt,
+          sessionDate: followUp.sessionDate,
+          sessionType: followUp.sessionType,
+          status: followUp.appointment?.status ?? null,
+          therapist: followUp.doctor
+            ? {
+                id: followUp.doctor.id,
+                fullName: followUp.doctor.fullName,
+                email: followUp.doctor.email,
+                specialty: null,
+              }
+            : null,
+        })),
+        recentSharedContent: recentSharedContent.map((content) => ({
+          id: content.id,
+          contentType: content.contentType,
+          sharedAt: content.sharedAt,
+        })),
       };
     });
   }
@@ -143,7 +299,11 @@ export class DashboardService {
           }),
           tx.clinicalNote.findMany({
             where: { studentId },
-            orderBy: { createdAt: 'desc' },
+            orderBy: [
+              { sessionDate: { sort: 'desc', nulls: 'last' } },
+              { createdAt: 'desc' },
+              { id: 'desc' },
+            ],
             take: TIMELINE_SOURCE_LIMIT,
           }),
           tx.alert.findMany({
@@ -177,13 +337,18 @@ export class DashboardService {
             referenceId: a.id,
             summary: a.status,
           })),
-        ...clinicalNotes.map((n) => ({
-          type: 'CLINICAL_NOTE' as const,
-          occurredAt: n.createdAt,
-          title: 'Nota clínica',
-          referenceId: n.id,
-          summary: n.sessionDiagnosis,
-        })),
+        ...clinicalNotes
+          .filter(
+            (note): note is typeof note & { sessionDate: Date } =>
+              note.sessionDate !== null,
+          )
+          .map((note) => ({
+            type: 'CLINICAL_NOTE' as const,
+            occurredAt: note.sessionDate,
+            title: 'Nota clínica',
+            referenceId: note.id,
+            summary: note.sessionDiagnosis,
+          })),
         ...alerts.map((al) => ({
           type: 'ALERT' as const,
           occurredAt: al.createdAt,
@@ -257,7 +422,7 @@ export class DashboardService {
             status: { in: OPEN_APPOINTMENT_STATUSES },
           },
           orderBy: { appointmentDate: 'asc' },
-          take: RECENT_TAKE,
+          take: DASHBOARD_RECENT_TAKE,
         }),
         tx.alert.findMany({
           where: {
@@ -284,7 +449,7 @@ export class DashboardService {
         tx.alertAction.findMany({
           where: { therapistId },
           orderBy: { createdAt: 'desc' },
-          take: RECENT_TAKE,
+          take: DASHBOARD_RECENT_TAKE,
         }),
       ]);
 

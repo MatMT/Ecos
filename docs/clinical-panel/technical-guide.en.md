@@ -619,7 +619,12 @@ Creation must run in a transaction: validate institution, validate email, create
 | PATCH | `/appointments/:id/reschedule` | Reschedule. |
 | PATCH | `/appointments/:id/cancel` | Cancel with a reason. |
 | PATCH | `/appointments/:id/no-show` | Mark as a no-show. |
-| PATCH | `/appointments/:id/complete` | Mark as completed; may require a `ClinicalNote`. |
+
+List and detail responses include `hasClinicalNote`, a boolean indicator with
+no clinical content. There is no separate clinical-completion endpoint:
+`POST /clinical-notes` creates the note for a confirmed appointment and marks
+it `completed` in the same transaction. A historical completed appointment
+without a note may be documented once.
 
 `CreateAppointmentDto` — example JSON:
 
@@ -651,14 +656,23 @@ is in the future.
 
 | Method | Endpoint | Use |
 |---|---|---|
-| POST | `/clinical-notes` | Log a note for a completed appointment. |
+| POST | `/clinical-notes` | Log a note for a confirmed appointment and complete it atomically. |
+| POST | `/students/:id/clinical-notes` | Log a manual session for the currently assigned patient. |
 | GET | `/clinical-notes/:id` | Get note. |
-| PATCH | `/clinical-notes/:id` | Update while the edit policy allows it. |
-| GET | `/students/:id/clinical-notes` | Patient's note history. |
+| GET | `/students/:studentId/clinical-notes/:id` | Get patient-qualified detail, including only the workspace context authorized for that note. |
+| PATCH | `/clinical-notes/:id` | Update allowed professional content only; the original author is the sole editor and a voided note conflicts. |
+| GET | `/students/:id/clinical-notes?skip=0&take=20` | Paginated, minimized patient note history; returns `{ data, meta }`. |
 
 > **Deletion.** A physical `DELETE` on `ClinicalNote` is not recommended. If a note needs to be
 > voided or corrected, use `voidedAt`, `voidedBy`, and `voidReason`, or an equivalent strategy that
 > preserves traceability.
+
+Session detail separates professional content from supplementary ECOS analysis.
+`aiAssistantAnalysis` is read-only in this surface and is never merged with the therapist's
+assessment. Read continuity is preserved for the original author and current assigned therapist;
+a narrow RLS projection provides only the context necessary for that detail, without broadening a
+former author's access to the complete patient profile. Updates record `CLINICAL_NOTE_UPDATED`
+without writing clinical text to the audit log.
 
 ### 7.7 Treatment plan and goals
 
@@ -691,7 +705,10 @@ the period/window it represents.
 | Method | Endpoint | Use |
 |---|---|---|
 | GET | `/students/:id/bands` | Query linked Ecos Bands. |
-| GET | `/students/:id/biometrics` | Query series/summaries by date range. |
+| GET | `/students/:id/biometrics?range&skip&take` | Paginated, minimized biometric history; `latest` always represents the global latest record. `range` accepts `24h`, `7d`, `30d`, and `90d`. |
+| GET | `/students/:id/biometrics/summary?range` | Descriptive statistics and an aggregate series for preset ranges; 24 hours uses institution-local hourly buckets and other ranges use local daily buckets. |
+| GET | `/students/:id/alerts?skip&take&status&alertType&priority` | Paginated, minimized persisted-alert history. It verifies patient access, orders by newest creation time, and excludes SOS contextual text. |
+| GET | `/students/:id/alerts/:alertId` | Patient-qualified alert detail for psychologists. It verifies the alert-patient relation and RLS before exposing authorized SOS context and summarized actors. |
 | GET | `/students/:id/biometrics/latest` | Latest available summary. |
 | GET | `/students/:id/biometrics/trends` | Trends prepared for charts. |
 
@@ -710,6 +727,13 @@ the period/window it represents.
 | POST | `/alerts/:id/actions` | Log an action taken. |
 | PATCH | `/alerts/:id/close` | Close the alert. |
 | GET | `/students/:id/alerts` | Patient's history. |
+
+The portal uses `GET /students/:id/alerts/:alertId`; administrators receive `403` and
+inaccessible or mismatched resources return `404`. The transition path is
+`new → reviewed → in_follow_up → closed`: review accepts only `new`, while close accepts
+`reviewed` or `in_follow_up`. Conditional writes reject concurrent changes with `409`.
+`reviewedBy` is stored on the alert; `closedBy` is projected from the terminal `closed` action.
+This phase adds no column, migration, or notification mechanism.
 
 The therapist may decide to contact the patient, schedule an appointment, plan a session, or
 recommend a referral. An alert must not automatically turn into a diagnosis, nor modify the clinical
@@ -733,28 +757,54 @@ patient's private journal.
 | `GET /dashboard/psychologist` | Assigned patients, today's appointments, upcoming appointments, pending alerts, priority alerts, activities, and recent follow-up. |
 | `GET /dashboard/administrator` | Users, patients, therapists, assignments, appointments, linked bands, and the institution's operational metrics. |
 
-### 7.13 Patient aggregated view
+### 7.13 Secure patient aggregated view
 
-A composite endpoint is recommended for the record's landing screen, to avoid the frontend firing
-many independent requests when a patient is opened.
+`GET /students/:id/overview` is a composite projection for the clinical header. It is restricted
+to the currently assigned psychologist through `Roles(psychologist)` and RLS; an administrator
+uses `GET /students/:id` for the non-clinical institutional record. Its purpose is to avoid N+1
+requests without sending the record or clinical bodies the summary view does not need.
 
-`GET /students/:id/overview` — indicative contract:
+The contract is intentionally minimal:
 
 ```json
 {
-  "student": {},
-  "currentTherapist": {},
-  "nextAppointment": {},
-  "activeTreatmentPlan": {},
-  "recentBiometricSummary": {},
-  "openAlerts": [],
+  "student": { "id": 0, "fullName": "string|null", "email": "string|null", "studentCode": "string|null" },
+  "institutionTimezone": "America/El_Salvador",
+  "currentTherapist": { "id": "uuid", "fullName": "string|null", "email": "string|null", "specialty": "string|null" },
+  "nextAppointment": { "id": 0, "appointmentDate": "date|null", "endAt": "date|null", "durationMinutes": 0, "sessionType": "string|null", "modality": "string|null", "status": "string|null" },
+  "activeTreatmentPlan": { "id": 0, "title": "string|null", "generalGoal": "string|null", "startsAt": "date", "endsAt": "date|null", "status": "string" },
+  "recentBiometricSummary": { "id": 0, "avgHeartRate": 0, "stressLevel": 0, "bloodOxygen": 0, "timestamp": "date|null" },
+  "alertsSummary": { "openCount": 0, "recentAlerts": [{ "id": 0, "alertType": "panic_button|null", "priority": "critical|null", "status": "new", "createdAt": "date" }] },
   "pendingActivities": [],
-  "recentClinicalNotes": [],
+  "recentFollowUps": [],
   "recentSharedContent": []
 }
 ```
 
-### 7.14 Clinical timeline
+`recentBiometricSummary` is the latest synchronized record ordered by timestamp,
+creation time, and identifier; it is not live telemetry. `alertsSummary.openCount`
+counts `new`, `reviewed`, and `in_follow_up` alerts exactly, while
+`recentAlerts` contains at most three minimized summaries ordered by creation
+time and identifier. Neither alert descriptions nor SOS context are included.
+
+Recent collections are limited to three records. `pendingActivities` contains title, origin,
+status, assignment and due date; `recentFollowUps` provides only date, linked appointment, type,
+status and therapist; `recentSharedContent` provides only identifier, type and date. The endpoint
+does not include diagnosis, observations, AI analysis, summaries, impressions, interventions,
+agreements, follow-up plans, activity responses, or shared-content bodies. The timezone comes from
+the patient's institution and falls back to `America/El_Salvador` when unavailable.
+
+### 7.14 Clinical and administrative read separation
+
+Administrators may manage institutional patients and authorized appointment
+operations, but they do not obtain clinical telemetry through that role. The RLS
+policies for `remote_alerts`, `remote_band_devices`, and
+`remote_biometric_records` allow reads only to the owning student or currently
+assigned psychologist through `can_access_clinical_data`. This separation
+complements Nest guards; it must not be replaced by client-side or
+institution-filter checks.
+
+### 7.15 Clinical timeline
 
 `ClinicalTimelineService` can unify events from `Appointment`, `ClinicalNote`, `Alert`,
 `StudentActivity`, `SharedPatientContent`, and relevant clinical changes. It doesn't need its own
@@ -903,6 +953,7 @@ therapeutic notes, history, or shared content.
 | `CLINICAL_NOTE_CREATED` | Creating a session note. |
 | `CLINICAL_NOTE_UPDATED` | A later edit. |
 | `ALERT_REVIEWED` | First review of an alert. |
+| `ALERT_CLOSED` | Alert closure, with identifier-only metadata and no SOS text. |
 | `ALERT_ACTION_CREATED` | An action taken on an alert. |
 | `THERAPIST_ASSIGNED` | Assignment/reassignment. |
 | `SHARED_CONTENT_VIEWED` | Viewing explicitly shared content. |
@@ -959,14 +1010,14 @@ _This table is the original proposal, not the executed plan.)_
 | Assignments | `POST /therapist-assignments` · `GET /students/:id/therapist-assignments` · `PATCH /therapist-assignments/:id/end` |
 | Schedules | `GET/POST /psychologists/:id/schedules` · `PATCH /schedules/:id` · `POST /psychologists/:id/schedule-exceptions` |
 | Availability | `GET /psychologists/:id/availability` |
-| Appointments | `GET/POST /appointments` · `GET /appointments/:id` · confirm · reschedule · cancel · no-show · complete |
+| Appointments | `GET/POST /appointments` · `GET /appointments/:id` · confirm · reschedule · cancel · no-show |
 | Record | `GET/POST/PATCH /students/:id/clinical-record` |
-| Notes | `POST /clinical-notes` · `GET/PATCH /clinical-notes/:id` · `GET /students/:id/clinical-notes` |
+| Notes | `POST /clinical-notes` · `GET/PATCH /clinical-notes/:id` · `GET /students/:id/clinical-notes?skip&take` |
 | Plans | `POST /treatment-plans` · `GET /students/:id/treatment-plans` · `PATCH /treatment-plans/:id` |
 | Goals | `POST /treatment-plans/:id/goals` · `PATCH /treatment-goals/:id` |
 | Activities | `GET/POST /activities` · `POST/GET /students/:id/activities` · `PATCH /student-activities/:id` |
-| Biometrics | `GET /students/:id/biometrics` · latest · trends |
-| Alerts | `GET /alerts` · `GET /alerts/:id` · review · actions · close · `GET /students/:id/alerts` |
+| Biometrics | `GET /students/:id/biometrics?range&skip&take` · `summary?range` · latest · trends |
+| Alerts | `GET /alerts` · `GET /students/:id/alerts?skip&take&status&alertType&priority` · `GET /students/:id/alerts/:alertId` · review/actions/close |
 | Shared | `GET /students/:id/shared-content` · `GET /shared-content/:id` |
 | Dashboards | `GET /dashboard/psychologist` · `GET /dashboard/administrator` |
 

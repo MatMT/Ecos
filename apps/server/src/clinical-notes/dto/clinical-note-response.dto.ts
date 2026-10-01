@@ -6,13 +6,25 @@ export class ClinicalNoteResponseDto {
   id!: number;
 
   @ApiProperty()
-  appointmentId!: number;
+  appointmentId!: number | null;
 
   @ApiPropertyOptional({ nullable: true })
   doctorId!: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   studentId!: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  sessionDate!: Date | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  sessionType!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  durationMinutes!: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  modality!: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   sessionDiagnosis!: string | null;

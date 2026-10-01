@@ -57,12 +57,37 @@ export class StudentsService {
     });
   }
 
-  findAll(skip = 0, take = 20) {
+  findAll(query: { skip?: number; take?: number; search?: string; therapistId?: string }) {
+    const skip = query.skip ?? 0;
+    const take = Math.min(query.take ?? 20, MAX_PAGE_SIZE);
+    const where: any = {};
+    if (query.therapistId) {
+      where.assignedDoctorId = query.therapistId;
+    }
+    if (query.search?.trim()) {
+      const term = query.search.trim();
+      where.OR = [
+        { studentCode: { contains: term, mode: 'insensitive' } },
+        { user: { fullName: { contains: term, mode: 'insensitive' } } },
+        { user: { email: { contains: term, mode: 'insensitive' } } },
+      ];
+    }
     return this.prisma.withRls((tx) =>
       tx.studentProfile.findMany({
         skip,
-        take: Math.min(take, MAX_PAGE_SIZE),
-        include: { user: true },
+        take,
+        where,
+        include: {
+          user: true,
+          assignedDoctor: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
       }),
     );
   }

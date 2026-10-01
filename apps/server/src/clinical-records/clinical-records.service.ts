@@ -17,8 +17,13 @@ export class ClinicalRecordsService {
     private readonly auditService: AuditService,
   ) {}
 
-  create(studentId: number, dto: CreateClinicalRecordDto) {
+  create(
+    studentId: number,
+    dto: CreateClinicalRecordDto,
+    currentUser?: RequestUser,
+  ) {
     return this.prisma.withRls(async (tx) => {
+      const user = this.requireCurrentUser(currentUser);
       const student = await tx.studentProfile.findUnique({
         where: { id: studentId },
       });
@@ -37,7 +42,19 @@ export class ClinicalRecordsService {
         );
       }
 
-      return tx.clinicalRecord.create({ data: { studentId, ...dto } });
+      const record = await tx.clinicalRecord.create({
+        data: { studentId, ...dto },
+      });
+
+      await this.auditService.log(tx, {
+        userId: user.id,
+        institutionId: user.institutionId,
+        action: 'CLINICAL_RECORD_CREATED',
+        entity: 'ClinicalRecord',
+        entityId: String(record.id),
+      });
+
+      return record;
     });
   }
 
@@ -68,8 +85,13 @@ export class ClinicalRecordsService {
     });
   }
 
-  update(studentId: number, dto: UpdateClinicalRecordDto) {
+  update(
+    studentId: number,
+    dto: UpdateClinicalRecordDto,
+    currentUser?: RequestUser,
+  ) {
     return this.prisma.withRls(async (tx) => {
+      const user = this.requireCurrentUser(currentUser);
       const existing = await tx.clinicalRecord.findUnique({
         where: { studentId },
       });
@@ -78,7 +100,28 @@ export class ClinicalRecordsService {
           'No se ha encontrado el expediente clínico solicitado.',
         );
       }
-      return tx.clinicalRecord.update({ where: { studentId }, data: dto });
+      const record = await tx.clinicalRecord.update({
+        where: { studentId },
+        data: dto,
+      });
+
+      await this.auditService.log(tx, {
+        userId: user.id,
+        institutionId: user.institutionId,
+        action: 'CLINICAL_RECORD_UPDATED',
+        entity: 'ClinicalRecord',
+        entityId: String(record.id),
+      });
+
+      return record;
     });
+  }
+
+  private requireCurrentUser(currentUser?: RequestUser): RequestUser {
+    if (!currentUser) {
+      throw new ForbiddenException('No se ha podido identificar al usuario.');
+    }
+
+    return currentUser;
   }
 }

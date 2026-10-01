@@ -111,6 +111,8 @@ export class AppointmentsController {
   @ApiQuery({ name: 'studentId', required: false, type: Number })
   @ApiQuery({ name: 'doctorId', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, enum: AppointmentStatus })
+  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'ISO Date string' })
+  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'ISO Date string' })
   @ApiQuery({ name: 'skip', required: false, type: Number, example: 0 })
   @ApiQuery({ name: 'take', required: false, type: Number, example: 20 })
   @ApiResponse({
@@ -127,11 +129,19 @@ export class AppointmentsController {
     studentId: number | undefined,
     @Query('doctorId') doctorId: string | undefined,
     @Query('status') status: AppointmentStatus | undefined,
+    @Query('startDate') startDate: string | undefined,
+    @Query('endDate') endDate: string | undefined,
     @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skip: number,
     @Query('take', new DefaultValuePipe(20), ParseIntPipe) take: number,
   ) {
     return this.appointmentsService.findAll(
-      { studentId, doctorId, status },
+      { 
+        studentId, 
+        doctorId, 
+        status,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+      },
       skip,
       take,
     );
@@ -208,24 +218,6 @@ export class AppointmentsController {
   })
   noShow(@Param('id', ParseIntPipe) id: number) {
     return this.appointmentsService.noShow(id);
-  }
-
-  @Patch(':id/complete')
-  @UseGuards(RolesGuard)
-  @Roles(Role.administrator, Role.psychologist)
-  @ApiOperation({ summary: 'Mark a confirmed appointment as completed' })
-  @ApiResponse({
-    status: 200,
-    description: 'Appointment completed.',
-    type: AppointmentResponseDto,
-  })
-  @ApiResponse({
-    status: 409,
-    description:
-      'The appointment is not in a state that allows this transition.',
-  })
-  complete(@Param('id', ParseIntPipe) id: number) {
-    return this.appointmentsService.complete(id);
   }
 
   @Patch(':id/reschedule')

@@ -1,5 +1,7 @@
-import type { ReactNode } from 'react'
-import Sidebar from '@/components/Sidebar'
+import type { ReactNode } from "react"
+import { DashboardShell } from "@/components/common/DashboardShell"
+import { AuthBoundary } from "@/features/auth/components/AuthBoundary"
+import { RouteAccessBoundary } from "@/features/auth/components/RouteAccessBoundary"
 
 export default function DashboardLayout({
   children,
@@ -7,12 +9,10 @@ export default function DashboardLayout({
   children: ReactNode
 }>) {
   return (
-    <div className="flex min-h-screen bg-surface">
-      <Sidebar notificationCount={1} />
-      <main className="min-h-screen flex-1 overflow-y-auto md:ml-64">
-        {children}
-      </main>
-    </div>
+    <AuthBoundary>
+      <RouteAccessBoundary>
+        <DashboardShell>{children}</DashboardShell>
+      </RouteAccessBoundary>
+    </AuthBoundary>
   )
 }
-
