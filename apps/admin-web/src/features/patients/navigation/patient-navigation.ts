@@ -1,4 +1,4 @@
-import {
+﻿import {
   CalendarDays,
   ClipboardList,
   FileHeart,
@@ -75,7 +75,7 @@ export const patientNavigation: readonly PatientNavigationItem[] = [
     availability: "available",
     getHref: patientRoutes.biometrics,
     icon: HeartPulse,
-    label: "Biometría",
+    label: "BiometrÃ­a",
     permission: "biometrics.view",
     section: "biometrics",
   },
@@ -93,7 +93,7 @@ export const patientNavigation: readonly PatientNavigationItem[] = [
     availability: "future",
     getHref: patientRoutes.treatmentPlan,
     icon: Stethoscope,
-    label: "Plan terapéutico",
+    label: "Plan terapÃ©utico",
     permission: "treatment-plans.view",
     section: "treatmentPlan",
   },
@@ -114,6 +114,15 @@ export const patientNavigation: readonly PatientNavigationItem[] = [
     label: "Contenido compartido",
     permission: "shared-content.view",
     section: "sharedContent",
+  },
+  {
+    activeMatch: "exact",
+    availability: "available",
+    getHref: patientRoutes.timeline,
+    icon: CalendarDays,
+    label: "Timeline",
+    permission: "patients.view",
+    section: "timeline",
   },
 ]
 
@@ -136,3 +145,4 @@ export function isPatientNavigationItemActive(
     ? pathname === item.href
     : pathname === item.href || pathname.startsWith(`${item.href}/`)
 }
+

@@ -1,25 +1,39 @@
 "use client"
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useSession } from "@/features/auth/hooks/use-session"
+import { AdministratorDashboardView } from "@/features/dashboard/components/AdministratorDashboardView"
+import { PsychologistDashboardView } from "@/features/dashboard/components/PsychologistDashboardView"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ErrorState } from "@/components/common/ErrorState"
 
 export default function Dashboard() {
   const session = useSession()
-  const displayName = session.data?.fullName ?? session.data?.email ?? ""
+
+  if (session.isPending) {
+    return <Skeleton className="h-[400px] w-full" />
+  }
+
+  if (session.isError || !session.isAuthenticated || !session.data) {
+    return (
+      <ErrorState
+        title="Sesión no válida"
+        description="No fue posible validar su sesión para mostrar el dashboard."
+        onRetry={() => session.refetch()}
+      />
+    )
+  }
+
+  if (session.data.role === 'administrator') {
+    return <AdministratorDashboardView />
+  }
+
+  if (session.data.role === 'psychologist') {
+    return <PsychologistDashboardView />
+  }
 
   return (
-    <Card className="max-w-2xl shadow-sm">
-      <CardHeader>
-        <h1 className="font-display text-2xl font-semibold">
-          {displayName ? `Bienvenido, ${displayName}` : "Bienvenido a ECOS"}
-        </h1>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm leading-6 text-muted-foreground">
-          Este espacio centralizará las herramientas de gestión y seguimiento
-          disponibles según sus permisos.
-        </p>
-      </CardContent>
-    </Card>
+    <div className="flex h-[400px] items-center justify-center rounded-md border border-dashed">
+      <p className="text-sm text-muted-foreground">Rol no soportado en este panel.</p>
+    </div>
   )
 }

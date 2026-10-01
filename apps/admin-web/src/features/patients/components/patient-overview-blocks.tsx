@@ -104,7 +104,15 @@ export function NextAppointment({ overview }: { overview: StudentOverview }) {
   const appointment = overview.nextAppointment
 
   return (
-    <OverviewSection icon={CalendarClock} title="Próxima cita">
+    <OverviewSection
+      actions={
+        <Button asChild size="sm" variant="link" className="h-auto p-0">
+          <Link href={patientRoutes.appointments(overview.student.id)}>Ver citas</Link>
+        </Button>
+      }
+      icon={CalendarClock}
+      title="Próxima cita"
+    >
       {appointment ? (
         <div className="space-y-3 text-sm">
           <p className="font-medium text-foreground">
@@ -209,9 +217,16 @@ export function OpenAlerts({ overview }: { overview: StudentOverview }) {
 
 export function TreatmentPlan({ overview }: { overview: StudentOverview }) {
   const plan = overview.activeTreatmentPlan
-
   return (
-    <OverviewSection icon={Stethoscope} title="Plan terapéutico activo">
+    <OverviewSection
+      actions={
+        <Button asChild size="sm" variant="link" className="h-auto p-0">
+          <Link href={patientRoutes.treatmentPlan(overview.student.id)}>Ver plan</Link>
+        </Button>
+      }
+      icon={Stethoscope}
+      title="Plan terapéutico activo"
+    >
       {plan ? (
         <div className="space-y-2 text-sm">
           <p className="font-medium text-foreground">
@@ -287,9 +302,15 @@ export function PendingActivities({ overview }: { overview: StudentOverview }) {
 
 export function RecentFollowUp({ overview }: { overview: StudentOverview }) {
   const recentFollowUps = (overview.recentFollowUps || []).slice(0, MAX_RECENT_ITEMS)
-
   return (
-    <OverviewSection icon={FileText} title="Seguimiento reciente">
+    <OverviewSection
+      actions={
+        <Button asChild size="sm" variant="link" className="h-auto p-0">
+          <Link href={patientRoutes.sessions(overview.student.id)}>Ver sesiones</Link>
+        </Button>
+      }
+      icon={FileText}
+      title="Seguimiento reciente">
       {recentFollowUps.length > 0 ? (
         <ul className="space-y-2">
           {recentFollowUps.map((followUp) => (
@@ -331,9 +352,15 @@ export function RecentSharedContent({
   overview: StudentOverview
 }) {
   const recentContent = (overview.recentSharedContent || []).slice(0, MAX_RECENT_ITEMS)
-
   return (
-    <OverviewSection icon={Share2} title="Contenido compartido reciente">
+    <OverviewSection
+      actions={
+        <Button asChild size="sm" variant="link" className="h-auto p-0">
+          <Link href={patientRoutes.sharedContent(overview.student.id)}>Ver contenido</Link>
+        </Button>
+      }
+      icon={Share2}
+      title="Contenido compartido reciente">
       {recentContent.length > 0 ? (
         <ul className="space-y-2">
           {recentContent.map((content) => (
