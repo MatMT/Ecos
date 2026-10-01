@@ -16,7 +16,7 @@ describe('DashboardService', () => {
     treatmentPlan: { findFirst: jest.Mock };
     biometricRecord: { findFirst: jest.Mock };
     alert: { count: jest.Mock; findMany: jest.Mock };
-    studentActivity: { findMany: jest.Mock };
+    studentActivity: { count: jest.Mock; findMany: jest.Mock };
     clinicalNote: { findMany: jest.Mock };
     sharedPatientContent: { findMany: jest.Mock };
     alertAction: { findMany: jest.Mock };
@@ -44,7 +44,7 @@ describe('DashboardService', () => {
       treatmentPlan: { findFirst: jest.fn() },
       biometricRecord: { findFirst: jest.fn() },
       alert: { count: jest.fn(), findMany: jest.fn() },
-      studentActivity: { findMany: jest.fn() },
+      studentActivity: { count: jest.fn(), findMany: jest.fn() },
       clinicalNote: { findMany: jest.fn() },
       sharedPatientContent: { findMany: jest.fn() },
       alertAction: { findMany: jest.fn() },
@@ -70,6 +70,7 @@ describe('DashboardService', () => {
     tx.alert.count.mockResolvedValue(0);
     tx.alert.findMany.mockResolvedValue([]);
     tx.studentActivity.findMany.mockResolvedValue([]);
+    tx.studentActivity.count.mockResolvedValue(0);
     tx.clinicalNote.findMany.mockResolvedValue([]);
     tx.sharedPatientContent.findMany.mockResolvedValue([]);
     tx.alertAction.findMany.mockResolvedValue([]);
@@ -115,6 +116,9 @@ describe('DashboardService', () => {
           activity: { title: 'Registro de emociones' },
         },
       ]);
+      tx.studentActivity.count
+        .mockResolvedValueOnce(4)
+        .mockResolvedValueOnce(2);
       tx.treatmentPlan.findFirst.mockResolvedValue({
         id: 51,
         title: 'Plan de seguimiento',
@@ -197,6 +201,21 @@ describe('DashboardService', () => {
           dueAt: null,
         },
       ]);
+      expect(result.activitiesSummary).toEqual({
+        totalCount: 4,
+        incompleteCount: 2,
+        recentAssignments: [
+          {
+            id: 21,
+            activityId: 4,
+            title: 'Registro de emociones',
+            origin: 'psychologist',
+            status: 'pending',
+            assignedAt: new Date('2026-09-01T10:00:00.000Z'),
+            dueAt: null,
+          },
+        ],
+      });
       expect(result.activeTreatmentPlan).toEqual({
         id: 51,
         title: 'Plan de seguimiento',
@@ -251,6 +270,12 @@ describe('DashboardService', () => {
       expect(result.student).not.toHaveProperty('primaryDiagnosis');
       expect(result.recentSharedContent[0]).not.toHaveProperty('content');
       expect(result.pendingActivities[0]).not.toHaveProperty('response');
+      expect(result.activitiesSummary.recentAssignments[0]).not.toHaveProperty(
+        'response',
+      );
+      expect(result.activitiesSummary.recentAssignments[0]).not.toHaveProperty(
+        'instructions',
+      );
       expect(result.activeTreatmentPlan).not.toHaveProperty('notes');
       expect(result.recentFollowUps[0]).not.toHaveProperty('observations');
       expect(result.recentFollowUps[0]).not.toHaveProperty(
@@ -337,8 +362,11 @@ describe('DashboardService', () => {
         },
       });
       expect(tx.studentActivity.findMany).toHaveBeenCalledWith({
-        where: { studentId: 8, status: { not: 'completed' } },
-        orderBy: { assignedAt: 'desc' },
+        where: {
+          studentId: 8,
+          status: { in: ['pending', 'in_progress'] },
+        },
+        orderBy: [{ assignedAt: 'desc' }, { id: 'desc' }],
         take: 3,
         select: {
           id: true,
@@ -348,6 +376,15 @@ describe('DashboardService', () => {
           assignedAt: true,
           dueAt: true,
           activity: { select: { title: true } },
+        },
+      });
+      expect(tx.studentActivity.count).toHaveBeenNthCalledWith(1, {
+        where: { studentId: 8 },
+      });
+      expect(tx.studentActivity.count).toHaveBeenNthCalledWith(2, {
+        where: {
+          studentId: 8,
+          status: { in: ['pending', 'in_progress'] },
         },
       });
       expect(tx.clinicalNote.findMany).toHaveBeenCalledWith({
@@ -395,6 +432,94 @@ describe('DashboardService', () => {
       const result = await service.getStudentOverview(8);
 
       expect(result.institutionTimezone).toBe('America/El_Salvador');
+    });
+
+    it('excludes completed assignments from the incomplete summary', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: 8,
+        studentCode: null,
+        user: { fullName: 'Ana', email: 'ana@example.com', institution: null },
+        assignedDoctor: null,
+      });
+      tx.studentActivity.count
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(0);
+
+      const result = await service.getStudentOverview(8);
+
+      expect(result.activitiesSummary).toEqual({
+        totalCount: 2,
+        incompleteCount: 0,
+        recentAssignments: [],
+      });
+    });
+
+    it('returns recent incomplete assignments in deterministic assignment order', async () => {
+      tx.studentProfile.findUnique.mockResolvedValue({
+        id: 8,
+        studentCode: null,
+        user: { fullName: 'Ana', email: 'ana@example.com', institution: null },
+        assignedDoctor: null,
+      });
+      tx.studentActivity.count
+        .mockResolvedValueOnce(3)
+        .mockResolvedValueOnce(2);
+      tx.studentActivity.findMany.mockResolvedValue([
+        {
+          id: 12,
+          activityId: 4,
+          origin: 'psychologist',
+          status: 'in_progress',
+          assignedAt: new Date('2026-10-01T10:00:00.000Z'),
+          dueAt: new Date('2026-10-03T10:00:00.000Z'),
+          activity: { title: 'Actividad histórica inactiva', active: false },
+        },
+        {
+          id: 11,
+          activityId: 3,
+          origin: 'psychologist',
+          status: 'pending',
+          assignedAt: new Date('2026-10-01T10:00:00.000Z'),
+          dueAt: null,
+          activity: { title: 'Actividad vigente', active: true },
+        },
+      ]);
+
+      const result = await service.getStudentOverview(8);
+
+      expect(result.activitiesSummary).toEqual({
+        totalCount: 3,
+        incompleteCount: 2,
+        recentAssignments: [
+          {
+            id: 12,
+            activityId: 4,
+            title: 'Actividad histórica inactiva',
+            origin: 'psychologist',
+            status: 'in_progress',
+            assignedAt: new Date('2026-10-01T10:00:00.000Z'),
+            dueAt: new Date('2026-10-03T10:00:00.000Z'),
+          },
+          {
+            id: 11,
+            activityId: 3,
+            title: 'Actividad vigente',
+            origin: 'psychologist',
+            status: 'pending',
+            assignedAt: new Date('2026-10-01T10:00:00.000Z'),
+            dueAt: null,
+          },
+        ],
+      });
+      expect(tx.studentActivity.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ assignedAt: 'desc' }, { id: 'desc' }],
+          where: {
+            studentId: 8,
+            status: { in: ['pending', 'in_progress'] },
+          },
+        }),
+      );
     });
   });
 

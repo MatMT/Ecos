@@ -80,15 +80,37 @@ contenido profesional permitido; administradores no reciben acceso clínico.
 expediente clínico longitudinal mediante los contratos explícitos de creación,
 lectura y edición. La ausencia de expediente es un estado vacío válido después
 de confirmar la visibilidad del paciente; no se trata como un error técnico.
-La navegación conserva `appointments`, `treatment-plan`,
-`activities` y `shared-content` como `future`; no tienen páginas, reglas de
-ruta ni enlaces visibles. **Biometría** presenta un resumen estable del último
+La navegación conserva `appointments`, `treatment-plan` y `shared-content`
+como `future`; no tienen páginas, reglas de ruta ni enlaces visibles.
+**Actividades** está disponible para psicología asignada en
+`/patients/[id]/activities`: presenta historial paginado, filtro por estado y
+asignación manual de actividades activas del catálogo institucional. No permite
+crear actividades libres, modificar asignaciones ni marcar completitud. Su
+detalle protegido en `/patients/[id]/activities/[assignmentId]` muestra de forma
+exclusivamente de lectura el contenido vigente del catálogo y la respuesta
+registrada cuando existe; no almacena una instantánea histórica del contenido.
+**Biometría** presenta un resumen estable del último
 registro sincronizado global, una tabla paginada minimizada y tendencias
 descriptivas por rango predefinido. No afirma monitoreo en vivo, no muestra
 umbrales, anomalías ni contenido clínico. **Alertas** muestra entidades `Alert`
 persistidas y paginadas; su detalle calificado por paciente permite revisión y
 cierre únicamente a psicología autorizada. No representa notificaciones ni
 anomalías locales de la aplicación móvil.
+
+## Activities Summary
+
+The psychologist-only overview receives `activitiesSummary` from
+`GET /students/:studentId/overview` in the same RLS-scoped request as its other
+clinical summaries. It contains `totalCount`, `incompleteCount`, and at most
+three recent incomplete assignments. Incomplete means persisted `pending` or
+`in_progress`; recent assignments are ordered by `assignedAt DESC, id DESC`.
+The overview never receives response text or activity instructions.
+
+The card distinguishes no assignments from no incomplete assignments, uses the
+central assignment status/origin labels, and links to history and assignment
+detail through `patientRoutes`. It has no mutation controls. The legacy
+`pendingActivities` response field remains available temporarily for API
+compatibility, but Admin Web renders `activitiesSummary`.
 `patientRoutes` es la única fuente de rutas internas para listado, creación,
 edición, resumen, expediente y dichas convenciones. No existe aún
 un `patients/[id]/layout.tsx`: con una única sección causaría complejidad y
