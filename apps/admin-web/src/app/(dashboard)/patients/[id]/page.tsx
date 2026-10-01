@@ -1,4 +1,5 @@
-import PatientDetail from '@/app/views/PatientDetail'
+import { PatientOverviewView } from "@/features/patients/components/PatientOverviewView"
+import { notFound } from "next/navigation"
 
 interface PatientPageProps {
   params: Promise<{
@@ -8,6 +9,9 @@ interface PatientPageProps {
 
 export default async function PatientPage({ params }: PatientPageProps) {
   const { id } = await params
-
-  return <PatientDetail patientId={id} />
+  const studentId = Number(id)
+  if (!Number.isSafeInteger(studentId) || studentId < 1) {
+    notFound()
+  }
+  return <PatientOverviewView patientId={studentId} />
 }

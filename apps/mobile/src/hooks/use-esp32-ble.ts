@@ -1,0 +1,94 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Linking } from 'react-native';
+import {
+  BleDeviceService,
+  formatBleErrorMessage,
+  type BleConnectionStatus,
+  type BleTelemetryState,
+  type ScannedDevice,
+} from '@/services/ble/ble-device-service';
+
+export { formatBleErrorMessage };
+export type { BleConnectionStatus, BleTelemetryState, ScannedDevice };
+
+export interface UseEsp32BleResult extends BleTelemetryState {
+  startScanAndConnect: () => Promise<void>;
+  startScanOnly: () => Promise<void>;
+  stopScan: () => void;
+  connectToDeviceId: (deviceId: string) => Promise<void>;
+  disconnect: () => Promise<void>;
+  disconnectSession: () => Promise<void>;
+  resumeBondedConnection: () => void;
+  unpair: () => Promise<void>;
+  openSettings: () => Promise<void>;
+}
+
+export function useEsp32Ble(): UseEsp32BleResult {
+  const bleService = BleDeviceService.getInstance();
+  const [state, setState] = useState<BleTelemetryState>(bleService.getState());
+
+  useEffect(() => {
+    bleService.resumeBondedConnection();
+    void bleService.initBondedState();
+    const unsubscribe = bleService.subscribe((updatedState) => {
+      setState(updatedState);
+    });
+    return unsubscribe;
+  }, [bleService]);
+
+  const startScanAndConnect = useCallback(async () => {
+    await bleService.startScanAndConnect();
+  }, [bleService]);
+
+  const startScanOnly = useCallback(async () => {
+    await bleService.startScanOnly();
+  }, [bleService]);
+
+  const stopScan = useCallback(() => {
+    bleService.stopScan();
+  }, [bleService]);
+
+  const connectToDeviceId = useCallback(
+    async (deviceId: string) => {
+      await bleService.connectToDeviceId(deviceId);
+    },
+    [bleService]
+  );
+
+  const unpair = useCallback(async () => {
+    await bleService.unpair();
+  }, [bleService]);
+
+  const disconnect = useCallback(async () => {
+    await bleService.unpair();
+  }, [bleService]);
+
+  const disconnectSession = useCallback(async () => {
+    await bleService.disconnectSession();
+  }, [bleService]);
+
+  const resumeBondedConnection = useCallback(() => {
+    bleService.resumeBondedConnection();
+  }, [bleService]);
+
+  const openSettings = useCallback(async () => {
+    try {
+      await Linking.openSettings();
+    } catch {
+      // Ignored
+    }
+  }, []);
+
+  return {
+    ...state,
+    startScanAndConnect,
+    startScanOnly,
+    stopScan,
+    connectToDeviceId,
+    disconnect,
+    disconnectSession,
+    resumeBondedConnection,
+    unpair,
+    openSettings,
+  };
+}

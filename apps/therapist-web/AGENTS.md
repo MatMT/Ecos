@@ -33,6 +33,13 @@ The app is configured to listen on `0.0.0.0:9443`.
 
 This project uses Tailwind CSS v4. Use Tailwind utility classes directly in JSX and keep global tokens in `src/app/globals.css`.
 
+## Auth Integration
+
+Any login/session/token work in this app MUST follow
+[`docs/AUTH_INTEGRATION.md`](../../docs/AUTH_INTEGRATION.md) at the repo root — it's the
+authoritative contract for talking to the `server` app's auth endpoints. This app's dev
+origin (`http://localhost:9443`) must stay in the server's `CORS_ALLOWED_ORIGINS`.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ECOS Admin Web
 
-## Getting Started
+Frontend portal for ECOS administrators and psychologists.
 
-First, run the development server:
+## Requirements
+
+- Node.js 24.x (the repository currently uses Node 24.21.0).
+- pnpm 10.34.5.
+- The ECOS Nest API running locally at `http://localhost:6622` for future API integration.
+
+## Installation
+
+From the monorepo root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install --frozen-lockfile
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create the local environment file:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cp apps/admin-web/.env.example apps/admin-web/.env.local
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`NEXT_PUBLIC_API_URL` points only to the Nest API. Do not add Supabase, PostgreSQL, Prisma, or server-side secrets to this application.
 
-## Learn More
+## Development
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm --filter admin-web dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The application is available at `http://localhost:9444`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Validation
 
-## Deploy on Vercel
+```bash
+pnpm --filter admin-web lint
+pnpm --filter admin-web typecheck
+pnpm --filter admin-web build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Architecture
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The project uses Next.js App Router under `src/app` and the `@/*` alias for `src/*` imports.
+
+- `(dashboard)` contains routes for the future protected administrator/psychologist portal.
+- `(auth)` is the reserved route group for future public authentication routes. It will be added when authentication is implemented.
+- The existing dashboard shell is in `src/components/common`.
+
+The current and target internal architecture, dependency rules, and guidance for future features are documented in [frontend-architecture.md](../../docs/frontend/frontend-architecture.md).
+
+Features, API access, session management, permissions, and clinical modules are intentionally deferred to later Phase 1 subphases.

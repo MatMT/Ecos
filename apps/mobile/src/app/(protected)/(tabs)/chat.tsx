@@ -1,0 +1,1275 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Alert,
+  FlatList,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+
+import CustomTopBar from '@/components/custom-top-bar';
+import { Colors, Radius } from '@/constants/theme';
+import {
+  AnxietyPulseIcon,
+  BookOpenIcon,
+  CheckIcon,
+  CloseIcon,
+  CloudRainIcon,
+  HeartIcon,
+  LeafIcon,
+  LockIcon,
+  MoodHappyIcon,
+  MoodNeutralIcon,
+  MoodSadIcon,
+  MoodVeryHappyIcon,
+  MoodVerySadIcon,
+  PlusIcon,
+  SparklesIcon,
+  WatchIcon,
+  ZapIcon,
+} from '@/components/ui/app-icons';
+import { useAuth } from '@/hooks/use-auth';
+import { useStudent } from '@/hooks/use-student';
+import { useTheme } from '@/context/theme-context';
+import { useBiometricMonitor } from '@/hooks/use-biometric-monitor';
+import {
+  listJournalEntries,
+  createJournalEntry,
+  markJournalEntryShared,
+} from '@/services/storage/journal-service';
+import type { LocalJournalEntry } from '@/services/storage/local-db';
+import { enqueueSync } from '@/services/storage/local-db';
+import { authClient } from '@/services/api/auth-client';
+
+function greetingNameFrom(email: string | undefined): string {
+  if (!email) return 'Laura';
+  const localPart = email.split('@')[0];
+  return localPart.charAt(0).toUpperCase() + localPart.slice(1);
+}
+
+interface MoodOption {
+  score: number;
+  label: string;
+  color: string;
+  colorActive: string;
+  bgLight: string;
+  bgActive: string;
+  borderLight: string;
+  borderActive: string;
+}
+
+const MOOD_OPTIONS: MoodOption[] = [
+  {
+    score: 1,
+    label: 'Muy mal',
+    color: '#E05252',
+    colorActive: '#DC2626',
+    bgLight: '#FFF8F8',
+    bgActive: '#FEE2E2',
+    borderLight: '#FCE7E7',
+    borderActive: '#EF4444',
+  },
+  {
+    score: 2,
+    label: 'Mal',
+    color: '#D9822B',
+    colorActive: '#B45309',
+    bgLight: '#FFFCF5',
+    bgActive: '#FEF3C7',
+    borderLight: '#FEF3D6',
+    borderActive: '#F59E0B',
+  },
+  {
+    score: 3,
+    label: 'Regular',
+    color: '#64748B',
+    colorActive: '#334155',
+    bgLight: '#F8FAFC',
+    bgActive: '#F1F5F9',
+    borderLight: '#E2E8F0',
+    borderActive: '#64748B',
+  },
+  {
+    score: 4,
+    label: 'Bien',
+    color: '#10B981',
+    colorActive: '#047857',
+    bgLight: '#F4FDF7',
+    bgActive: '#DCFCE7',
+    borderLight: '#DCFCE7',
+    borderActive: '#16A34A',
+  },
+  {
+    score: 5,
+    label: 'Excelente',
+    color: '#14B8A6',
+    colorActive: '#0F766E',
+    bgLight: '#F2FCFB',
+    bgActive: '#CCFBF1',
+    borderLight: '#CCFBF1',
+    borderActive: '#0D9488',
+  },
+];
+
+function renderMoodIcon(score: number, size = 26, isSelected = false) {
+  const opt = MOOD_OPTIONS.find((m) => m.score === score);
+  const color = opt ? (isSelected ? opt.colorActive : opt.color) : '#64748B';
+  switch (score) {
+    case 1:
+      return <MoodVerySadIcon size={size} color={color} />;
+    case 2:
+      return <MoodSadIcon size={size} color={color} />;
+    case 3:
+      return <MoodNeutralIcon size={size} color={color} />;
+    case 4:
+      return <MoodHappyIcon size={size} color={color} />;
+    case 5:
+    default:
+      return <MoodVeryHappyIcon size={size} color={color} />;
+  }
+}
+
+interface EmotionOption {
+  key: string;
+  label: string;
+  color: string;
+  bgLight: string;
+  bgActive: string;
+  borderLight: string;
+  borderActive: string;
+}
+
+const EMOTIONS: EmotionOption[] = [
+  {
+    key: 'ansiedad',
+    label: 'Ansiedad',
+    color: '#D97706',
+    bgLight: '#FFFBEB',
+    bgActive: '#FEF3C7',
+    borderLight: '#FDE68A',
+    borderActive: '#F59E0B',
+  },
+  {
+    key: 'tristeza',
+    label: 'Tristeza',
+    color: '#2563EB',
+    bgLight: '#EFF6FF',
+    bgActive: '#DBEAFE',
+    borderLight: '#BFDBFE',
+    borderActive: '#3B82F6',
+  },
+  {
+    key: 'calma',
+    label: 'Calma',
+    color: '#059669',
+    bgLight: '#ECFDF5',
+    bgActive: '#D1FAE5',
+    borderLight: '#A7F3D0',
+    borderActive: '#10B981',
+  },
+  {
+    key: 'estres',
+    label: 'Estrés',
+    color: '#DC2626',
+    bgLight: '#FEF2F2',
+    bgActive: '#FEE2E2',
+    borderLight: '#FECACA',
+    borderActive: '#EF4444',
+  },
+  {
+    key: 'motivacion',
+    label: 'Motivación',
+    color: '#7C3AED',
+    bgLight: '#F5F3FF',
+    bgActive: '#EDE9FE',
+    borderLight: '#DDD6FE',
+    borderActive: '#8B5CF6',
+  },
+];
+
+function renderEmotionIcon(key: string, size = 16, isSelected = false) {
+  const e = EMOTIONS.find((item) => item.key === key);
+  const color = isSelected && e ? e.color : '#64748B';
+  switch (key) {
+    case 'ansiedad':
+      return <AnxietyPulseIcon size={size} color={color} />;
+    case 'tristeza':
+      return <CloudRainIcon size={size} color={color} />;
+    case 'calma':
+      return <LeafIcon size={size} color={color} />;
+    case 'estres':
+      return <ZapIcon size={size} color={color} />;
+    case 'motivacion':
+    default:
+      return <SparklesIcon size={size} color={color} />;
+  }
+}
+
+export default function ChatScreen() {
+  const { user } = useAuth();
+  const { student } = useStudent();
+  const { colors } = useTheme();
+  const { bpm, stress, isBleConnected, trafficState } = useBiometricMonitor();
+
+  // Journal Entries State
+  const [journalEntries, setJournalEntries] = useState<LocalJournalEntry[]>([]);
+  const [showNewEntryModal, setShowNewEntryModal] = useState(false);
+
+  // Deep Link params from therapeutic activities
+  const params = useLocalSearchParams<{ newEntry?: string; tag?: string }>();
+
+  // Form State for New Entry
+  const [newMoodScore, setNewMoodScore] = useState<number>(4);
+  const [newEmotion, setNewEmotion] = useState<string>('calma');
+  const [newNarrative, setNewNarrative] = useState<string>('');
+  const [showBiometricTooltip, setShowBiometricTooltip] = useState(false);
+
+  useEffect(() => {
+    if (params.newEntry === 'true') {
+      const timer = setTimeout(() => {
+        setShowNewEntryModal(true);
+        if (params.tag) {
+          const prefix = `[${params.tag}] `;
+          setNewNarrative((prev) => (prev.startsWith(prefix) ? prev : `${prefix}${prev}`));
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [params.newEntry, params.tag]);
+
+  const refreshJournal = useCallback(async () => {
+    try {
+      const entries = await listJournalEntries();
+      setJournalEntries(entries);
+    } catch {
+      // Ignored
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    listJournalEntries()
+      .then((entries) => {
+        if (active) {
+          setJournalEntries(entries);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSaveEntry = async () => {
+    if (!newNarrative.trim()) {
+      Alert.alert(
+        'Atención',
+        'Por favor, escriba una breve reflexión para registrar su entrada.'
+      );
+      return;
+    }
+
+    try {
+      await createJournalEntry({
+        moodScore: newMoodScore,
+        primaryEmotion: newEmotion,
+        narrativeText: newNarrative.trim(),
+        associatedBpm: bpm,
+        associatedStress: stress,
+      });
+
+      setNewNarrative('');
+      setNewMoodScore(4);
+      setNewEmotion('calma');
+      setShowBiometricTooltip(false);
+      setShowNewEntryModal(false);
+      await refreshJournal();
+    } catch {
+      Alert.alert('Error', 'Ha ocurrido un error al guardar su reflexión local.');
+    }
+  };
+
+  // Share with Therapist State (Mental Health UX: Empowering granular modal)
+  const [entryToShare, setEntryToShare] = useState<LocalJournalEntry | null>(null);
+  const [shareIncludeBiometrics, setShareIncludeBiometrics] = useState<boolean>(true);
+  const [shareIncludeNarrative, setShareIncludeNarrative] = useState<boolean>(true);
+
+  const handleOpenShareModal = (entry: LocalJournalEntry) => {
+    setEntryToShare(entry);
+    setShareIncludeBiometrics(true);
+    setShareIncludeNarrative(true);
+  };
+
+  const handleConfirmShare = async () => {
+    if (!entryToShare || !student?.id) {
+      Alert.alert(
+        'Atención',
+        'No se ha podido identificar su expediente de estudiante. Por favor, verifique su conexión e intente nuevamente.'
+      );
+      return;
+    }
+
+    if (!shareIncludeBiometrics && !shareIncludeNarrative) {
+      Alert.alert('Atención', 'Por favor, seleccione al menos una opción para compartir con su terapeuta.');
+      return;
+    }
+
+    const snapshotId = `snap_${Date.now()}`;
+    try {
+      await markJournalEntryShared(entryToShare.id, snapshotId);
+
+      const parts: string[] = [];
+      if (shareIncludeBiometrics) {
+        parts.push(
+          `[Métricas fisiológicas: Emoción: ${entryToShare.primary_emotion}, Ánimo: ${entryToShare.mood_score}/5, FC: ${entryToShare.associated_bpm ?? '--'} bpm]`
+        );
+      }
+      if (shareIncludeNarrative) {
+        parts.push(entryToShare.narrative_text);
+      }
+
+      const payload = {
+        therapistId: student.assignedTherapist?.id,
+        contentType: 'journal_entry',
+        sourceLocalId: entryToShare.id,
+        content: parts.join('\n\n'),
+      };
+
+      const endpoint = `/api/v1/students/${student.id}/shared-content`;
+
+      authClient
+        .apiFetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        .catch(() => {
+          return enqueueSync(endpoint, payload);
+        });
+
+      await refreshJournal();
+      setEntryToShare(null);
+      Alert.alert(
+        'Nota preparada',
+        `Esta información se ha organizado para revisarla con ${student.assignedTherapist?.fullName || 'su psicólogo'} en su próxima sesión.`
+      );
+    } catch {
+      setEntryToShare(null);
+      Alert.alert('Aviso', 'Se ha programado el envío para cuando se restablezca la conexión.');
+    }
+  };
+
+  // Subtle Biometric Chip State
+  const isAgitated = trafficState === 'RED' || (bpm != null && bpm > 95) || (stress != null && stress > 40);
+
+  const biometricPillConfig = isBleConnected
+    ? isAgitated
+      ? {
+          bg: '#FEF3C7',
+          textColor: '#92400E',
+          borderColor: '#FDE68A',
+          text: 'ECOS BAND conectada  ·  Ritmo acelerado',
+          detail: `Frecuencia cardíaca: ${bpm} bpm · Estrés estimado: ${stress}%`,
+        }
+      : {
+          bg: '#F1F5F9',
+          textColor: '#475569',
+          borderColor: '#E2E8F0',
+          text: 'ECOS BAND conectada  ·  Fisiología en calma',
+          detail: `Frecuencia cardíaca: ${bpm} bpm · Estrés estimado: ${stress}%`,
+        }
+    : {
+        bg: '#F1F5F9',
+        textColor: '#475569',
+        borderColor: '#E2E8F0',
+        text: 'ECOS BAND en reposo  ·  Registro manual',
+        detail: `Modo continuo · Lectura estimada: ${bpm ?? 72} bpm`,
+      };
+
+  const displayName = student?.fullName || greetingNameFrom(user?.email);
+
+  return (
+    <View style={[styles.mainContainer, { backgroundColor: colors.background }]}>
+      <CustomTopBar name={displayName} />
+
+      {/* Screen Subheader */}
+      <View style={styles.subHeader}>
+        <View style={styles.subHeaderLeft}>
+          <Text style={[styles.screenTitle, { color: colors.text }]}>Tu Espacio Personal</Text>
+          <View style={styles.privacyBadge}>
+            <LockIcon size={12} color="#64748B" />
+            <Text style={styles.privacyBadgeText}>
+              Privado · Almacenado solo en tu teléfono
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.newEntryButton, { backgroundColor: colors.brand }]}
+          onPress={() => setShowNewEntryModal(true)}
+          activeOpacity={0.85}
+        >
+          <PlusIcon size={13} color="#FFFFFF" />
+          <Text style={styles.newEntryButtonText}>Escribir</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Entries List or Clean Empty State */}
+      {journalEntries.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <View style={[styles.emptyIconCircle, { backgroundColor: colors.brandLight }]}>
+            <BookOpenIcon size={36} color={colors.brand} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Aún no tienes entradas registradas</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Tómate un momento para expresar tus pensamientos y emociones del día con total privacidad.
+          </Text>
+          <TouchableOpacity
+            style={[styles.emptyActionButton, { backgroundColor: colors.brandLight, borderColor: colors.border }]}
+            onPress={() => setShowNewEntryModal(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.emptyActionButtonText, { color: colors.brand }]}>Escribir primera reflexión</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={journalEntries}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          renderItem={({ item }) => {
+            const emotionObj = EMOTIONS.find((e) => e.key === item.primary_emotion);
+            const moodObj = MOOD_OPTIONS.find((m) => m.score === item.mood_score);
+            const isShared = item.is_shared_with_therapist === 1;
+
+            return (
+              <View style={[styles.entryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.entryHeader}>
+                  <View style={styles.entryEmotionTag}>
+                    {renderEmotionIcon(item.primary_emotion, 15, true)}
+                    <Text style={[styles.entryEmotionLabel, { color: colors.brand }]}>
+                      {emotionObj?.label ?? item.primary_emotion}
+                    </Text>
+                    <Text style={styles.entryMoodDot}>·</Text>
+                    {renderMoodIcon(item.mood_score, 17, true)}
+                    <Text style={[styles.entryMoodScore, { color: colors.textSecondary }]}>
+                      {moodObj?.label ?? `${item.mood_score}/5`}
+                    </Text>
+                  </View>
+                  <Text style={[styles.entryDate, { color: colors.textMuted }]}>
+                    {new Date(item.created_at ?? '').toLocaleDateString('es-ES', {
+                      day: '2-digit',
+                      month: 'short',
+                    })}
+                  </Text>
+                </View>
+
+                <Text style={[styles.entryNarrative, { color: colors.text }]}>{item.narrative_text}</Text>
+
+                {item.associated_bpm != null && (
+                  <View style={[styles.entryBiometricStamp, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <WatchIcon size={12} color={colors.textSecondary} />
+                    <Text style={[styles.entryBiometricText, { color: colors.textSecondary }]}>
+                      ECOS BAND ·
+                    </Text>
+                    <HeartIcon size={11} color="#DC2626" />
+                    <Text style={[styles.entryBiometricText, { color: colors.textSecondary }]}>
+                      {item.associated_bpm} bpm
+                      {item.associated_stress != null ? ` · ${item.associated_stress}% estrés` : ''}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={[styles.entryFooter, { borderColor: colors.borderSubtle }]}>
+                  {isShared ? (
+                    <View style={styles.sharedBadge}>
+                      <CheckIcon size={12} color="#15803D" />
+                      <Text style={styles.sharedBadgeText}>
+                        {student?.assignedTherapist?.fullName
+                          ? `Compartido con ${student.assignedTherapist.fullName}`
+                          : 'Compartido con terapeuta'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.shareButton, { backgroundColor: colors.surfaceSubtle }]}
+                      onPress={() => handleOpenShareModal(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.shareButtonText, { color: colors.brand }]}>Preparar para mi sesión</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          }}
+        />
+      )}
+
+      {/* Modal de Entrada ("+ Escribir") */}
+      <Modal visible={showNewEntryModal} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
+            {/* Modal Header */}
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Nueva Reflexión</Text>
+              <TouchableOpacity
+                style={[styles.modalCloseButton, { backgroundColor: colors.surfaceSubtle }]}
+                onPress={() => setShowNewEntryModal(false)}
+                activeOpacity={0.7}
+              >
+                <CloseIcon size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Question 1: Mood Score */}
+              <Text style={[styles.formSectionLabel, { color: colors.textSecondary }]}>¿Cómo te sientes en este momento?</Text>
+              <View style={styles.moodSelectorRow}>
+                {MOOD_OPTIONS.map((opt) => {
+                  const isSelected = newMoodScore === opt.score;
+                  return (
+                    <TouchableOpacity
+                      key={opt.score}
+                      style={[
+                        styles.moodOptionButton,
+                        {
+                          backgroundColor: isSelected ? opt.bgActive : colors.surfaceSubtle,
+                          borderColor: isSelected ? opt.borderActive : colors.border,
+                          borderWidth: isSelected ? 2 : 1,
+                        },
+                      ]}
+                      onPress={() => setNewMoodScore(opt.score)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={styles.moodIconWrapper}>
+                        {renderMoodIcon(opt.score, 28, isSelected)}
+                      </View>
+                      <Text
+                        style={[
+                          styles.moodLabel,
+                          {
+                            color: isSelected ? opt.colorActive : colors.textSecondary,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Question 2: Predominant Emotion */}
+              <Text style={[styles.formSectionLabel, { color: colors.textSecondary }]}>Emoción predominante</Text>
+              <View style={styles.emotionsWrap}>
+                {EMOTIONS.map((e) => {
+                  const isSelected = newEmotion === e.key;
+                  return (
+                    <TouchableOpacity
+                      key={e.key}
+                      style={[
+                        styles.emotionPill,
+                        isSelected
+                          ? {
+                              backgroundColor: e.bgActive,
+                              borderColor: e.borderActive,
+                              borderWidth: 1.5,
+                            }
+                          : {
+                              backgroundColor: colors.surfaceSubtle,
+                              borderColor: colors.border,
+                              borderWidth: 1,
+                            },
+                      ]}
+                      onPress={() => setNewEmotion(e.key)}
+                      activeOpacity={0.75}
+                    >
+                      {renderEmotionIcon(e.key, 16, isSelected)}
+                      <Text
+                        style={[
+                          styles.emotionPillLabel,
+                          {
+                            color: isSelected ? e.color : colors.textSecondary,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {e.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Question 3: Narrative Text */}
+              <Text style={[styles.formSectionLabel, { color: colors.textSecondary }]}>
+                Escribe tus pensamientos o reflexiones
+              </Text>
+              <TextInput
+                style={[
+                  styles.narrativeTextInput,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                placeholder="Hoy me sentí un poco abrumado cuando..."
+                placeholderTextColor={colors.placeholder}
+                multiline
+                numberOfLines={5}
+                value={newNarrative}
+                onChangeText={setNewNarrative}
+              />
+
+              {/* Subtle Biometric Chip (Pill) */}
+              <TouchableOpacity
+                style={[
+                  styles.biometricPill,
+                  {
+                    backgroundColor: biometricPillConfig.bg,
+                    borderColor: biometricPillConfig.borderColor,
+                  },
+                ]}
+                onPress={() => setShowBiometricTooltip((prev) => !prev)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.biometricPillContent}>
+                  <WatchIcon size={16} color={biometricPillConfig.textColor} />
+                  <Text
+                    style={[
+                      styles.biometricPillText,
+                      { color: biometricPillConfig.textColor },
+                    ]}
+                  >
+                    {biometricPillConfig.text}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Optional Subtle Tooltip */}
+              {showBiometricTooltip && (
+                <View style={[styles.tooltipCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.tooltipText, { color: colors.textSecondary }]}>{biometricPillConfig.detail}</Text>
+                </View>
+              )}
+
+              {/* Save Action */}
+              <TouchableOpacity
+                style={[styles.saveEntryButton, { backgroundColor: colors.brand }]}
+                onPress={handleSaveEntry}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.saveEntryButtonText}>Guardar en mi diario</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      {/* Modal de Preparación para la Sesión (Alianza Terapéutica & Mental Health UX) */}
+      <Modal visible={entryToShare !== null} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.shareModalCard, { backgroundColor: colors.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <View style={styles.modalHeaderTitleRow}>
+                <BookOpenIcon size={20} color={colors.brand} />
+                <Text style={[styles.shareModalTitle, { color: colors.text }]}>Preparar nota para tu sesión</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.modalCloseButton, { backgroundColor: colors.surfaceSubtle }]}
+                onPress={() => setEntryToShare(null)}
+                activeOpacity={0.7}
+              >
+                <CloseIcon size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.shareModalExplanation, { color: colors.textSecondary }]}>
+              Esta información se compartirá de forma confidencial con{' '}
+              <Text style={{ fontWeight: '700', color: colors.text }}>
+                {student?.assignedTherapist?.fullName || 'tu psicólogo'}
+              </Text>{' '}
+              para que puedan revisarla juntos en tu próxima consulta clínica.
+            </Text>
+
+            {/* Checkbox 1: Narrative */}
+            <TouchableOpacity
+              style={[
+                styles.shareCheckboxRow,
+                { backgroundColor: shareIncludeNarrative ? colors.brandLight : colors.surfaceSubtle, borderColor: shareIncludeNarrative ? colors.brand : colors.border },
+              ]}
+              onPress={() => setShareIncludeNarrative((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.checkboxBox,
+                  shareIncludeNarrative && { backgroundColor: colors.brand, borderColor: colors.brand },
+                ]}
+              >
+                {shareIncludeNarrative && <CheckIcon size={14} color="#FFFFFF" />}
+              </View>
+              <View style={styles.checkboxTextWrap}>
+                <Text style={[styles.checkboxTitle, { color: colors.text }]}>Incluir mi reflexión escrita</Text>
+                <Text style={[styles.checkboxSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                  &ldquo;{entryToShare?.narrative_text}&rdquo;
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Checkbox 2: Biometrics */}
+            <TouchableOpacity
+              style={[
+                styles.shareCheckboxRow,
+                { backgroundColor: shareIncludeBiometrics ? colors.brandLight : colors.surfaceSubtle, borderColor: shareIncludeBiometrics ? colors.brand : colors.border },
+              ]}
+              onPress={() => setShareIncludeBiometrics((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.checkboxBox,
+                  shareIncludeBiometrics && { backgroundColor: colors.brand, borderColor: colors.brand },
+                ]}
+              >
+                {shareIncludeBiometrics && <CheckIcon size={14} color="#FFFFFF" />}
+              </View>
+              <View style={styles.checkboxTextWrap}>
+                <Text style={[styles.checkboxTitle, { color: colors.text }]}>Incluir biometría registrada</Text>
+                <Text style={[styles.checkboxSub, { color: colors.textSecondary }]}>
+                  Frecuencia cardíaca ({entryToShare?.associated_bpm ?? '--'} bpm) y estado anímico ({entryToShare?.mood_score}/5).
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={[styles.privacyNoteBox, { backgroundColor: colors.brandLight }]}>
+              <LockIcon size={13} color={colors.brand} />
+              <Text style={[styles.privacyNoteText, { color: colors.brand }]}>
+                Tu privacidad es absoluta. Solo tú y tu terapeuta asignado tienen acceso a esta nota.
+              </Text>
+            </View>
+
+            {/* Actions */}
+            <TouchableOpacity
+              style={[
+                styles.shareConfirmButton,
+                { backgroundColor: colors.brand },
+                (!shareIncludeBiometrics && !shareIncludeNarrative) && styles.shareConfirmButtonDisabled,
+              ]}
+              onPress={handleConfirmShare}
+              disabled={!shareIncludeBiometrics && !shareIncludeNarrative}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.shareConfirmButtonText}>
+                Guardar y compartir con mi psicólogo
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.shareCancelButton}
+              onPress={() => setEntryToShare(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.shareCancelButtonText, { color: colors.textSecondary }]}>Mantener solo en mi diario</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  mainContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  subHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  subHeaderLeft: {
+    flex: 1,
+  },
+  screenTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.text,
+  },
+  privacyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 5,
+  },
+  privacyBadgeText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  newEntryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.brand,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    elevation: 2,
+    shadowColor: Colors.brand,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    gap: 6,
+  },
+  newEntryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    marginTop: -40,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E6F7F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  emptyActionButton: {
+    backgroundColor: '#E6F7F5',
+    borderWidth: 1,
+    borderColor: '#A7E3DC',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: Radius.pill,
+  },
+  emptyActionButtonText: {
+    color: '#0F766E',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  listContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 110,
+    gap: 14,
+  },
+  entryCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.medium,
+    padding: 16,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  entryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  entryEmotionTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  entryEmotionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.brand,
+    textTransform: 'uppercase',
+  },
+  entryMoodDot: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  entryMoodScore: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  entryDate: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  entryNarrative: {
+    fontSize: 14,
+    color: Colors.text,
+    lineHeight: 21,
+    marginBottom: 12,
+  },
+  entryBiometricStamp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: Radius.small,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 5,
+  },
+  entryBiometricText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  entryFooter: {
+    borderTopWidth: 1,
+    borderColor: '#F1F5F9',
+    paddingTop: 10,
+  },
+  sharedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: Radius.small,
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  sharedBadgeText: {
+    color: '#15803D',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  shareButton: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: Radius.small,
+    alignSelf: 'flex-start',
+  },
+  shareButtonText: {
+    color: Colors.brand,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 36,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: 'bold',
+    color: Colors.text,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    fontSize: 15,
+    color: '#64748B',
+    fontWeight: 'bold',
+  },
+  modalScroll: {
+    gap: 14,
+  },
+  formSectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  moodSelectorRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  moodOptionButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: Radius.medium,
+    backgroundColor: '#F8FAFC',
+    marginHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  moodOptionButtonActive: {
+    backgroundColor: '#E6F7F5',
+    borderColor: Colors.brand,
+  },
+  moodIconWrapper: {
+    marginBottom: 4,
+  },
+  moodLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  moodLabelActive: {
+    color: '#0F766E',
+    fontWeight: '700',
+  },
+  emotionsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 6,
+  },
+  emotionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
+  },
+  emotionPillActive: {
+    backgroundColor: '#E6F7F5',
+    borderColor: Colors.brand,
+  },
+  emotionPillLabel: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  emotionPillLabelActive: {
+    color: '#0F766E',
+    fontWeight: '700',
+  },
+  narrativeTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.medium,
+    padding: 14,
+    fontSize: 14,
+    color: Colors.text,
+    textAlignVertical: 'top',
+    height: 120,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    lineHeight: 20,
+  },
+  biometricPill: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  biometricPillContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  biometricPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  tooltipCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.small,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    marginTop: -6,
+  },
+  tooltipText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  saveEntryButton: {
+    backgroundColor: Colors.brand,
+    paddingVertical: 14,
+    borderRadius: Radius.large,
+    alignItems: 'center',
+    marginTop: 8,
+    elevation: 2,
+    shadowColor: Colors.brand,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  saveEntryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  shareModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 36,
+  },
+  modalHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  shareModalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  shareModalExplanation: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 19,
+    marginVertical: 12,
+  },
+  shareCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    marginBottom: 10,
+    gap: 12,
+  },
+  shareCheckboxRowActive: {
+    borderColor: '#0D9488',
+    backgroundColor: '#F0FDFA',
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  checkboxBoxActive: {
+    backgroundColor: '#0D9488',
+    borderColor: '#0D9488',
+  },
+  checkboxTextWrap: {
+    flex: 1,
+  },
+  checkboxTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  checkboxSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  privacyNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDFA',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.small,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  privacyNoteText: {
+    fontSize: 11,
+    color: '#0F766E',
+    fontWeight: '500',
+    flex: 1,
+  },
+  shareConfirmButton: {
+    backgroundColor: '#0D9488',
+    paddingVertical: 14,
+    borderRadius: Radius.large,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#0D9488',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  shareConfirmButtonDisabled: {
+    backgroundColor: '#94A3B8',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  shareConfirmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  shareCancelButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  shareCancelButtonText: {
+    color: '#64748B',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+});
