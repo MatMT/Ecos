@@ -15,6 +15,7 @@
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "seed:demo": "ts-node -r tsconfig-paths/register prisma/seed-demo.ts",
+    "db:reset": "ts-node -r tsconfig-paths/register scripts/reset-db.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

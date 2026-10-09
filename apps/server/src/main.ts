@@ -35,7 +35,7 @@ async function bootstrap() {
     .setTitle('ECOS API')
     .setDescription('REST API for the ECOS health monitoring platform')
     .setVersion('0.1.0')
-    .setContact('The Code Artisans', '', 'javier@thecodeartisans.com')
+    .setContact('Olabsv.com', '', 'oelias@olabsv.com')
     .addBearerAuth()
     // Identity & Access
     .addTag(
