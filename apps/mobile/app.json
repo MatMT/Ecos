@@ -8,6 +8,7 @@
     "scheme": "ecos",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "supportsTablet": true,
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.mateoelias.ecos",
       "infoPlist": {
